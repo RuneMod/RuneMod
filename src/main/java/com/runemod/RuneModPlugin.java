@@ -21,6 +21,7 @@ import net.runelite.client.plugins.PluginInstantiationException;
 import net.runelite.client.plugins.PluginManager;
 import net.runelite.client.ui.ClientToolbar;
 import net.runelite.client.ui.ClientUI;
+import net.runelite.client.ui.ContainableFrame;
 import net.runelite.client.ui.DrawManager;
 import net.runelite.client.ui.overlay.OverlayManager;
 import net.runelite.client.util.HotkeyListener;
@@ -30,8 +31,7 @@ import javax.inject.Inject;
 import javax.swing.*;
 import java.awt.Point;
 import java.awt.*;
-import java.awt.event.InputEvent;
-import java.awt.event.KeyEvent;
+import java.awt.event.*;
 import java.io.IOException;
 import java.lang.reflect.Field;
 import java.util.List;
@@ -87,8 +87,6 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	public static RuneMod_Launcher runeModLauncher;
 
 	int clientCycle_unreal = 0;
-
-	private RuneMod_Toggle_Overlay runeModOverlay = new RuneMod_Toggle_Overlay(this);
 
 	@Inject
 	private ClientToolbar clientToolbar;
@@ -163,24 +161,19 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		}
 	};*/
 
-/*	@Subscribe
+	@Subscribe
 	public void onFocusChanged(FocusChanged focusChanged)
 	{
+		System.out.println("focus changed");
 		if (focusChanged.isFocused() == false)
 		{
-			System.out.println("mousePressed");
-			Buffer buffer = new Buffer(new byte[20]);
-			buffer.writeByte(10);
-			myRunnableSender.sendBytes(trimmedBufferBytes(buffer),"WindowEvent");
+			maintainRuneModStatusAttachment(true, false);
 		}
 		if (focusChanged.isFocused() == true)
 		{
-			System.out.println("focus");
-			Buffer buffer = new Buffer(new byte[20]);
-			buffer.writeByte(11);
-			myRunnableSender.sendBytes(trimmedBufferBytes(buffer),"WindowEvent");
+			maintainRuneModStatusAttachment(true, true);
 		}
-	}*/
+	}
 
 	public Boolean runeModToggled = true;
 
@@ -214,113 +207,80 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		return isDebug;
 	}
 
-/*	public void registerWindowEventListeners() {
+	public void registerWindowEventListeners() {
 		//setup window event listeners
 
 		JFrame window = (JFrame)SwingUtilities.getAncestorOfClass(ContainableFrame.class, client.getCanvas());
 
 		window.addWindowFocusListener(new WindowAdapter() {
 			public void windowGainedFocus(WindowEvent e) {
-				System.out.println("window focused");
+				maintainRuneModStatusAttachment(true, true);
 			}
 		});
 
 		window.addComponentListener(new ComponentAdapter() {
 			public void componentMoved(ComponentEvent e) {
-				clientThread.invokeLater(() ->
-				{
-					windowMoved();
-				});
+				maintainRuneModStatusAttachment(true, true);
 			}
 		});
+
 		window.addComponentListener(new ComponentAdapter() {
 			public void componentResized(ComponentEvent e) {
-				clientThread.invokeLater(() ->
-				{
-					canvasSizeHasChanged();
-				});
+				maintainRuneModStatusAttachment(true, true);
 			}
 		});
 
 		window.addWindowListener(new WindowListener() {
 			@Override
 			public void windowOpened(WindowEvent e) {
-*//*				if (!config.keepOverlayOnTop()) {return;}
-				System.out.println("windowOpened");
-				Buffer buffer = new Buffer(new byte[20]);
-				buffer.writeByte(2);
-				myRunnableSender.sendBytes(trimmedBufferBytes(buffer),"WindowEvent");*//*
+				maintainRuneModStatusAttachment(true, true);
 			}
 
 			@Override
 			public void windowClosing(WindowEvent e) {
-*//*				if (!config.keepOverlayOnTop()) {return;}
-				System.out.println("windowClosing");
-				Buffer buffer = new Buffer(new byte[20]);
-				buffer.writeByte(3);
-				myRunnableSender.sendBytes(trimmedBufferBytes(buffer),"WindowEvent");*//*
+
 			}
 
 			@Override
 			public void windowClosed(WindowEvent e) {
-*//*				if (!config.keepOverlayOnTop()) {return;}
-				System.out.println("windowClosed");
-				Buffer buffer = new Buffer(new byte[20]);
-				buffer.writeByte(4);
-				myRunnableSender.sendBytes(trimmedBufferBytes(buffer),"WindowEvent");*//*
+
 			}
 
 			@Override
 			public void windowIconified(WindowEvent e) {
-*//*				if (!config.keepOverlayOnTop()) {return;}
-				System.out.println("windowIconified");
-				Buffer buffer = new Buffer(new byte[20]);
-				buffer.writeByte(5);
-				myRunnableSender.sendBytes(trimmedBufferBytes(buffer),"WindowEvent");*//*
+				maintainRuneModStatusAttachment(false, false);
 			}
 
 			@Override
 			public void windowDeiconified(WindowEvent e) {
-*//*				if (!config.keepOverlayOnTop()) {return;}
-				System.out.println("windowDeiconified");
-				Buffer buffer = new Buffer(new byte[20]);
-				buffer.writeByte(6);
-				myRunnableSender.sendBytes(trimmedBufferBytes(buffer),"WindowEvent");*//*
+				maintainRuneModStatusAttachment(true, true);
 			}
 
 			@Override
 			public void windowActivated(WindowEvent e) {
-*//*				if (!config.keepOverlayOnTop()) {return;}
-				System.out.println("windowActivated");
-				Buffer buffer = new Buffer(new byte[20]);
-				buffer.writeByte(7);
-				myRunnableSender.sendBytes(trimmedBufferBytes(buffer),"WindowEvent");*//*
+				maintainRuneModStatusAttachment(true, true);
 			}
 
 			@Override
 			public void windowDeactivated(WindowEvent e) {
-*//*				if (!config.keepOverlayOnTop()) {return;}
-				System.out.println("windowDeactivated");
-				Buffer buffer = new Buffer(new byte[20]);
-				buffer.writeByte(8);
-				myRunnableSender.sendBytes(trimmedBufferBytes(buffer),"WindowEvent");*//*
+				maintainRuneModStatusAttachment(true, false);
 			}
 		});
 
 
 
 
-		Toolkit.getDefaultToolkit().addAWTEventListener(new AWTEventListener() { //keeps game window on top
+/*		Toolkit.getDefaultToolkit().addAWTEventListener(new AWTEventListener() { //keeps game window on top
 			public void eventDispatched(AWTEvent event) {
 				if (!config.keepOverlayOnTop()) {return;}
-*//*				if(event instanceof KeyEvent){
+				if(event instanceof KeyEvent){
 					KeyEvent evt = (KeyEvent)event;
 					System.out.println("keyPressedEvent: ");
 					System.out.println("char: " + evt.getKeyChar());
 					System.out.println("KeyCode: " + evt.getKeyCode());
 					System.out.println("keyLocation: " + evt.getKeyLocation());
 					System.out.println("paramString: " + evt.paramString());
-				}*//*
+				}
 				if(event instanceof MouseEvent){
 					MouseEvent evt = (MouseEvent)event;
 					if(evt.getID() == MouseEvent.MOUSE_PRESSED){
@@ -358,21 +318,22 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 				System.out.println("button: "+mouseEvent.getButton());
 				System.out.println("isPopupTrigger: "+mouseEvent.isPopupTrigger());
 			}
-		});
-	}*/
+		});*/
+	}
 
 	int perFramePacketSentTick = -1;
 	int sharedMemPixelsUpdatedTick = -1;
 	int ticksSinceLogin = 0;
 	int ticksSincePLuginLoad = 0;
 
-	void maintainRuneModStatusAttachment() {
-		Point loc = client.getCanvas().getLocationOnScreen();
-		loc.x += 100;
-		loc.y -= runeModLauncher.runeMod_statusUI.frame.getHeight();
-		//loc.y = loc.y+client.getCanvas().getParent().getHeight() - runeModLauncher.runeMod_statusUI.frame.getHeight();
-		runeModLauncher.runeMod_statusUI.frame.setLocation(loc);
-		if(clientUI.isFocused()) {
+	void maintainRuneModStatusAttachment(boolean shouldBeVisible, boolean bringToFront) {
+		runeModLauncher.runeMod_statusUI.frame.setVisible(shouldBeVisible);
+		if(shouldBeVisible) {
+			Point loc = client.getCanvas().getLocationOnScreen();
+			loc.x += 100;
+			loc.y -= runeModLauncher.runeMod_statusUI.frame.getHeight();
+			//loc.y = loc.y+client.getCanvas().getParent().getHeight() - runeModLauncher.runeMod_statusUI.frame.getHeight();
+			runeModLauncher.runeMod_statusUI.frame.setLocation(loc);
 			runeModLauncher.runeMod_statusUI.frame.toFront();
 		}
 	}
@@ -386,9 +347,6 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	@Subscribe
 	private void onBeforeRender(BeforeRender event)
 	{
-
-		new Thread(this::maintainRuneModStatusAttachment).start();
-
 		alreadyCommunicatedUnreal = false;
 		ticksSincePLuginLoad++;
 
@@ -759,7 +717,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 			ticksSinceLogin = 0;
 
-			runeModLauncher.runeMod_statusUI.frame.dispose();
+			runeModLauncher.runeMod_statusUI.close();
 
 			System.out.println("RuneMod plugin shutDown");
 
@@ -793,11 +751,11 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	protected void startUp() throws IOException {
 
 		//System.out.println(RuneLite.RUNELITE_DIR);
-		overlayManager.add(runeModOverlay);
 
 		runeModPlugin = this;
 
 		RuneMod_statusUI statusUi = new RuneMod_statusUI();
+
 		//statusUi.client = client;
 		runeModLauncher =  new RuneMod_Launcher(statusUi, config.AltRuneModLocation(), config.StartRuneModOnStart());
 		executorService2.execute(runeModLauncher);
@@ -806,6 +764,10 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 		clientThread.invoke(() ->
 		{
+			maintainRuneModStatusAttachment(clientUI.isFocused(), clientUI.isFocused());
+
+			registerWindowEventListeners();
+
 			sharedmem_rm = new SharedMemoryManager(this);
 			sharedmem_rm.createSharedMemory("sharedmem_rm", 50000000); //50 mb
 			sharedmem_rm.CreateMutexes();

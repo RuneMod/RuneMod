@@ -16,6 +16,11 @@ public class RuneMod_statusUI implements Runnable {
     {
     }
 
+    public void close() {
+        frame.dispose();
+        frame.setVisible(false);
+    }
+
     RuneMod_statusUI() {
         StatusHeading.setText("No Status");
 
@@ -45,6 +50,7 @@ public class RuneMod_statusUI implements Runnable {
         labelPanel.setOpaque(false);
         frame.setBackground (new Color (0, 0, 0, 0));
         frame.setVisible(true);
+        frame.toFront();
 
         SetStatusHeading("RuneMod Status: ");
         SetStatus_Detail("No status");
