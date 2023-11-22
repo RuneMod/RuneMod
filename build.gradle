@@ -1,5 +1,6 @@
 plugins {
 	id 'java'
+	id "com.github.johnrengelman.shadow" version "6.1.0"
 }
 
 repositories {
@@ -29,8 +30,16 @@ dependencies {
 	testImplementation group: 'net.runelite', name:'jshell', version: runeLiteVersion
 }
 
-group = 'com.example'
-version = '1.0-SNAPSHOT'
+shadowJar {
+	from sourceSets.test.output
+	configurations = [project.configurations.testRuntimeClasspath]
+	manifest {
+		attributes "Main-Class": "com.runemod.RuneModPluginTest"
+	}
+}
+
+group = 'com.runemod'
+version = ''
 
 tasks.withType(JavaCompile) {
 	options.encoding = 'UTF-8'

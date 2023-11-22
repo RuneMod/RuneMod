@@ -1,0 +1,1 @@
+java -jar -ea build\libs\runemod-all.jar
