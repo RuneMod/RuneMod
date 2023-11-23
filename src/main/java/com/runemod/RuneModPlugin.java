@@ -164,7 +164,6 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	@Subscribe
 	public void onFocusChanged(FocusChanged focusChanged)
 	{
-		System.out.println("focus changed");
 		if (focusChanged.isFocused() == false)
 		{
 			maintainRuneModStatusAttachment(true, false);
@@ -709,18 +708,19 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	@Override
 	protected void shutDown() throws Exception
 	{
+		System.out.println("RuneMod plugin shutDown");
+
+		runeModLauncher.runeMod_statusUI.close();
+
+		runeModLauncher = null;
+
+		sharedmem_rm.destroyRuneModWin();
+
+		ticksSinceLogin = 0;
+
+
 		clientThread.invoke(() -> {
-			sharedmem_rm.destroyRuneModWin();
-
-
 			sharedmem_rm.CloseSharedMemory();
-
-			ticksSinceLogin = 0;
-
-			runeModLauncher.runeMod_statusUI.close();
-
-			System.out.println("RuneMod plugin shutDown");
-
 
 			setGpuFlags(0);
 			setDrawCallbacks(null);
