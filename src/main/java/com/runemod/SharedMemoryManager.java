@@ -8,6 +8,10 @@ import com.sun.jna.win32.W32APIOptions;
 import lombok.SneakyThrows;
 import net.runelite.api.GameState;
 
+import javax.swing.*;
+
+import java.awt.*;
+
 import static com.sun.jna.platform.win32.WinBase.INFINITE;
 import static com.sun.jna.platform.win32.WinBase.INVALID_HANDLE_VALUE;
 import static com.sun.jna.platform.win32.WinNT.PAGE_READWRITE;
@@ -338,17 +342,14 @@ public class SharedMemoryManager
 		if(!runeModWindowsExist()) {return;}
 
 		WinDef.HWND hwnd = User32.INSTANCE.FindWindow(null,"RuneModWin");
-		//WinDef.HWND ModModeWindow = User32.INSTANCE.FindWindow(null,"ModModeTogglerWin");
+		//WinDef.HWND hwnd2 = User32.INSTANCE.FindWindow(null,"RuneModControls");
 		if(visibility) {
 			User32.INSTANCE.ShowWindow(hwnd, WinUser.SW_SHOWNOACTIVATE);
-			User32.INSTANCE.ShowWindow(hwnd, WinUser.SW_SHOWNOACTIVATE);
-/*			User32.INSTANCE.ShowWindow(ModModeWindow, WinUser.SW_SHOWNOACTIVATE);
-			User32.INSTANCE.ShowWindow(ModModeWindow, WinUser.SW_SHOWNOACTIVATE);*/
+
+			//User32.INSTANCE.ShowWindow(hwnd2, WinUser.SW_SHOWNOACTIVATE);
 		} else {
 			User32.INSTANCE.ShowWindow(hwnd, WinUser.SW_HIDE);
-			User32.INSTANCE.ShowWindow(hwnd, WinUser.SW_HIDE);
-/*			User32.INSTANCE.ShowWindow(ModModeWindow, WinUser.SW_HIDE);
-			User32.INSTANCE.ShowWindow(ModModeWindow, WinUser.SW_HIDE);*/
+			//User32.INSTANCE.ShowWindow(hwnd2, WinUser.SW_HIDE);
 		}
 		curRmWindowVisibility = visibility;
 		System.out.println("SetRmWindowVisibility to "+visibility);
@@ -404,8 +405,23 @@ public class SharedMemoryManager
 		User32.INSTANCE.SetWindowLongPtr(ModModeWindow, GWLP_HWNDPARENT, RLHandle.getPointer());*/
 
 		updateRmWindowTransform();
+
+		runeModPlugin.maintainRuneModStatusAttachment(true, true);
 		return true;
 	}
+
+/*	public boolean ChildRuneModStatusToRl() {
+		WinDef.HWND RLStatusHandle = User32.INSTANCE.FindWindow(null,"RuneModStatus");
+		WinDef.HWND RLHandle = User32.INSTANCE.FindWindow(null,"RuneLite");
+
+		Point loc = runeModPlugin.client.getCanvas().getLocationOnScreen();
+		loc.x += 100;
+		loc.y -= runeModPlugin.runeModLauncher.runeMod_statusUI.frame.getHeight();
+
+		User32.INSTANCE.SetWindowPos(RLStatusHandle, RLHandle, loc.x, loc.y, 300, 20,  User32.SWP_NOSIZE|User32.SWP_NOACTIVATE);
+		//User32.INSTANCE.SetWindowLongPtr(RLStatusHandle, User32.GWL_HWNDPARENT, RLHandle.getPointer());
+		return true;
+	}*/
 
 	public void updateRmWindowTransform() {
 		if(!runeModPlugin.config.attachRmWindowToRL()) {return;}

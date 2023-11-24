@@ -326,6 +326,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	int ticksSincePLuginLoad = 0;
 
 	void maintainRuneModStatusAttachment(boolean shouldBeVisible, boolean bringToFront) {
+		//sharedmem_rm.ChildRuneModStatusToRl();
 		runeModLauncher.runeMod_statusUI.frame.setVisible(shouldBeVisible);
 		if(shouldBeVisible) {
 			Point loc = client.getCanvas().getLocationOnScreen();
@@ -333,7 +334,9 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			loc.y -= runeModLauncher.runeMod_statusUI.frame.getHeight();
 			//loc.y = loc.y+client.getCanvas().getParent().getHeight() - runeModLauncher.runeMod_statusUI.frame.getHeight();
 			runeModLauncher.runeMod_statusUI.frame.setLocation(loc);
-			runeModLauncher.runeMod_statusUI.frame.toFront();
+			if(bringToFront) {
+				runeModLauncher.runeMod_statusUI.frame.toFront();
+			}
 		}
 	}
 
@@ -368,6 +371,16 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			}
 		}
 
+
+		JFrame window = (JFrame) SwingUtilities.getWindowAncestor(client.getCanvas());
+		if (!window.getTitle().equals("RuneLite")) {
+			window.setTitle("RuneLite");
+		}
+
+
+		if(ticksSincePLuginLoad > 1) {
+
+		}
 /*		if(unrealIsConnected && client.getGameState().ordinal()>=GameState.LOGGING_IN.ordinal() && lastGameState.ordinal()>=GameState.LOGIN_SCREEN.ordinal()) {
 			setGpuFlags(3);
 			setDrawCallbacks(this);
@@ -378,20 +391,18 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			//}
 		}*/
 
-		if(client.getGameState().ordinal()<GameState.LOGGING_IN.ordinal() || client.getGameState()==GameState.LOGGING_IN && lastGameState.ordinal()<=GameState.LOGIN_SCREEN_AUTHENTICATOR.ordinal()) {//allows us to display logging in... on login screen
-			setGpuFlags(0);
-			clientThread.invokeAtTickEnd(this::communicateWithUnreal); //for times when scenedraw callback isnt available.
-		} else {
-			setGpuFlags(3);
-		}
+		//clientThread.invoke(() -> {
+			if(client.getGameState().ordinal()<GameState.LOGGING_IN.ordinal() || client.getGameState()==GameState.LOGGING_IN && lastGameState.ordinal()<=GameState.LOGIN_SCREEN_AUTHENTICATOR.ordinal()) {//allows us to display logging in... on login screen
+				setGpuFlags(0);
+				clientThread.invokeAtTickEnd(this::communicateWithUnreal); //for times when scenedraw callback isnt available.
+			} else {
+				setGpuFlags(3);
+			}
+		//});
+
 
 		if (client.getGameState().ordinal()>=GameState.LOGGED_IN.ordinal()) {
 			ticksSinceLogin++;
-		}
-
-		JFrame window = (JFrame) SwingUtilities.getWindowAncestor(client.getCanvas());
-		if (!window.getTitle().equals("RuneLite")) {
-			window.setTitle("RuneLite");
 		}
 
 
@@ -451,6 +462,9 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	long timeCommunicatedWithUnreal = 0;
 
 	void MaintainRuneModAttachment() {
+		if(sharedmem_rm == null) {
+			return;
+		}
 		sharedmem_rm.ChildRuneModWinToRl();
 		//if(sharedmem_rm.ChildRuneModWinToRl()) { //if RuneMod win exists and is childed to rl
 
@@ -462,6 +476,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 		if(RmNeedsWindowUpdate()) {
 			sharedmem_rm.updateRmWindowTransform();
+			maintainRuneModStatusAttachment(true, true);
 		}
 	}
 
@@ -715,13 +730,13 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		runeModLauncher = null;
 
 		sharedmem_rm.destroyRuneModWin();
+		sharedmem_rm.CloseSharedMemory();
+		sharedmem_rm = null;
 
 		ticksSinceLogin = 0;
 
 
 		clientThread.invoke(() -> {
-			sharedmem_rm.CloseSharedMemory();
-
 			setGpuFlags(0);
 			setDrawCallbacks(null);
 			client.setUnlockedFps(false);
@@ -758,27 +773,28 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 		//statusUi.client = client;
 		runeModLauncher =  new RuneMod_Launcher(statusUi, config.AltRuneModLocation(), config.StartRuneModOnStart());
+
 		executorService2.execute(runeModLauncher);
 
 		System.out.println("runelitDir: " + RUNELITE_DIR);
 
+		sharedmem_rm = new SharedMemoryManager(this);
+		sharedmem_rm.createSharedMemory("sharedmem_rm", 50000000); //50 mb
+		sharedmem_rm.CreateMutexes();
+
+		//start new rsdata. Unreal does not completely block rs (due to timeout), so it is safe to do his.
+		{
+			sharedmem_rm.LockMutex();
+			sharedmem_rm.startNewRsData();
+			sharedmem_rm.transferBackBufferToSharedMem();
+			sharedmem_rm.passRsDataToUnreal();
+		}
+
 		clientThread.invoke(() ->
 		{
-			maintainRuneModStatusAttachment(clientUI.isFocused(), clientUI.isFocused());
+			maintainRuneModStatusAttachment(true, true);
 
 			registerWindowEventListeners();
-
-			sharedmem_rm = new SharedMemoryManager(this);
-			sharedmem_rm.createSharedMemory("sharedmem_rm", 50000000); //50 mb
-			sharedmem_rm.CreateMutexes();
-
-			//start new rsdata. Unreal does not completely block rs (due to timeout), so it is safe to do his.
-			{
-				sharedmem_rm.LockMutex();
-				sharedmem_rm.startNewRsData();
-				sharedmem_rm.transferBackBufferToSharedMem();
-				sharedmem_rm.passRsDataToUnreal();
-			}
 
 			try
 			{
@@ -3304,6 +3320,7 @@ skills menu:__________
 	}
 
 	private void UpdateSharedMemoryUiPixels() {
+		if(sharedmem_rm == null) {return;}
 		if(sharedMemPixelsUpdatedTick == client.getGameCycle()) {return;}
 		sharedMemPixelsUpdatedTick = client.getGameCycle();
 		final BufferProvider bufferProvider = client.getBufferProvider();

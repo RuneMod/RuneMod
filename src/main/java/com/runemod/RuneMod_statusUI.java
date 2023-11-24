@@ -19,13 +19,14 @@ public class RuneMod_statusUI implements Runnable {
     public void close() {
         frame.dispose();
         frame.setVisible(false);
+        frame.setTitle("staleWindow");
     }
 
     RuneMod_statusUI() {
         StatusHeading.setText("No Status");
 
 
-        frame = createFrame("RuneMod status");
+        frame = createFrame("RuneModStatus");
 
 
         final JPanel labelPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
@@ -78,7 +79,7 @@ public class RuneMod_statusUI implements Runnable {
     }
 
     public static JDialog  createFrame(String title) {
-        JDialog dialog = new JDialog((JFrame)null, "Test JDialog", true);
+        JDialog dialog = new JDialog((JFrame)null, title, true);
         dialog.setModalityType(Dialog.ModalityType.MODELESS);
         dialog.setUndecorated(true);
         // Using rigid area just to give the dialog size, but you
