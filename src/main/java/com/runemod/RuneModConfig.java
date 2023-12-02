@@ -8,6 +8,18 @@ import net.runelite.client.config.ConfigSection;
 @ConfigGroup("RuneMod")
 public interface RuneModConfig extends Config
 {
+	@ConfigItem(
+			keyName = "RuneModVisibility",
+			name = "RuneModVisibility",
+			description = "Toggles visibility of runemod",
+			position = 6
+	)
+
+	default boolean RuneModVisibility()
+	{
+		return true;
+	}
+
 	@ConfigSection(
 			name = "Developer Stuff",
 			description = "Developer Stuff",
@@ -17,21 +29,11 @@ public interface RuneModConfig extends Config
 	String developerStuff = "DeveloperStuff";
 
 	@ConfigItem(
-			position = 8,
-			keyName = "UpdateDefaultModToLatest",
-			name = "UpdateDefaultModToLatest",
-			description = "Updates DefaultMod to current rs revision. Use at own risk"
-	)
-	default boolean UpdateDefaultModToLatest()
-	{
-		return false;
-	}
-
-	@ConfigItem(
 			keyName = "startRuneModOnStart",
 			name = "startRuneModOnStart",
 			description = "startRuneModOnStart",
-			position = 1
+			position = 6,
+			section = developerStuff
 	)
 	default boolean StartRuneModOnStart()
 	{

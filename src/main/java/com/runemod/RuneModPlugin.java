@@ -76,11 +76,13 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	private Set<Integer> sentSkeletonIds = new HashSet<>();
 	private Set<Integer> sentFrameIds = new HashSet<>();
 
+	private Set<Integer> projectiles_LastFrame = new HashSet<Integer>();
+
 
 	CacheReader myCacheReader = new CacheReader(RUNELITE_DIR + "\\jagexcache\\oldschool\\LIVE");
 
-	ExecutorService executorService = Executors.newFixedThreadPool(1);
-	ExecutorService executorService2 = Executors.newFixedThreadPool(1);
+	//ExecutorService executorService = Executors.newFixedThreadPool(1);
+	ExecutorService executorService2;
 
 	//alt runemodLocation C:\Users\soma.wheelhouse\Documents\Unreal Projects\RuneMod\LaunchGame_Standalone.lnk
 
@@ -167,10 +169,12 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		if (focusChanged.isFocused() == false)
 		{
 			maintainRuneModStatusAttachment(true, false);
+			return;
 		}
 		if (focusChanged.isFocused() == true)
 		{
 			maintainRuneModStatusAttachment(true, true);
+			return;
 		}
 	}
 
@@ -199,6 +203,12 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		}*//*
 	}*/
 
+	WindowAdapter WindowFocusListener;
+	ComponentAdapter componentAdapter0;
+	ComponentAdapter componentAdapter1;
+	WindowListener windowListener;
+	AWTEventListener mouseListener;
+
 	static public boolean runningFromIntelliJ()
 	{
 		//boolean isDebug = java.lang.management.ManagementFactory.getRuntimeMXBean().getInputArguments().toString().indexOf("jdwp") >= 0;
@@ -206,33 +216,44 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		return isDebug;
 	}
 
+	public void unRegisterWindowEventListeners() {
+		//JFrame window = (JFrame)SwingUtilities.getAncestorOfClass(ContainableFrame.class, client.getCanvas());
+/*		JFrame window = (JFrame)SwingUtilities.windowForComponent(client.getCanvas());
+		window.removeWindowFocusListener(WindowFocusListener);
+		window.removeComponentListener(componentAdapter0);
+		window.removeComponentListener(componentAdapter1);
+		window.removeWindowListener(windowListener);*/
+		Toolkit.getDefaultToolkit().removeAWTEventListener(mouseListener);
+	}
+
 	public void registerWindowEventListeners() {
-		//setup window event listeners
+/*		//setup window event listeners
 
-		JFrame window = (JFrame)SwingUtilities.getAncestorOfClass(ContainableFrame.class, client.getCanvas());
+		//JFrame window = (JFrame)SwingUtilities.getAncestorOfClass(ContainableFrame.class, client.getCanvas());
+		JFrame window = (JFrame)SwingUtilities.windowForComponent(client.getCanvas());
 
-		window.addWindowFocusListener(new WindowAdapter() {
+		window.addWindowFocusListener(WindowFocusListener = new WindowAdapter() {
 			public void windowGainedFocus(WindowEvent e) {
 				maintainRuneModStatusAttachment(true, true);
 			}
 		});
 
-		window.addComponentListener(new ComponentAdapter() {
+		window.addComponentListener(componentAdapter0 = new ComponentAdapter() {
 			public void componentMoved(ComponentEvent e) {
 				maintainRuneModStatusAttachment(true, true);
 			}
 		});
 
-		window.addComponentListener(new ComponentAdapter() {
+		window.addComponentListener(componentAdapter1 = new ComponentAdapter() {
 			public void componentResized(ComponentEvent e) {
 				maintainRuneModStatusAttachment(true, true);
 			}
 		});
 
-		window.addWindowListener(new WindowListener() {
+		window.addWindowListener(windowListener = new WindowListener() {
 			@Override
 			public void windowOpened(WindowEvent e) {
-				maintainRuneModStatusAttachment(true, true);
+					maintainRuneModStatusAttachment(true, true);
 			}
 
 			@Override
@@ -247,27 +268,42 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 			@Override
 			public void windowIconified(WindowEvent e) {
-				maintainRuneModStatusAttachment(false, false);
+					maintainRuneModStatusAttachment(false, true);
 			}
 
 			@Override
 			public void windowDeiconified(WindowEvent e) {
-				maintainRuneModStatusAttachment(true, true);
+					maintainRuneModStatusAttachment(true, true);
 			}
 
 			@Override
 			public void windowActivated(WindowEvent e) {
-				maintainRuneModStatusAttachment(true, true);
+				System.out.println("activated");
+					maintainRuneModStatusAttachment(true, true);
 			}
 
 			@Override
 			public void windowDeactivated(WindowEvent e) {
-				maintainRuneModStatusAttachment(true, false);
+					maintainRuneModStatusAttachment(true, false);
 			}
-		});
+		});*/
 
 
+		Toolkit.getDefaultToolkit().addAWTEventListener(mouseListener = new AWTEventListener() { //keeps game window on top
+			public void eventDispatched(AWTEvent event) {
+				if(event instanceof KeyEvent){
 
+				}
+				if(event instanceof MouseEvent){
+					MouseEvent evt = (MouseEvent)event;
+					if(evt.getID() == MouseEvent.MOUSE_PRESSED){
+						new Thread(() -> {
+							maintainRuneModStatusAttachment(true, true);
+						}).start();
+					}
+				}
+			}
+		}, AWTEvent.MOUSE_EVENT_MASK);
 
 /*		Toolkit.getDefaultToolkit().addAWTEventListener(new AWTEventListener() { //keeps game window on top
 			public void eventDispatched(AWTEvent event) {
@@ -326,18 +362,23 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	int ticksSincePLuginLoad = 0;
 
 	void maintainRuneModStatusAttachment(boolean shouldBeVisible, boolean bringToFront) {
-		//sharedmem_rm.ChildRuneModStatusToRl();
-		runeModLauncher.runeMod_statusUI.frame.setVisible(shouldBeVisible);
+		//System.out.println("maintainRuneModStatusAttachment " + shouldBeVisible + " " + bringToFront);
+		//clientThread.invokeLater(() -> {
+		if(runeModLauncher.runeMod_statusUI.frame.isVisible() != shouldBeVisible) {
+			System.out.println("setting visibility");
+			runeModLauncher.runeMod_statusUI.frame.setVisible(shouldBeVisible);
+		}
+
 		if(shouldBeVisible) {
+			if(!client.getCanvas().isShowing()) {return;}
 			Point loc = client.getCanvas().getLocationOnScreen();
 			loc.x += 100;
 			loc.y -= runeModLauncher.runeMod_statusUI.frame.getHeight();
 			//loc.y = loc.y+client.getCanvas().getParent().getHeight() - runeModLauncher.runeMod_statusUI.frame.getHeight();
 			runeModLauncher.runeMod_statusUI.frame.setLocation(loc);
-			if(bringToFront) {
-				runeModLauncher.runeMod_statusUI.frame.toFront();
-			}
+			runeModLauncher.runeMod_statusUI.frame.toFront();
 		}
+		//});
 	}
 
 	void clearRsPixelBuffer() {
@@ -350,7 +391,10 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	private void onBeforeRender(BeforeRender event)
 	{
 		alreadyCommunicatedUnreal = false;
-		ticksSincePLuginLoad++;
+
+		if(client.getGameState().ordinal() >= GameState.LOGIN_SCREEN.ordinal()) {
+			ticksSincePLuginLoad++;
+		}
 
 		if(ticksSincePLuginLoad == 1) {
 			for (Plugin plugin : pluginManager.getPlugins()) {
@@ -369,18 +413,15 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 					}
 				}
 			}
-		}
 
+			startUp_Custom();
+		}
 
 		JFrame window = (JFrame) SwingUtilities.getWindowAncestor(client.getCanvas());
 		if (!window.getTitle().equals("RuneLite")) {
 			window.setTitle("RuneLite");
 		}
 
-
-		if(ticksSincePLuginLoad > 1) {
-
-		}
 /*		if(unrealIsConnected && client.getGameState().ordinal()>=GameState.LOGGING_IN.ordinal() && lastGameState.ordinal()>=GameState.LOGIN_SCREEN.ordinal()) {
 			setGpuFlags(3);
 			setDrawCallbacks(this);
@@ -391,10 +432,13 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			//}
 		}*/
 
-		//clientThread.invoke(() -> {
-			if(client.getGameState().ordinal()<GameState.LOGGING_IN.ordinal() || client.getGameState()==GameState.LOGGING_IN && lastGameState.ordinal()<=GameState.LOGIN_SCREEN_AUTHENTICATOR.ordinal()) {//allows us to display logging in... on login screen
+		//clientThread.invokeAtTickEnd(() -> {
+			if(ticksSincePLuginLoad <= 1 || client.getGameState().ordinal()<GameState.LOGGING_IN.ordinal() || client.getGameState()==GameState.LOGGING_IN && lastGameState.ordinal()<=GameState.LOGIN_SCREEN_AUTHENTICATOR.ordinal() || config.RuneModVisibility() == false) {//allows us to display logging in... on login screen
 				setGpuFlags(0);
-				clientThread.invokeAtTickEnd(this::communicateWithUnreal); //for times when scenedraw callback isnt available.
+				if(client.getDrawCallbacks() == null) {
+					communicateWithUnreal();
+					//clientThread.invokeAtTickEnd(this::communicateWithUnreal); //for times when scenedraw callback isnt available.
+				}
 			} else {
 				setGpuFlags(3);
 			}
@@ -468,7 +512,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		sharedmem_rm.ChildRuneModWinToRl();
 		//if(sharedmem_rm.ChildRuneModWinToRl()) { //if RuneMod win exists and is childed to rl
 
-		if (client.getGameState().ordinal()>=GameState.LOADING.ordinal()) {
+		if (client.getGameState().ordinal()>=GameState.LOADING.ordinal() && config.RuneModVisibility() == true) {
 			sharedmem_rm.setRuneModVisibility(true);
 		} else {
 			sharedmem_rm.setRuneModVisibility(false);
@@ -476,7 +520,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 		if(RmNeedsWindowUpdate()) {
 			sharedmem_rm.updateRmWindowTransform();
-			maintainRuneModStatusAttachment(true, true);
+			//maintainRuneModStatusAttachment(true, true);
 		}
 	}
 
@@ -487,20 +531,22 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	int consecutiveTimeouts = 0;
 	boolean alreadyCommunicatedUnreal = false; //whether we have communicated with unreal this frame.
 	void communicateWithUnreal() {
-		//System.out.println("unrealComStarted");
-
 		if(alreadyCommunicatedUnreal) { return; }
 
 		alreadyCommunicatedUnreal = true;
 
 		new Thread(this::MaintainRuneModAttachment).start();
 
+		if (client.getGameState().ordinal() < GameState.LOGIN_SCREEN.ordinal()) { //prevents communicating with unreal before client is loaded.
+			return;
+		}
+
 		if(!sharedmem_rm.backBuffer.isOverFlowed) {
 			WritePerFramePacket(); //we start writing the perframe apcket before unreal has indidcated its started a new frame, for a small performance optimization
 		}
 
-		long waitForUnrealTimeout = 100/(consecutiveTimeouts+1);
-		boolean unrealStartedNewFrame = sharedmem_rm.AwaitUnrealMutex_Locked(clamp(waitForUnrealTimeout, 2, 1000)); //unreal locks it's mutex when it has started frame
+		long waitForUnrealTimeout = 500/(consecutiveTimeouts+1);
+		boolean unrealStartedNewFrame = sharedmem_rm.AwaitUnrealMutex_Locked(clamp(waitForUnrealTimeout, 500, 500)); //unreal locks it's mutex when it has started frame
 
 		long frameSyncStartTime = System.nanoTime();
 
@@ -558,6 +604,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			client.resizeCanvas(); //resize canvas to force rebuild for working alpha channel
 			storedGpuFlags = flags;
 			client.getCanvas().setIgnoreRepaint(true);
+			client.resizeCanvas();
 			System.out.println("GPU Flags have been changed to "+flags);
 		}
 	}
@@ -583,8 +630,11 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 				if(unrealIsConnected == true) { //if unreal is disconnecting just now
 					unrealIsConnected = false;
 
-					System.out.println("Unreasl Has just Disconnected");
-					//runeModLauncher.runeMod_statusUI.SetStatus_Detail("Disconnected...");
+					System.out.println("Unreal Has just Disconnected");
+
+					if(sharedmem_rm.runeModWindowsExist()) {
+						runeModLauncher.runeMod_statusUI.SetStatus_Detail("RuneMod is not connected.");
+					}
 				}
 
 				if(sharedmem_rm.backBuffer.offset > 500000) {
@@ -600,6 +650,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	@Override
 	public void drawScene(double cameraX, double cameraY, double cameraZ, double cameraPitch, double cameraYaw, int plane) {
 		if(storedGpuFlags <= 0) {return;}
+		if(!client.isGpu()){return;}
 		communicateWithUnreal();
 		//System.out.println("drawScene");
 
@@ -717,29 +768,30 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		//GpuPluginDrawCallbacks.swapScene(scene);
 	}
 
-
-
-
 	@Override
 	protected void shutDown() throws Exception
 	{
 		System.out.println("RuneMod plugin shutDown");
-
-		runeModLauncher.runeMod_statusUI.close();
-
-		runeModLauncher = null;
-
-		sharedmem_rm.destroyRuneModWin();
-		sharedmem_rm.CloseSharedMemory();
-		sharedmem_rm = null;
-
-		ticksSinceLogin = 0;
-
-
 		clientThread.invoke(() -> {
+			unRegisterWindowEventListeners();
+
+			runeModLauncher.runeMod_statusUI.close();
+
+			runeModLauncher = null;
+
+			executorService2.shutdown();
+
+			ticksSinceLogin = -1;
+			ticksSincePLuginLoad = -1;
+
+			sharedmem_rm.destroyRuneModWin();
+			sharedmem_rm.CloseSharedMemory();
+			sharedmem_rm = null;
+
 			setGpuFlags(0);
 			setDrawCallbacks(null);
 			client.setUnlockedFps(false);
+
 			// force main buffer provider rebuild to turn off alpha channel
 			client.resizeCanvas();
 
@@ -747,6 +799,8 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			lastCavansY = 0;
 			lastCavansSizeX = 0;
 			lastCavansSizeY = 0;
+
+			storedGpuFlags = -1;
 		});
 	}
 
@@ -754,18 +808,84 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		client.setDrawCallbacks(drawCallbacks);
 
 		if (drawCallbacks==null) {
-			//System.out.println("Changed DrawCallbacks To Null");
+			System.out.println("Changed DrawCallbacks To Null");
 		} else {
-			//System.out.println("Changed DrawCallbacks");
+			System.out.println("Changed DrawCallbacks");
 		}
 	}
 
 	private AWTContext awtContext;
 
+	void startUp_Custom() {
+		//System.out.println(RuneLite.RUNELITE_DIR);
+
+		//clientThread.invoke(() ->
+		//{
+			executorService2 = Executors.newFixedThreadPool(1);
+			executorService2.execute(runeModLauncher);
+
+			System.out.println("runelitDir: " + RUNELITE_DIR);
+
+			sharedmem_rm.CreateMutexes();
+
+			//start new rsdata. Unreal does not completely block rs (due to timeout), so it is safe to do his.
+			{
+				sharedmem_rm.LockMutex();
+				sharedmem_rm.startNewRsData();
+				sharedmem_rm.transferBackBufferToSharedMem();
+				sharedmem_rm.passRsDataToUnreal();
+			}
+
+			maintainRuneModStatusAttachment(true, true);
+
+			registerWindowEventListeners();
+
+			try
+			{
+				//int GpuFlags = DrawCallbacks.GPU | (computeMode == ComputeMode.NONE ? 0 : DrawCallbacks.HILLSKEW);
+				client.getScene().setDrawDistance(50);
+				client.setUnlockedFps(false);
+				client.getCanvas().setIgnoreRepaint(true);
+				setGpuFlags(0);
+				setDrawCallbacks(this);
+			}
+			catch (Throwable e)
+			{
+				log.error("Error starting RuneMod plugin", e);
+
+				SwingUtilities.invokeLater(() ->
+				{
+					try
+					{
+						pluginManager.setPluginEnabled(this, false);
+						pluginManager.stopPlugin(this);
+					}
+					catch (PluginInstantiationException ex)
+					{
+						log.error("error stopping plugin", ex);
+					}
+				});
+
+				try {
+					shutDown();
+				} catch (Exception exception) {
+					exception.printStackTrace();
+				}
+			}
+			//return true;
+		//});
+	}
+
 	@Override
 	protected void startUp() throws IOException {
 
-		//System.out.println(RuneLite.RUNELITE_DIR);
+		sharedmem_rm = new SharedMemoryManager(this);
+		sharedmem_rm.createSharedMemory("sharedmem_rm", 50000000); //50 mb
+
+		runeModPlugin = this;
+		RuneMod_statusUI statusUi = new RuneMod_statusUI();
+		runeModLauncher =  new RuneMod_Launcher(statusUi, config.AltRuneModLocation(), config.StartRuneModOnStart());
+/*		//System.out.println(RuneLite.RUNELITE_DIR);
 
 		runeModPlugin = this;
 
@@ -790,7 +910,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			sharedmem_rm.passRsDataToUnreal();
 		}
 
-		clientThread.invoke(() ->
+		clientThread.invokeAtTickEnd(() ->
 		{
 			maintainRuneModStatusAttachment(true, true);
 
@@ -827,8 +947,8 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 					exception.printStackTrace();
 				}
 			}
-			return true;
-		});
+			//return true;
+		});*/
 
 
 		//registerWindowEventListeners();
@@ -1185,9 +1305,16 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		{
 			if (event.getGroup().equalsIgnoreCase("RuneMod")) {
 				System.out.println("RuneModConfigChanged to " + event.getNewValue());
-				if(event.getKey().equalsIgnoreCase("UpdateDefaultModToLatest")) {
+				if(event.getKey().equalsIgnoreCase("RuneModVisibility")) {
 					if(event.getNewValue().equalsIgnoreCase("true")) {
-						provideRsCacheData();
+						clientThread.invoke(() -> {
+							setDrawCallbacks(this);
+						});
+
+					} else {
+						clientThread.invoke(() -> {
+							setDrawCallbacks(null);
+						});
 					}
 				}
 			}
@@ -3424,6 +3551,7 @@ skills menu:__________
 		List<NPC> npcs = client.getNpcs();
 
 		int npcCount = npcs.size();
+		if(!config.spawnNPCs()) { npcCount = 0;}
 		perFramePacket.writeShort(npcCount);
 		if (npcCount > 0) {
 			for (int i = 0; i < npcCount; i++ ) {
@@ -3480,6 +3608,7 @@ skills menu:__________
 		List<Player> players = client.getPlayers();
 
 		int playerCount = players.size();
+		if(!config.spawnPlayers()) { playerCount = 0;}
 		perFramePacket.writeShort(playerCount);
 		if (playerCount > 0) {
 			for (int i = 0; i < playerCount; i++ ) {
@@ -3545,6 +3674,7 @@ skills menu:__________
 		if(client.getLocalPlayer()!=null) {LocalPlayerIndex = client.getLocalPlayer().getId();}
 		perFramePacket.writeShort(LocalPlayerIndex);
 
+
 		int noGraphicsObjects = 0;
 		if (config.spawnStaticGFX()) {
 			for (GraphicsObject graphicsObject : client.getGraphicsObjects()) {
@@ -3552,7 +3682,7 @@ skills menu:__________
 			}
 		}
 		perFramePacket.writeShort(noGraphicsObjects);
-		if (config.spawnStaticGFX()) {
+		if (noGraphicsObjects>0) {
 			for (GraphicsObject graphicsObject : client.getGraphicsObjects())
 			{
 				if (graphicsObject instanceof RuneLiteObject) {
@@ -3574,41 +3704,80 @@ skills menu:__________
 		}
 
 
+
+
 		int noProjectiles = 0;
+
+		Set<Integer> projectilesThisFrame = new HashSet<Integer>();
+
 		if (config.spawnProjectiles()) {
-			for (Projectile projectiles : client.getProjectiles())
+			for (Projectile projectile : client.getProjectiles())
 			{
 				noProjectiles++;
+				projectilesThisFrame.add(projectile.hashCode());
+			}
+
+			if(projectiles_LastFrame!=null) {
+				for (Integer lastFrameProjectile : projectiles_LastFrame) {
+					if(projectilesThisFrame.contains(lastFrameProjectile)) { //if lats frames projectile is not present this frame, means it has despawned.
+						//System.out.println("projectilesThisFrame contains projectile "+lastFrameProjectile);
+					} else {
+						ProjectileDeSpawned(lastFrameProjectile);
+					}
+				}
 			}
 		}
+		projectiles_LastFrame = projectilesThisFrame;
 
-		perFramePacket.writeShort(noProjectiles);
+		if(config.spawnProjectiles() && noProjectiles > 0) {
+			perFramePacket.writeShort(noProjectiles);
 
-		for (Projectile projectile : client.getProjectiles())
-		{
-			long sceneId = projectile.hashCode();
-			perFramePacket.writeLong(sceneId);
-			short localX = (short)projectile.getX();
-			perFramePacket.writeShort(localX);
-			short localY = (short)projectile.getY();
-			perFramePacket.writeShort(localY);
-			short Z = (short)((projectile.getZ()*-1) + projectile.getStartHeight()); //not sure if getStartHeight is correct/helping things.
-			perFramePacket.writeShort(Z);
-			short spotAnimId = (short)projectile.getId();
-			perFramePacket.writeShort(spotAnimId);
-			short animimationFrameIdx = (short)projectile.getAnimationFrame();
-			perFramePacket.writeShort(animimationFrameIdx);
-			short animimationFrameCycle = (short)-1;
-			perFramePacket.writeShort(animimationFrameCycle);
-			short remainingCycles = (short)projectile.getRemainingCycles();
-			perFramePacket.writeShort(remainingCycles);
+			for (Projectile projectile : client.getProjectiles())
+			{
+				long sceneId = projectile.hashCode();
+				perFramePacket.writeLong(sceneId);
+				short localX = (short)projectile.getX();
+				perFramePacket.writeShort(localX);
+				short localY = (short)projectile.getY();
+				perFramePacket.writeShort(localY);
+				short Z = (short)((projectile.getZ()*-1)); //not sure if getStartHeight is correct/helping things.
+				perFramePacket.writeShort(Z);
+
+				short localX_target = (short)projectile.getTarget().getX();
+				perFramePacket.writeShort(localX_target);
+				short localY_target = (short)projectile.getTarget().getY();
+				perFramePacket.writeShort(localY_target);
+				short Z_target = (short)(projectile.getEndHeight());
+				Z_target+=(Perspective.getTileHeight(client, new LocalPoint(localX_target, localY_target), client.getPlane())*-1);
+				perFramePacket.writeShort(Z_target);
+
+/*				System.out.println("z = "+Z);
+				System.out.println("ztarget = " + Z_target);*/
+
+/*				System.out.println("Height: "+projectile.getHeight());
+				System.out.println("endHeight: "+projectile.getEndHeight()); //endHeight,relativeToTerrain?
+				System.out.println("startHeight: "+projectile.getStartHeight());
+				System.out.println("Z: "+projectile.getZ());
+				System.out.println("ModelHeight: "+projectile.getModelHeight()); //(offset?)*/
+
+				short spotAnimId = (short)projectile.getId();
+				perFramePacket.writeShort(spotAnimId);
+				short animimationFrameIdx = (short)projectile.getAnimationFrame();
+				perFramePacket.writeShort(animimationFrameIdx);
+				short animimationFrameCycle = (short)-1;
+				perFramePacket.writeShort(animimationFrameCycle);
+				short remainingCycles = (short)projectile.getRemainingCycles();
+				perFramePacket.writeShort(remainingCycles);
+			}
+		} else {
+			perFramePacket.writeShort(0);
 		}
 
 		//Map<GameObject,Tile> GameObjAnimChanges = checkForGameObjectAnimationChanges();
 		//int noGameObjAnimChanges = GameObjAnimChanges.size();
 
 
-		if(config.spawnAnimations()) {
+		if(config.spawnAnimations() && config.spawnGameObjects()) {
 			Map<Long, DynamicObject> gameObjects = getAnimatedGameObjects();
 			int NoGameObjects = gameObjects.size();
 			perFramePacket.writeInt(NoGameObjects);
@@ -3671,6 +3840,20 @@ skills menu:__________
 		lastFrameWorldX = worldX;
 		lastFrameWorldY = worldY;
 		lastFrameWorldZ = worldZ;*/
+	}
+
+	void ProjectileDeSpawned(int projectileHashCode) {
+			if (!config.spawnProjectiles()) {
+				return;
+			}
+
+			Buffer actorSpawnPacket = new Buffer(new byte[20]);
+
+			actorSpawnPacket.writeByte(6); //write projectile data type
+			actorSpawnPacket.writeLong(projectileHashCode);
+
+			sharedmem_rm.backBuffer.writePacket(actorSpawnPacket, "ActorDeSpawn");
+			//System.out.println("projectile despawned: " + projectileHashCode);
 	}
 
 	void attachUnrealToRl() {

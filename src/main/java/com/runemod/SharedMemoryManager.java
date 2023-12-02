@@ -436,7 +436,7 @@ public class SharedMemoryManager
 		//WinDef.HWND HWND_TOP = new WinDef.HWND(new Pointer(0));
 		User32.INSTANCE.SetWindowPos(RuneModHandle, null, canvasPosX, canvasPosY, canvasSizeX, canvasSizeY,  0);
 
-
+		runeModPlugin.maintainRuneModStatusAttachment(true, true);
 
 /*		WinDef.HWND ModModeWindow = User32.INSTANCE.FindWindow(null,"ModModeTogglerWin");
 		int SWP_NOSIZE = 0x0001;

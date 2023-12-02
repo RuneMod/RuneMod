@@ -50,7 +50,7 @@ public class RuneMod_statusUI implements Runnable {
         labelPanel.setBackground (new Color (0, 0, 0, 0));
         labelPanel.setOpaque(false);
         frame.setBackground (new Color (0, 0, 0, 0));
-        frame.setVisible(true);
+        frame.setVisible(false);
         frame.toFront();
 
         SetStatusHeading("RuneMod Status: ");
@@ -66,6 +66,24 @@ public class RuneMod_statusUI implements Runnable {
     public void SetStatus_Detail(String statusText) {
         //loadingBar.setString(statusText +" - " + loadingBar.getValue() + "%");
         StatusDetail.setText(statusText);
+
+        String statusText_caseless =  statusText.toLowerCase();
+
+        if (statusText_caseless.contains("updating")) {
+            StatusDetail.setForeground(Color.orange);
+        }else {
+            if (statusText_caseless.contains("ing")) {
+                StatusDetail.setForeground(Color.yellow);
+            }else {
+                if(statusText_caseless.contains("fail")||statusText_caseless.contains("not ")||statusText_caseless.contains("cant")) {
+                    StatusDetail.setForeground(Color.red);
+                } else {
+                    StatusDetail.setForeground(Color.green);
+                }
+            }
+        }
+
+
 
 /*        if (!statusText.toLowerCase().contains("ready")) {
             SetStatusHeading("Runemod Loading...");

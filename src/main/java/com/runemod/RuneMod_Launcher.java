@@ -85,6 +85,8 @@ class RuneMod_Launcher implements Runnable {
 
     @SneakyThrows
     public void onStart() {
+
+
         if(AltRuneModLocation.length()>1) {
             LaunchApp(AltRuneModLocation);
             return;
@@ -108,14 +110,12 @@ class RuneMod_Launcher implements Runnable {
             }
 
             if(Files.exists(Paths.get(rmAppLocation +"WindowsNoEditor\\RuneMod\\Binaries\\Win64\\"+"RuneMod-Win64-Shipping.exe"))) {
-                runeMod_statusUI.SetStatus_Detail("Launching RuneMod.exe...");
                 LaunchApp(rmAppLocation +"WindowsNoEditor\\RuneMod\\Binaries\\Win64\\"+"RuneMod-Win64-Shipping.exe");
             } else  {
                 runeMod_statusUI.SetStatus_Detail("Launch failed: Runemod.exe could not be found, ask for help in RuneMod discord");
             }
         } else {
             if(Files.exists(Paths.get(rmAppLocation +"WindowsNoEditor\\RuneMod\\Binaries\\Win64\\"+"RuneMod-Win64-Shipping.exe"))) {
-                runeMod_statusUI.SetStatus_Detail("Launching RuneMod.exe...");
                 LaunchApp(rmAppLocation +"WindowsNoEditor\\RuneMod\\Binaries\\Win64\\"+"RuneMod-Win64-Shipping.exe");
             } else {
                 runeMod_statusUI.SetStatus_Detail("Launch failed: Runemod.exe could not be found, ask for help in RuneMod discord");
@@ -240,6 +240,13 @@ class RuneMod_Launcher implements Runnable {
 
     public void LaunchApp(String filePath) throws IOException {
 
+        if(AltRuneModLocation.length()>1) {
+            runeMod_statusUI.SetStatus_Detail("Launching Alt RuneMod.exe...");
+        } else {
+            runeMod_statusUI.SetStatus_Detail("Launching RuneMod.exe...");
+        }
+
+
         File theFile = new File(filePath);
 
         String folderPath = theFile.getParent();
@@ -248,13 +255,11 @@ class RuneMod_Launcher implements Runnable {
         String fileName = theFile.getName();
         System.out.println(fileName);
 
-        if(AutoLaunch == false) {return;}
+        if(AutoLaunch == false) { runeMod_statusUI.SetStatus_Detail("Auto launch turned off, not launching RuneMod.exe."); return;}
 
-        runeMod_statusUI.SetStatus_Detail("Launching...");
         Desktop desktop = Desktop.getDesktop();
         try
         {
-            runeMod_statusUI.SetStatus_Detail("Executing RuneMod.exe...");
             //desktop.open(new File(filePath));
             //Process p = new ProcessBuilder(filePath).start();
             ProcessBuilder pb = new ProcessBuilder(
