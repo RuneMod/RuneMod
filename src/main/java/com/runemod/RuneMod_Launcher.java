@@ -255,7 +255,7 @@ class RuneMod_Launcher implements Runnable {
         String fileName = theFile.getName();
         System.out.println(fileName);
 
-        if(AutoLaunch == false) { runeMod_statusUI.SetStatus_Detail("Auto launch turned off, not launching RuneMod.exe."); return;}
+        if(AutoLaunch == false) { runeMod_statusUI.SetStatus_Detail("Auto launch turned off, will not launch RuneMod.exe."); return;}
 
         Desktop desktop = Desktop.getDesktop();
         try
@@ -263,7 +263,7 @@ class RuneMod_Launcher implements Runnable {
             //desktop.open(new File(filePath));
             //Process p = new ProcessBuilder(filePath).start();
             ProcessBuilder pb = new ProcessBuilder(
-                    "cmd", "/c", "cd \"" + folderPath+ "\" " + "&& start /B "+ fileName + " -NOSPLASH -game -windowed -WinX=0 -WinY=0 -ResX=1 -ResY=1"); //launches program with arguments
+                    "cmd", "/c", "cd \"" + folderPath+ "\" " + "&& start "+ fileName + " -NOSPLASH -game -windowed -WinX=0 -WinY=0 -ResX=1 -ResY=1"); //launches program with arguments
             pb.start();
         }
         catch (IOException e)

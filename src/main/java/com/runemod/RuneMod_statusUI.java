@@ -3,18 +3,25 @@ package com.runemod;
 import javax.swing.*;
 import java.awt.*;
 
-public class RuneMod_statusUI implements Runnable {
+public class RuneMod_statusUI extends JPanel {
 
 
     public JLabel StatusHeading = new JLabel();
     public JLabel StatusDetail = new JLabel();
+    JLabel iconHolder = new JLabel();
+
     public JDialog frame;
     public JProgressBar loadingBar;
 
-    @Override
+/*    @Override
     public void run()
     {
-    }
+        if (dotdotdot.getText().length() > 4) {
+            dotdotdot.setText("");
+        } else {
+            dotdotdot.setText(dotdotdot.getText()+".");
+        }
+    }*/
 
     public void close() {
         frame.dispose();
@@ -22,11 +29,11 @@ public class RuneMod_statusUI implements Runnable {
         frame.setTitle("staleWindow");
     }
 
-    RuneMod_statusUI() {
+    RuneMod_statusUI(Frame owner) {
         StatusHeading.setText("No Status");
 
 
-        frame = createFrame("RuneModStatus");
+        frame = createFrame("RuneModStatus", owner);
 
 
         final JPanel labelPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
@@ -39,6 +46,8 @@ public class RuneMod_statusUI implements Runnable {
         labelPanel.add(StatusDetail);
 
 
+        // We suppose you have already set your JFrame
+        labelPanel.add(iconHolder);
 /*
         loadingBar = new JProgressBar( ) ;
         loadingBar.setValue( 0 ) ;
@@ -50,10 +59,10 @@ public class RuneMod_statusUI implements Runnable {
         labelPanel.setBackground (new Color (0, 0, 0, 0));
         labelPanel.setOpaque(false);
         frame.setBackground (new Color (0, 0, 0, 0));
-        frame.setVisible(false);
+        frame.setVisible(true);
         frame.toFront();
 
-        SetStatusHeading("RuneMod Status: ");
+        SetStatusHeading("RuneMod: ");
         SetStatus_Detail("No status");
     }
 
@@ -71,14 +80,20 @@ public class RuneMod_statusUI implements Runnable {
 
         if (statusText_caseless.contains("updating")) {
             StatusDetail.setForeground(Color.orange);
+            iconHolder.setVisible(true);
+            iconHolder.setIcon(new ImageIcon("loading_shrimps_small.gif"));
         }else {
             if (statusText_caseless.contains("ing")) {
                 StatusDetail.setForeground(Color.yellow);
+                iconHolder.setVisible(true);
+                iconHolder.setIcon(new ImageIcon("loading_shrimps_small.gif"));
             }else {
                 if(statusText_caseless.contains("fail")||statusText_caseless.contains("not ")||statusText_caseless.contains("cant")) {
                     StatusDetail.setForeground(Color.red);
+                    iconHolder.setVisible(false);
                 } else {
                     StatusDetail.setForeground(Color.green);
+                    iconHolder.setVisible(false);
                 }
             }
         }
@@ -96,8 +111,8 @@ public class RuneMod_statusUI implements Runnable {
         StatusHeading.setText(statusText);
     }
 
-    public static JDialog  createFrame(String title) {
-        JDialog dialog = new JDialog((JFrame)null, title, true);
+    public static JDialog  createFrame(String title, Frame owner) {
+        JDialog dialog = new JDialog(owner, title, true);
         dialog.setModalityType(Dialog.ModalityType.MODELESS);
         dialog.setUndecorated(true);
         // Using rigid area just to give the dialog size, but you
@@ -105,11 +120,13 @@ public class RuneMod_statusUI implements Runnable {
         dialog.getContentPane().add(Box.createRigidArea(new Dimension(500, 20)));
         dialog.pack();
         dialog.setAutoRequestFocus(false);
+        dialog.setFocusable(false);
         dialog.setVisible(true);
+        //dialog.setLocationRelativeTo(owner);
         return dialog;
     }
 
     public static void main(String args[]) {
-        new RuneMod_statusUI();
+        //new RuneMod_statusUI();
     }
 }

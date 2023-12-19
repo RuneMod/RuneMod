@@ -7,6 +7,7 @@ import com.sun.jna.platform.win32.*;
 import com.sun.jna.win32.W32APIOptions;
 import lombok.SneakyThrows;
 import net.runelite.api.GameState;
+import net.runelite.client.ui.ContainableFrame;
 
 import javax.swing.*;
 
@@ -379,18 +380,26 @@ public class SharedMemoryManager
 	}
 
 	public WinDef.HWND findRuneModWindow() {
-		return User32.INSTANCE.FindWindow(null,"RuneModWin");
+		WinDef.HWND handle = User32.INSTANCE.FindWindow(null,"RuneModWin");
+		if(User32.INSTANCE.IsWindow(handle)) {
+			System.out.println("found rl window");
+			return handle;
+		} else {
+			System.out.println("Not found rl window");
+			return null;
+		}
 	}
 
 	WinDef.HWND RuneModHandle = null;
 	public boolean ChildRuneModWinToRl() {
 		if(runeModPlugin.client.getGameState().ordinal()<=GameState.LOGIN_SCREEN.ordinal()) { return false; }  //prevents childing while on login screen, because that causes a period where the client becomes unfocused which prevents you typing your user/pass
-		if(RuneModHandle != null && User32.INSTANCE.IsWindow(RuneModHandle)) {return true;}
-		if(RuneModHandle == findRuneModWindow()) {return true;} else {
+		if(RuneModHandle != null) {
+			return true;}
+		else {
 			RuneModHandle = findRuneModWindow();
 		}
+		if (RuneModHandle == null) { return false;}
 
-		if (RuneModHandle == null || !User32.INSTANCE.IsWindow(RuneModHandle)) { return false;}
 		if(!runeModPlugin.config.attachRmWindowToRL()) {return false;}
 
 /*		User32.INSTANCE.SetWindowLongPtr(RuneModHandle *//*The handle of the window to remove its borders*//*, User32.GWL_STYLE, User32.WS_POPUP);
@@ -406,7 +415,7 @@ public class SharedMemoryManager
 
 		updateRmWindowTransform();
 
-		runeModPlugin.maintainRuneModStatusAttachment(true, true);
+		//runeModPlugin.maintainRuneModStatusAttachment();
 		return true;
 	}
 
@@ -425,18 +434,20 @@ public class SharedMemoryManager
 
 	public void updateRmWindowTransform() {
 		if(!runeModPlugin.config.attachRmWindowToRL()) {return;}
-		if(RuneModHandle == null) {System.out.println();}
+		//if(RuneModHandle == null) {System.out.println("null rmHandle, cant uodate transform");}
 		System.out.println("updating RuneMod windows");
 		if(!runeModPlugin.client.getCanvas().isShowing()) { return;}
-		int canvasPosX = runeModPlugin.client.getCanvas().getLocationOnScreen().x;
-		int canvasPosY = runeModPlugin.client.getCanvas().getLocationOnScreen().y;
-		int canvasSizeX = runeModPlugin.client.getCanvas().getWidth();
-		int canvasSizeY = runeModPlugin.client.getCanvas().getHeight();
+		Container parent = runeModPlugin.client.getCanvas().getParent();
+		int canvasPosX = parent.getLocationOnScreen().x;
+		int canvasPosY = parent.getLocationOnScreen().y;
+		int canvasSizeX = parent.getWidth();
+		int canvasSizeY = parent.getHeight();
+
 
 		//WinDef.HWND HWND_TOP = new WinDef.HWND(new Pointer(0));
 		User32.INSTANCE.SetWindowPos(RuneModHandle, null, canvasPosX, canvasPosY, canvasSizeX, canvasSizeY,  0);
 
-		runeModPlugin.maintainRuneModStatusAttachment(true, true);
+		//runeModPlugin.maintainRuneModStatusAttachment();
 
 /*		WinDef.HWND ModModeWindow = User32.INSTANCE.FindWindow(null,"ModModeTogglerWin");
 		int SWP_NOSIZE = 0x0001;
@@ -489,10 +500,16 @@ public class SharedMemoryManager
 					});
 					break;
 				case 5: //RequestRsCacheHashes
-					//System.out.println("recieved unrealStatusReport");
 					runeModPlugin.clientThread.invokeAtTickEnd(() -> //invoke at end of tick, because we cannot communicate with unreal at this point in the communiucation process. (tecnically we can, but only if we dont overflow the backbuffer, which we will do when sending cache)
 					{
 						runeModPlugin.myCacheReader.provideRsCacheHashes();
+					});
+					break;
+				case 6: //RequestSceneReload
+					System.out.println("recieved unreal RequestSceneReload");
+					runeModPlugin.clientThread.invokeAtTickEnd(() ->
+					{
+						runeModPlugin.reloadUnrealScene();
 					});
 					break;
 				default:
