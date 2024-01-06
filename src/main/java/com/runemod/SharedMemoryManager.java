@@ -393,14 +393,15 @@ public class SharedMemoryManager
 	WinDef.HWND RuneModHandle = null;
 	public boolean ChildRuneModWinToRl() {
 		if(runeModPlugin.client.getGameState().ordinal()<=GameState.LOGIN_SCREEN.ordinal()) { return false; }  //prevents childing while on login screen, because that causes a period where the client becomes unfocused which prevents you typing your user/pass
+
+		if(!runeModPlugin.config.attachRmWindowToRL()) {return false;}
+
 		if(RuneModHandle != null) {
 			return true;}
 		else {
 			RuneModHandle = findRuneModWindow();
 		}
 		if (RuneModHandle == null) { return false;}
-
-		if(!runeModPlugin.config.attachRmWindowToRL()) {return false;}
 
 /*		User32.INSTANCE.SetWindowLongPtr(RuneModHandle *//*The handle of the window to remove its borders*//*, User32.GWL_STYLE, User32.WS_POPUP);
 		User32.INSTANCE.SetWindowLongPtr(RuneModHandle *//*The handle of the window to remove its borders*//*, User32.GWL_STYLE, User32.WS_POPUP, );*/
@@ -425,7 +426,7 @@ public class SharedMemoryManager
 
 		Point loc = runeModPlugin.client.getCanvas().getLocationOnScreen();
 		loc.x += 100;
-		loc.y -= runeModPlugin.runeModLauncher.runeMod_statusUI.frame.getHeight();
+		loc.y -= runeModPlugin.runeMod_statusUI.frame.getHeight();
 
 		User32.INSTANCE.SetWindowPos(RLStatusHandle, RLHandle, loc.x, loc.y, 300, 20,  User32.SWP_NOSIZE|User32.SWP_NOACTIVATE);
 		//User32.INSTANCE.SetWindowLongPtr(RLStatusHandle, User32.GWL_HWNDPARENT, RLHandle.getPointer());
@@ -490,7 +491,7 @@ public class SharedMemoryManager
 					break;
 				case 3: //StatusReport
 					//System.out.println("recieved unrealStatusReport");
-					RuneModPlugin.runeModLauncher.runeMod_statusUI.SetStatus_Detail(packet.readStringCp1252NullTerminated());
+					RuneModPlugin.runeMod_statusUI.SetStatus_Detail(packet.readStringCp1252NullTerminated());
 					break;
 				case 4: //RequestRsCacheData
 					//System.out.println("recieved RsCacheData request");

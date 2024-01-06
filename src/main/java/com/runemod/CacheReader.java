@@ -5,6 +5,7 @@ import com.runemod.cache.IndexType;
 import com.runemod.cache.definitions.MapDefinition;
 import com.runemod.cache.definitions.loaders.MapLoader;
 import com.runemod.cache.fs.*;
+import com.runemod.cache.index.FileData;
 import com.runemod.cache.models.JagexColor;
 import com.runemod.cache.region.Region;
 import com.runemod.cache.util.KeyProvider;
@@ -12,6 +13,7 @@ import lombok.SneakyThrows;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
@@ -24,7 +26,7 @@ public class CacheReader {
 
     private KeyProvider keyProvider;
 
-    public CacheReader(String cacheLocation) {
+    public CacheReader() {
         try {
             store = new Store(new File(RUNELITE_DIR + "\\jagexcache\\oldschool\\LIVE"));
             store.load();
@@ -367,6 +369,30 @@ public class CacheReader {
     }
 
     @SneakyThrows
+    public void isCacheComplete() {
+        for (Index index : store.getIndexes()) {
+            for(Archive archive : index.getArchives()) {
+                store.getStorage().loadArchive(archive);
+                byte[] archiveData = store.getStorage().loadArchive(archive);
+                ArchiveFiles archiveFiles = archive.getFiles(archiveData);
+
+                //create list of downloaded files
+                List<Integer> DownloadedFileIdList = new ArrayList<>();
+                for (FSFile fsFile : archiveFiles.getFiles()) {
+                    DownloadedFileIdList.add(fsFile.getFileId());
+                }
+
+                //check if any files are missing from the downloaded file-list
+                for (FileData fileData : archive.getFileData()) {
+                    if (!DownloadedFileIdList.contains(fileData.getId())) {
+                        System.out.println("file missing. id: "+fileData.getId() + " index: "+index.getId());
+                    }
+                }
+            }
+        }
+    }
+
+    @SneakyThrows
     public void sendTilesInRegion(int regionId) {
         MapDefinition.Tile nullTile = new MapDefinition.Tile();
             try
@@ -387,6 +413,13 @@ public class CacheReader {
                 bytes = map.decompress(storage.loadArchive(map));
 
                 if(bytes==null) {return;}
+
+/*                try {
+                    bytes = map.decompress(storage.loadArchive(map));
+                } catch (IOException e) {
+                    //e.printStackTrace();
+                    return;
+                }*/
 
                 MapLoader mapLoader = new MapLoader();
                 MapDefinition mapDef = mapLoader.load(regionX, regionY, bytes);

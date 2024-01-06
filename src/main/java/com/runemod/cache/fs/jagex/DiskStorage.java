@@ -179,6 +179,12 @@ public class DiskStorage implements Storage
 			}
 		}
 
+		if (entry == null)
+		{
+			System.out.println("can't read archive " + archive.getArchiveId() + " from index " + index.getId());
+			return null;
+		}
+
 		assert entry.getId() == archive.getArchiveId();
 
 		logger.trace("Loading archive {} for index {} from sector {} length {}",

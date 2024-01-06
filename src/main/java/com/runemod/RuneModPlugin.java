@@ -28,9 +28,9 @@ import net.runelite.rlawt.AWTContext;
 
 import javax.inject.Inject;
 import javax.swing.*;
-import java.awt.Point;
 import java.awt.*;
 import java.awt.event.*;
+import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.Field;
 import java.util.List;
@@ -76,14 +76,16 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 	private Set<Integer> hashedEntitys_LastFrame = new HashSet<Integer>();
 
-	CacheReader myCacheReader = new CacheReader(RUNELITE_DIR + "\\jagexcache\\oldschool\\LIVE");
+	public static CacheReader myCacheReader;
 
 	//ExecutorService executorService = Executors.newFixedThreadPool(1);
-	ExecutorService executorService2;
+	ExecutorService executorService2 = null;
 
 	//alt runemodLocation C:\Users\soma.wheelhouse\Documents\Unreal Projects\RuneMod\LaunchGame_Standalone.lnk
 
 	public static RuneMod_Launcher runeModLauncher;
+
+	public static RuneMod_statusUI runeMod_statusUI;
 
 	int clientCycle_unreal = 0;
 
@@ -219,8 +221,8 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		window.removeWindowFocusListener(WindowFocusListener);
 		window.removeComponentListener(componentAdapter0);
 		window.removeComponentListener(componentAdapter1);
-		window.removeWindowListener(windowListener);*/
-		Toolkit.getDefaultToolkit().removeAWTEventListener(mouseListener);
+		window.removeWindowListener(windowListener);
+		Toolkit.getDefaultToolkit().removeAWTEventListener(mouseListener);*/
 	}
 
 	public void registerWindowEventListeners() {
@@ -355,15 +357,17 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 	int perFramePacketSentTick = -1;
 	int sharedMemPixelsUpdatedTick = -1;
-	int ticksSinceLogin = 0;
 	int ticksSincePLuginLoad = 0;
 
 	void maintainRuneModStatusAttachment() {
-			if(!client.getCanvas().isShowing()) {return;}
+		return;
+/*			if(!client.getCanvas().isShowing()) {return; }
 			Point loc = client.getCanvas().getParent().getLocationOnScreen();
 			loc.x += 100;
-			loc.y -= runeModLauncher.runeMod_statusUI.frame.getHeight();
-			runeModLauncher.runeMod_statusUI.frame.setLocation(loc);
+			loc.y -= runeMod_statusUI.frame.getHeight();
+			loc.x = (int)clamp(loc.x, 0, 8000);
+			loc.y = (int)clamp(loc.y, 0, 8000);
+			runeMod_statusUI.frame.setLocation(loc);*/
 	}
 
 	void clearRsPixelBuffer() {
@@ -371,6 +375,12 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		System.arraycopy(client.getBufferProvider().getPixels(), 0, newArray, 0, 3);
 	}
 
+
+	int cacheLastUpdatedTick = Integer.MAX_VALUE; //when a cache file was last seen to be changed
+	boolean rsCacheIsUpdating = true;
+	HashMap<File, Long> lastSeenFileSizes =  new HashMap<File, Long>();
+
+	boolean startedWhileLoggedIn;
 	@SneakyThrows
 	@Subscribe
 	private void onBeforeRender(BeforeRender event)
@@ -383,6 +393,63 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 		if(ticksSincePLuginLoad == 1) {
 			startUp_Custom();
+			if (client.getGameState().ordinal() > GameState.LOGIN_SCREEN_AUTHENTICATOR.ordinal()) {
+				runeMod_statusUI.SetStatus_Detail("To enable RuneMod, you must first logout");
+				startedWhileLoggedIn = true;
+			} else {
+				runeMod_statusUI.SetStatus_Detail("Starting...");
+				startedWhileLoggedIn = false;
+			}
+		}
+
+		if (startedWhileLoggedIn) { //if were logged in, we auto stop the plugin after the user has had a moment to read the message
+			System.out.println("Not logged out, so not starting rm . Will stop plugin soon");
+			if (ticksSincePLuginLoad == 50) {
+				SwingUtilities.invokeLater(() ->
+				{
+					try {
+						pluginManager.setPluginEnabled(this, false);
+						pluginManager.stopPlugin(this);
+					} catch (PluginInstantiationException ex) {
+						log.error("error stopping plugin", ex);
+					}
+
+					try {
+						shutDown();
+					} catch (Exception exception) {
+						exception.printStackTrace();
+					}
+				});
+			}
+			return;
+		}
+
+		//check if rscache is currently being updated. if not, start runemod launcher
+		if(rsCacheIsUpdating == true && ticksSincePLuginLoad > 1 && client.getGameCycle()%50 == 0) {
+			String directory = RUNELITE_DIR + "\\jagexcache\\oldschool\\LIVE";
+			File[] files = new File(directory).listFiles();
+			for(File file : files){
+				if(file!=null && file.isFile()) {
+					long lastSeenFileSize = lastSeenFileSizes.getOrDefault(file, -1L);
+					if (file.length() != lastSeenFileSize) {
+						lastSeenFileSizes.put(file, file.length());
+						cacheLastUpdatedTick = client.getGameCycle();
+						rsCacheIsUpdating = true;
+					}
+				}
+			}
+
+			if(client.getGameCycle() - cacheLastUpdatedTick > 100) {
+				System.out.println("RSCache has finished downloading");
+				runeMod_statusUI.SetStatus_Detail("Downloaded RS cache");
+				rsCacheIsUpdating = false;
+
+				executorService2 = Executors.newFixedThreadPool(1);
+
+				executorService2.execute(runeModLauncher);
+			} else {
+				runeMod_statusUI.SetStatus_Detail("Downloading RS cache...");
+			}
 		}
 
 		JFrame window = (JFrame) SwingUtilities.getWindowAncestor(client.getCanvas());
@@ -402,20 +469,20 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 		//clientThread.invokeAtTickEnd(() -> {
 			if(ticksSincePLuginLoad <= 2 || client.getGameState().ordinal()<GameState.LOGGING_IN.ordinal() || client.getGameState()==GameState.LOGGING_IN && lastGameState.ordinal()<=GameState.LOGIN_SCREEN_AUTHENTICATOR.ordinal() || config.RuneModVisibility() == false) {//allows us to display logging in... on login screen
-				setGpuFlags(0);
-				if(client.getDrawCallbacks() == null) {
-					communicateWithUnreal();
-					//clientThread.invokeAtTickEnd(this::communicateWithUnreal); //for times when scenedraw callback isnt available.
-				}
+					setGpuFlags(0);
+					if(client.getDrawCallbacks() == null) {
+						communicateWithUnreal();
+						//clientThread.invokeAtTickEnd(this::communicateWithUnreal); //for times when scenedraw callback isnt available.
+					}
 			} else {
-				setGpuFlags(3);
+				clientThread.invokeAtTickEnd(() -> {
+					if(isShutDown == false) {
+						setGpuFlags(3);
+					}
+				});
 			}
-		//});
 
 
-		if (client.getGameState().ordinal()>=GameState.LOGGED_IN.ordinal()) {
-			ticksSinceLogin++;
-		}
 
 
 /*			if (curGamestate == GameState.LOGIN_SCREEN) {
@@ -474,9 +541,14 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	long timeCommunicatedWithUnreal = 0;
 
 	void MaintainRuneModAttachment() {
+		maintainRuneModStatusAttachment();
+
 		if(sharedmem_rm == null) {
 			return;
 		}
+
+		if(!runeModPlugin.config.attachRmWindowToRL()) {return;}
+
 		sharedmem_rm.ChildRuneModWinToRl();
 
 		//if(sharedmem_rm.ChildRuneModWinToRl()) { //if RuneMod win exists and is childed to rl
@@ -490,7 +562,6 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 		if(RmNeedsWindowUpdate()) {
 			sharedmem_rm.updateRmWindowTransform();
-			maintainRuneModStatusAttachment();
 		}
 	}
 
@@ -517,7 +588,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			WritePerFramePacket(); //we start writing the perframe apcket before unreal has indidcated its started a new frame, for a small performance optimization
 		}
 
-		long waitForUnrealTimeout = 500/(consecutiveTimeouts+1);
+		long waitForUnrealTimeout = 1000/(consecutiveTimeouts+1);
 		boolean unrealStartedNewFrame = sharedmem_rm.AwaitUnrealMutex_Locked(clamp(waitForUnrealTimeout, 60, 500)); //unreal locks it's mutex when it has started frame
 
 		long frameSyncStartTime = System.nanoTime();
@@ -525,7 +596,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		if(!unrealStartedNewFrame) { // if the wait for unreal's frame timedout
 			//System.out.println("TimedOutWaitingFor unreal");
 			consecutiveTimeouts++;
-			if(consecutiveTimeouts > 5) {
+			if(consecutiveTimeouts > 10) {
 				setUnrealConnectionStatus(false);
 			}
 			return;
@@ -594,7 +665,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 				//if unreal connected while we were already logged in, trigger a reload rs scene.
 				simulateGameEvents();
 
-				//runeModLauncher.runeMod_statusUI.SetStatus_Detail("Connected");
+				//runeMod_statusUI.SetStatus_Detail("Connected");
 				return;
 			}
 		}
@@ -607,12 +678,12 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 					System.out.println("Unreal Has just Disconnected");
 
 					if(sharedmem_rm.runeModWindowsExist()) {
-						runeModLauncher.runeMod_statusUI.SetStatus_Detail("RuneMod is not connected.");
+						runeMod_statusUI.SetStatus_Detail("RuneMod is not connected.");
 					}
 				}
 
 				if(sharedmem_rm.backBuffer.offset > 500000) {
-					//runeModLauncher.runeMod_statusUI.SetStatus_Detail("Disconnected..");
+					//runeMod_statusUI.SetStatus_Detail("Disconnected..");
 					sharedmem_rm.clearBackBuffer();
 				}
 			}
@@ -750,27 +821,38 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	protected void shutDown() throws Exception
 	{
 		System.out.println("RuneMod plugin shutDown");
+		isShutDown = true;
 		clientThread.invoke(() -> {
-			isShutDown = true;
-			unRegisterWindowEventListeners();
 
-			runeModLauncher.runeMod_statusUI.close();
+			//unRegisterWindowEventListeners();
 
 			runeModLauncher = null;
+			myCacheReader = null;
 
-			executorService2.shutdown();
+			if(runeMod_statusUI!=null) {
+				runeMod_statusUI.close();
+				runeMod_statusUI = null;
+			}
 
-			ticksSinceLogin = -1;
+			if(executorService2!=null) {
+				executorService2.shutdown();
+				executorService2 = null;
+			}
+
 			ticksSincePLuginLoad = -1;
 
-			sharedmem_rm.destroyRuneModWin();
-			sharedmem_rm.CloseSharedMemory();
-			sharedmem_rm = null;
+			if(sharedmem_rm!=null) {
+				sharedmem_rm.destroyRuneModWin();
+				sharedmem_rm.CloseSharedMemory();
+				sharedmem_rm = null;
+			}
+
 
 			setGpuFlags(0);
 			setDrawCallbacks(null);
 			client.setUnlockedFps(false);
 
+			toggleRuneModLoadingScreen(false);
 			// force main buffer provider rebuild to turn off alpha channel
 			client.resizeCanvas();
 
@@ -780,6 +862,8 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			lastCavansSizeY = 0;
 
 			storedGpuFlags = -1;
+
+			rsCacheIsUpdating = true;
 		});
 	}
 
@@ -793,128 +877,62 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		}
 	}
 
-	private AWTContext awtContext;
 
+	public static JPanel RuneModLoadingScreen = new JPanel();
+	public static Container canvasAncestor;
+	public static Client client_static;
+
+	public static void toggleRuneModLoadingScreen(Boolean toggled) {
+		SwingUtilities.invokeLater(() ->
+		{
+			if(toggled) {
+				//JPanel window = (JPanel) SwingUtilities.getAncestorOfClass();
+				if(canvasAncestor == null) {return;}
+				RuneModLoadingScreen.removeAll();
+				RuneModLoadingScreen.setLayout(new FlowLayout(FlowLayout.CENTER, 0, 300));
+				RuneModLoadingScreen.setBackground(Color.black);
+				RuneModLoadingScreen.add(runeMod_statusUI.labelPanel);
+				RuneModLoadingScreen.setSize(canvasAncestor.getSize());
+				canvasAncestor.add(RuneModLoadingScreen, BorderLayout.CENTER, 0);
+				RuneModLoadingScreen.revalidate();
+				RuneModLoadingScreen.repaint();
+			} else {
+				if(canvasAncestor == null) {return;}
+				canvasAncestor.remove(RuneModLoadingScreen);
+			}
+		});
+	}
 
 	@SneakyThrows
 	void startUp_Custom() {
-		//System.out.println(RuneLite.RUNELITE_DIR);
-
-		//clientThread.invoke(() ->
-		//{
-
-		//forces stretchmode to enable keepAspectRatio, because runemod doesnt support having it off.
+		client_static = client;
 		isShutDown = false;
+
+		canvasAncestor = client.getCanvas().getParent(); //is "clientPannel" class
+
+		RuneModPlugin.toggleRuneModLoadingScreen(true);
 
 		configManager.setConfiguration("stretchedmode","keepAspectRatio", true);
 
-			for (Plugin plugin : pluginManager.getPlugins()) {
-				if (plugin.getName().equalsIgnoreCase("GPU")) {
-					if (pluginManager.isPluginEnabled(plugin)) {
-						SwingUtilities.invokeAndWait(() ->
-						{
-							try {
-								pluginManager.setPluginEnabled(plugin, false);
-								pluginManager.stopPlugin(plugin);
-							} catch (PluginInstantiationException e) {
-								e.printStackTrace();
-							}
-							System.out.println("Disabled the GpuPlugin, as it is not compatible with runemod");
-						});
-					}
+		for (Plugin plugin : pluginManager.getPlugins()) {
+			if (plugin.getName().equalsIgnoreCase("GPU")) {
+				if (pluginManager.isPluginEnabled(plugin)) {
+					SwingUtilities.invokeAndWait(() ->
+					{
+						try {
+							pluginManager.setPluginEnabled(plugin, false);
+							pluginManager.stopPlugin(plugin);
+						} catch (PluginInstantiationException e) {
+							e.printStackTrace();
+						}
+						System.out.println("Disabled the GpuPlugin, as it is not compatible with runemod");
+					});
 				}
 			}
-
-
-
-
-			executorService2 = Executors.newFixedThreadPool(1);
-			executorService2.execute(runeModLauncher);
-
-			System.out.println("runelitDir: " + RUNELITE_DIR);
-
-			sharedmem_rm.CreateMutexes();
-
-			//start new rsdata. Unreal does not completely block rs (due to timeout), so it is safe to do his.
-			{
-				sharedmem_rm.LockMutex();
-				sharedmem_rm.startNewRsData();
-				sharedmem_rm.transferBackBufferToSharedMem();
-				sharedmem_rm.passRsDataToUnreal();
-			}
-
-			//maintainRuneModStatusAttachment();
-
-			registerWindowEventListeners();
-
-			try
-			{
-				//int GpuFlags = DrawCallbacks.GPU | (computeMode == ComputeMode.NONE ? 0 : DrawCallbacks.HILLSKEW);
-				client.getScene().setDrawDistance(50);
-				client.setUnlockedFps(false);
-				client.getCanvas().setIgnoreRepaint(true);
-				setGpuFlags(0);
-				setDrawCallbacks(this);
-			}
-			catch (Throwable e)
-			{
-				log.error("Error starting RuneMod plugin", e);
-
-				SwingUtilities.invokeLater(() ->
-				{
-					try
-					{
-						pluginManager.setPluginEnabled(this, false);
-						pluginManager.stopPlugin(this);
-					}
-					catch (PluginInstantiationException ex)
-					{
-						log.error("error stopping plugin", ex);
-					}
-				});
-
-				try {
-					shutDown();
-				} catch (Exception exception) {
-					exception.printStackTrace();
-				}
-			}
-
-
-/*			Window window = SwingUtilities.getWindowAncestor(client.getCanvas());
-			JFrame frame = (JFrame) window;
-			System.out.println("menuBarLocation: " + frame.getTitle());
-			frame.setComponentZOrder(runeModLauncher.runeMod_statusUI.StatusDetail, 1);*/
-			//return true;
-		//});
-	}
-
-	@Override
-	protected void startUp() throws IOException {
-
-		sharedmem_rm = new SharedMemoryManager(this);
-		sharedmem_rm.createSharedMemory("sharedmem_rm", 50000000); //50 mb
-
-		runeModPlugin = this;
-
-		JFrame window = (JFrame) SwingUtilities.getWindowAncestor(client.getCanvas());
-		RuneMod_statusUI statusUi = new RuneMod_statusUI(window);
-		runeModLauncher =  new RuneMod_Launcher(statusUi, config.AltRuneModLocation(), config.StartRuneModOnStart());
-/*		//System.out.println(RuneLite.RUNELITE_DIR);
-
-		runeModPlugin = this;
-
-		RuneMod_statusUI statusUi = new RuneMod_statusUI();
-
-		//statusUi.client = client;
-		runeModLauncher =  new RuneMod_Launcher(statusUi, config.AltRuneModLocation(), config.StartRuneModOnStart());
-
-		executorService2.execute(runeModLauncher);
+		}
 
 		System.out.println("runelitDir: " + RUNELITE_DIR);
 
-		sharedmem_rm = new SharedMemoryManager(this);
-		sharedmem_rm.createSharedMemory("sharedmem_rm", 50000000); //50 mb
 		sharedmem_rm.CreateMutexes();
 
 		//start new rsdata. Unreal does not completely block rs (due to timeout), so it is safe to do his.
@@ -925,92 +943,47 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			sharedmem_rm.passRsDataToUnreal();
 		}
 
-		clientThread.invokeAtTickEnd(() ->
-		{
-			maintainRuneModStatusAttachment(true, true);
+		//maintainRuneModStatusAttachment();
 
-			registerWindowEventListeners();
+		registerWindowEventListeners();
 
-			try
-			{
-				//int GpuFlags = DrawCallbacks.GPU | (computeMode == ComputeMode.NONE ? 0 : DrawCallbacks.HILLSKEW);
-				client.getScene().setDrawDistance(50);
-				client.setUnlockedFps(false);
-				client.getCanvas().setIgnoreRepaint(true);
-				setDrawCallbacks(this);
-			}
-			catch (Throwable e)
-			{
-				log.error("Error starting RuneMod plugin", e);
 
-				SwingUtilities.invokeLater(() ->
-				{
-					try
-					{
-						pluginManager.setPluginEnabled(this, false);
-						pluginManager.stopPlugin(this);
-					}
-					catch (PluginInstantiationException ex)
-					{
-						log.error("error stopping plugin", ex);
-					}
-				});
+		//int GpuFlags = DrawCallbacks.GPU | (computeMode == ComputeMode.NONE ? 0 : DrawCallbacks.HILLSKEW);
+		client.getScene().setDrawDistance(50);
+		client.setUnlockedFps(false);
+		client.getCanvas().setIgnoreRepaint(true);
+		setGpuFlags(0);
+		setDrawCallbacks(this);
 
-				try {
-					shutDown();
-				} catch (Exception exception) {
-					exception.printStackTrace();
-				}
-			}
+
+/*			Window window = SwingUtilities.getWindowAncestor(client.getCanvas());
+			JFrame frame = (JFrame) window;
+			System.out.println("menuBarLocation: " + frame.getTitle());
+			frame.setComponentZOrder(runeMod_statusUI.StatusDetail, 1);*/
 			//return true;
-		});*/
+		//});
+	}
 
+	@Override
+	protected void startUp() throws IOException {
+		sharedmem_rm = new SharedMemoryManager(this);
+		sharedmem_rm.createSharedMemory("sharedmem_rm", 50000000); //50 mb
 
-		//registerWindowEventListeners();
+		runeModPlugin = this;
 
-		//mouseManager.registerMouseListener(rlMouseListener);
+		JFrame window = (JFrame) SwingUtilities.getAncestorOfClass(Frame.class, client.getCanvas());
+		runeMod_statusUI = new RuneMod_statusUI(window);
 
-		//setup runemod toggler
-/*		NavigationButton titleBarButton;
-
-		final BufferedImage iconImage = ImageUtil.loadImageResource(getClass(), "runemod.png");
-
-		titleBarButton = NavigationButton.builder()
-				.tab(false)
-				.tooltip("Toggle RuneMod visibility")
-				.icon(iconImage)
-				.onClick(this::toggleRuneModOverlay)
-				.popup(ImmutableMap
-						.<String, Runnable>builder()
-						.put("Open screenshot folder...", () ->
-						{
-							LinkBrowser.open(SCREENSHOT_DIR.toString());
-						})
-						.build())
-				.build();
-
-		clientToolbar.addNavigation(titleBarButton);*/
+		runeModLauncher =  new RuneMod_Launcher(config.AltRuneModLocation(), config.StartRuneModOnStart());
+		myCacheReader = new CacheReader();
 
 		Dimension screenSize = Toolkit.getDefaultToolkit().getScreenSize();
-/*		rsclient_ui_pixels.createSharedMemory("rsclient_ui_pixels", ((screenSize.height*screenSize.width*4)+4)); //make this the width/length of whole screen
-		rsclient_ui_pixels.CreateMutex();*/
 
-
-
-		//client.setPrintMenuActions(true);
 
 		keyManager.registerKeyListener(hotkeyListenerq);
 		keyManager.registerKeyListener(hotkeyListenerw);
 		keyManager.registerKeyListener(hotkeyListenerr);
 		keyManager.registerKeyListener(hotkeyListenert);
-
-		//clientThread.invoke(() -> { mapVarbitsToObjDefs(); });
-		//sourceObjDef =  client.createObjectDefinition();
-
-//		Thread thread = new Thread(this::threadTest);
-//		thread.start();
-
-		// The clicked x & y coordinates (the last arguments) are not processed in the game or sent to Jagex, so they don't have to be real.
 	}
 
 
@@ -3674,7 +3647,9 @@ skills menu:__________
 				int npcInstanceId = npc.getIndex();
 				int npcX = npc.getLocalLocation().getX();
 				int npcY = npc.getLocalLocation().getY();
-				int npcHeight = Perspective.getTileHeight(client, npc.getLocalLocation(), client.getPlane())*-1;
+				int offset = ((npc.getComposition().getSize()-1)*128)/2; //offset is required for npc's who are > 1 tile wide
+				LocalPoint LocationToSampleHeightFrom = new LocalPoint(npc.getLocalLocation().getX() + offset, npc.getLocalLocation().getY() + offset);
+				int npcHeight = Perspective.getTileHeight(client, LocationToSampleHeightFrom, client.getPlane())*-1;
 				int npcOrientation = npc.getCurrentOrientation();
 
 				int npcAnimationId = -1;

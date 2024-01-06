@@ -20,13 +20,11 @@ import java.util.zip.ZipInputStream;
 class RuneMod_Launcher implements Runnable {
     volatile boolean run = true;
     private boolean firstrun = true;
-    protected RuneMod_statusUI runeMod_statusUI;
     public String rmAppLocation = System.getProperty("user.home") + "\\.runemod\\application\\";
     public String AltRuneModLocation = "";
     boolean AutoLaunch;
 
-    RuneMod_Launcher(RuneMod_statusUI statusUI, String altRuneModLocation, boolean AutoLaunch_) {
-        runeMod_statusUI = statusUI;
+    RuneMod_Launcher(String altRuneModLocation, boolean AutoLaunch_) {
         AltRuneModLocation = altRuneModLocation;
         AutoLaunch = AutoLaunch_;
     }
@@ -112,20 +110,20 @@ class RuneMod_Launcher implements Runnable {
             if(Files.exists(Paths.get(rmAppLocation +"WindowsNoEditor\\RuneMod\\Binaries\\Win64\\"+"RuneMod-Win64-Shipping.exe"))) {
                 LaunchApp(rmAppLocation +"WindowsNoEditor\\RuneMod\\Binaries\\Win64\\"+"RuneMod-Win64-Shipping.exe");
             } else  {
-                runeMod_statusUI.SetStatus_Detail("Launch failed: Runemod.exe could not be found, ask for help in RuneMod discord");
+                RuneModPlugin.runeMod_statusUI.SetStatus_Detail("Launch failed: Runemod.exe could not be found");
             }
         } else {
             if(Files.exists(Paths.get(rmAppLocation +"WindowsNoEditor\\RuneMod\\Binaries\\Win64\\"+"RuneMod-Win64-Shipping.exe"))) {
                 LaunchApp(rmAppLocation +"WindowsNoEditor\\RuneMod\\Binaries\\Win64\\"+"RuneMod-Win64-Shipping.exe");
             } else {
-                runeMod_statusUI.SetStatus_Detail("Launch failed: Runemod.exe could not be found, ask for help in RuneMod discord");
+                RuneModPlugin.runeMod_statusUI.SetStatus_Detail("Launch failed: Runemod.exe could not be found");
             }
         }
     }
 
     public void downloadZip(String URL, String filePath) {
         System.out.println(rmAppLocation);
-        runeMod_statusUI.SetStatus_Detail("Starting RuneMod download...");
+        RuneModPlugin.runeMod_statusUI.SetStatus_Detail("Starting RuneMod download...");
         try {
 
             URL url = new URL(URL);
@@ -145,7 +143,7 @@ class RuneMod_Launcher implements Runnable {
             int count = 0;
 
             while ((count = bis.read(buffer, 0, buffer.length)) != -1) {
-                runeMod_statusUI.SetStatus_Detail("Downloaded: "+(((int)fis.getChannel().size()/100000)/10.0f)+" / " + (((int)fileSize/100000)/10.0f) + "mb");
+                RuneModPlugin.runeMod_statusUI.SetStatus_Detail("Downloaded: "+(((int)fis.getChannel().size()/100000)/10.0f)+" / " + (((int)fileSize/100000)/10.0f) + "mb");
                 fis.write(buffer, 0, count);
             }
 
@@ -153,7 +151,7 @@ class RuneMod_Launcher implements Runnable {
             bis.close();
 
         } catch (IOException e) {
-            runeMod_statusUI.SetStatus_Detail("RuneMod Download failed");
+            RuneModPlugin.runeMod_statusUI.SetStatus_Detail("RuneMod Download failed");
             e.printStackTrace();
         }
     }
@@ -172,7 +170,7 @@ class RuneMod_Launcher implements Runnable {
     }
 
     public void UnzipFile(String fileZip, String destPath) throws IOException {
-        runeMod_statusUI.SetStatus_Detail("Unzipping...");
+        RuneModPlugin.runeMod_statusUI.SetStatus_Detail("Unzipping...");
 
         File destDir = new File(destPath);
         byte[] buffer = new byte[8192];
@@ -199,7 +197,7 @@ class RuneMod_Launcher implements Runnable {
                     noBytesDecompressed = noBytesDecompressed+len;
 
                     if(noBytesDecompressed%1000 == 0) { //set status message ever 1kb
-                        runeMod_statusUI.SetStatus_Detail("UnZipped "+ noBytesDecompressed/1000000 + "mb");
+                        RuneModPlugin.runeMod_statusUI.SetStatus_Detail("UnZipped "+ noBytesDecompressed/1000000 + "mb");
                     }
 
                     fos.write(buffer, 0, len);
@@ -235,15 +233,15 @@ class RuneMod_Launcher implements Runnable {
             }
             zis.closeEntry();
             zis.close();*/
-        runeMod_statusUI.SetStatus_Detail("UnZipping finished ");
+        RuneModPlugin.runeMod_statusUI.SetStatus_Detail("UnZipping finished ");
     }
 
     public void LaunchApp(String filePath) throws IOException {
 
         if(AltRuneModLocation.length()>1) {
-            runeMod_statusUI.SetStatus_Detail("Launching Alt RuneMod.exe...");
+            RuneModPlugin.runeMod_statusUI.SetStatus_Detail("Launching Alt RuneMod.exe...");
         } else {
-            runeMod_statusUI.SetStatus_Detail("Launching RuneMod.exe...");
+            RuneModPlugin.runeMod_statusUI.SetStatus_Detail("Launching RuneMod.exe...");
         }
 
 
@@ -255,7 +253,7 @@ class RuneMod_Launcher implements Runnable {
         String fileName = theFile.getName();
         System.out.println(fileName);
 
-        if(AutoLaunch == false) { runeMod_statusUI.SetStatus_Detail("Auto launch turned off, will not launch RuneMod.exe."); return;}
+        if(AutoLaunch == false) { RuneModPlugin.runeMod_statusUI.SetStatus_Detail("Auto launch turned off, will not launch RuneMod.exe."); return;}
 
         Desktop desktop = Desktop.getDesktop();
         try
@@ -268,7 +266,7 @@ class RuneMod_Launcher implements Runnable {
         }
         catch (IOException e)
         {
-            runeMod_statusUI.SetStatus_Detail("Failed to execute RuneMod.exe...");
+            RuneModPlugin.runeMod_statusUI.SetStatus_Detail("Failed to execute RuneMod.exe...");
             e.printStackTrace();
         }
 
