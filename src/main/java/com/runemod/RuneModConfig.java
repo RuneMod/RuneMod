@@ -135,18 +135,6 @@ public interface RuneModConfig extends Config
 	}
 
 	@ConfigItem(
-			keyName = "spawnTerrain",
-			name = "spawnTerrain",
-			description = "spawnTerrain",
-			position = 50,
-			section = debugStuff
-	)
-	default boolean spawnTerrain()
-	{
-		return true;
-	}
-
-	@ConfigItem(
 			keyName = "spawnGameObjects",
 			name = "spawnGameObjects",
 			description = "spawnGameObjects",

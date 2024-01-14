@@ -177,11 +177,11 @@ public class CacheReader {
         for (int i = 0; i < files.size(); i++) {
             byte[] bytes = files.get(i).getContents();
             if (bytes != null && bytes.length > 0) {
-                counter++;
                 Buffer mainBuffer = new Buffer(new byte[bytes.length+12]);
-                mainBuffer.writeLong(i);
+                mainBuffer.writeLong(files.get(i).getFileId());
                 mainBuffer.writeByte_Array(bytes, bytes.length);
                 RuneModPlugin.sharedmem_rm.backBuffer.writePacket(mainBuffer, "ObjectDefinition");
+                counter++;
             }
         }
         System.out.println("Sent "+ counter +" ObjectDefinitions");
@@ -195,7 +195,7 @@ public class CacheReader {
             if (bytes != null && bytes.length > 0) {
                 counter++;
                 Buffer mainBuffer = new Buffer(new byte[bytes.length+12]);
-                mainBuffer.writeLong(i);
+                mainBuffer.writeLong(files.get(i).getFileId());
                 mainBuffer.writeByte_Array(bytes, bytes.length);
                 RuneModPlugin.sharedmem_rm.backBuffer.writePacket(mainBuffer, "KitDefinition");
             }
@@ -211,7 +211,7 @@ public class CacheReader {
             if (bytes != null && bytes.length > 0) {
                 counter++;
                 Buffer mainBuffer = new Buffer(new byte[bytes.length+12]);
-                mainBuffer.writeLong(i);
+                mainBuffer.writeLong(files.get(i).getFileId());
                 mainBuffer.writeByte_Array(bytes, bytes.length);
                 RuneModPlugin.sharedmem_rm.backBuffer.writePacket(mainBuffer, "SequenceDefinition");
             }
@@ -227,7 +227,7 @@ public class CacheReader {
             if (bytes != null && bytes.length > 0) {
                 counter++;
                 Buffer mainBuffer = new Buffer(new byte[bytes.length+12]);
-                mainBuffer.writeLong(i);
+                mainBuffer.writeLong(files.get(i).getFileId());
                 mainBuffer.writeByte_Array(bytes, bytes.length);
                 RuneModPlugin.sharedmem_rm.backBuffer.writePacket(mainBuffer, "SpotAnimDefinition");
             }
@@ -243,7 +243,7 @@ public class CacheReader {
             Buffer mainBuffer = new Buffer(new byte[bytes.length+12]);
             if (bytes != null && bytes.length > 0) {
                 counter++;
-                mainBuffer.writeLong(i);
+                mainBuffer.writeLong(files.get(i).getFileId());
                 mainBuffer.writeByte_Array(bytes, bytes.length);
                 RuneModPlugin.sharedmem_rm.backBuffer.writePacket(mainBuffer, "NpcDefinition");
             }
@@ -258,7 +258,7 @@ public class CacheReader {
             byte[] bytes = files.get(i).getContents();
             Buffer mainBuffer = new Buffer(new byte[bytes.length+12]);
             if (bytes != null && bytes.length > 0) {
-                mainBuffer.writeLong(i);
+                mainBuffer.writeLong(files.get(i).getFileId());
                 mainBuffer.writeByte_Array(bytes, bytes.length);
                 RuneModPlugin.sharedmem_rm.backBuffer.writePacket(mainBuffer, "ItemDefinition");
                 counter++;
@@ -459,7 +459,7 @@ public class CacheReader {
 
                                 Buffer elementBuffer = new Buffer(new byte[20]);//create cacheElementBytes;
                                 elementBuffer.writeByte((region.getTileHeight(z,x,y)/8)*-1);
-                                elementBuffer.writeByte(tile.overlayId);
+                                elementBuffer.writeShort(tile.overlayId);
                                 elementBuffer.writeByte(tile.overlayRotation);
                                 elementBuffer.writeByte(tile.overlayPath);
                                 elementBuffer.writeByte(tile.underlayId);

@@ -335,7 +335,7 @@ public class SharedMemoryManager
 		return;
 	}
 
-	boolean curRmWindowVisibility = true;
+	volatile boolean curRmWindowVisibility = true;
 
 	public void setRuneModVisibility(boolean visibility) {
 		if(!runeModPlugin.config.attachRmWindowToRL()) {return;}
@@ -344,16 +344,15 @@ public class SharedMemoryManager
 
 		WinDef.HWND hwnd = User32.INSTANCE.FindWindow(null,"RuneModWin");
 		//WinDef.HWND hwnd2 = User32.INSTANCE.FindWindow(null,"RuneModControls");
+		System.out.println("SettingRmWindowVisibility to "+visibility);
+		curRmWindowVisibility = visibility;
 		if(visibility) {
 			User32.INSTANCE.ShowWindow(hwnd, WinUser.SW_SHOWNOACTIVATE);
-
 			//User32.INSTANCE.ShowWindow(hwnd2, WinUser.SW_SHOWNOACTIVATE);
 		} else {
 			User32.INSTANCE.ShowWindow(hwnd, WinUser.SW_HIDE);
 			//User32.INSTANCE.ShowWindow(hwnd2, WinUser.SW_HIDE);
 		}
-		curRmWindowVisibility = visibility;
-		System.out.println("SetRmWindowVisibility to "+visibility);
 	}
 
 	public boolean runeModWindowsExist() {
@@ -392,7 +391,7 @@ public class SharedMemoryManager
 
 	WinDef.HWND RuneModHandle = null;
 	public boolean ChildRuneModWinToRl() {
-		if(runeModPlugin.client.getGameState().ordinal()<=GameState.LOGIN_SCREEN.ordinal()) { return false; }  //prevents childing while on login screen, because that causes a period where the client becomes unfocused which prevents you typing your user/pass
+		//if(runeModPlugin.client.getGameState().ordinal()<=GameState.LOGIN_SCREEN.ordinal()) { return false; }  //prevents childing while on login screen, because that causes a period where the client becomes unfocused which prevents you typing your user/pass
 
 		if(!runeModPlugin.config.attachRmWindowToRL()) {return false;}
 

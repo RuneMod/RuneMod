@@ -1,6 +1,11 @@
 package com.runemod;
 
 import com.google.inject.Provides;
+import com.runemod.cache.ConfigType;
+import com.runemod.cache.IndexType;
+import com.runemod.cache.definitions.ObjectDefinition;
+import com.runemod.cache.definitions.loaders.ObjectLoader;
+import com.runemod.cache.fs.*;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.ModelData;
@@ -29,6 +34,7 @@ import net.runelite.rlawt.AWTContext;
 import javax.inject.Inject;
 import javax.swing.*;
 import java.awt.*;
+import java.awt.Container;
 import java.awt.event.*;
 import java.io.File;
 import java.io.IOException;
@@ -468,7 +474,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		}*/
 
 		//clientThread.invokeAtTickEnd(() -> {
-			if(ticksSincePLuginLoad <= 2 || client.getGameState().ordinal()<GameState.LOGGING_IN.ordinal() || client.getGameState()==GameState.LOGGING_IN && lastGameState.ordinal()<=GameState.LOGIN_SCREEN_AUTHENTICATOR.ordinal() || config.RuneModVisibility() == false) {//allows us to display logging in... on login screen
+			if(ticksSincePLuginLoad <= 2 || client.getGameState().ordinal()<GameState.LOGGING_IN.ordinal() || config.RuneModVisibility() == false) {//allows us to display logging in... on login screen
 					setGpuFlags(0);
 					if(client.getDrawCallbacks() == null) {
 						communicateWithUnreal();
@@ -554,7 +560,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		//if(sharedmem_rm.ChildRuneModWinToRl()) { //if RuneMod win exists and is childed to rl
 
 
-		if (client.getGameState().ordinal()>=GameState.LOADING.ordinal() && config.RuneModVisibility() == true) {
+		if (client.getGameState().ordinal()>=GameState.LOGGING_IN.ordinal() && config.RuneModVisibility() == true) {
 			sharedmem_rm.setRuneModVisibility(true);
 		} else {
 			sharedmem_rm.setRuneModVisibility(false);
@@ -955,6 +961,23 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		setGpuFlags(0);
 		setDrawCallbacks(this);
 
+/*		ObjectLoader loader = new ObjectLoader();
+
+		Storage storage = myCacheReader.store.getStorage();
+		Index index = myCacheReader.store.getIndex(IndexType.CONFIGS);
+		Archive archive = index.getArchive(ConfigType.OBJECT.getId());
+
+		byte[] archiveData = storage.loadArchive(archive);
+		ArchiveFiles files = archive.getFiles(archiveData);
+
+		ObjectDefinition def = loader.load(f.getFileId(), f.getContents());
+
+		for (FSFile f : files.getFiles())
+		{
+			ObjectDefinition def = loader.load(f.getFileId(), f.getContents());
+			objects.put(f.getFileId(), def);
+		}*/
+
 
 /*			Window window = SwingUtilities.getWindowAncestor(client.getCanvas());
 			JFrame frame = (JFrame) window;
@@ -1266,9 +1289,9 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 
 	public void provideRsCacheData() {
+		myCacheReader.sendObjectDefinitions();
 		myCacheReader.sendModels();
 		myCacheReader.sendKitDefinitions();
-		myCacheReader.sendObjectDefinitions();
 		myCacheReader.sendItemDefinitions();
 		myCacheReader.sendSequenceDefinitions();
 		myCacheReader.sendNpcDefinitions();
@@ -1336,10 +1359,10 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 				System.out.println("tileHeightFromCache:" + tileHeightFromCache);
 				System.out.println("tileHeightFromClient:" + tileHeightFromClient);*/
 
-				for (int regionID = 0; regionID < Short.MAX_VALUE; regionID++) {
+/*				for (int regionID = 0; regionID < Short.MAX_VALUE; regionID++) {
 					System.out.println("sending region"+regionID);
 					myCacheReader.sendTilesInRegion(regionID);
-				}
+				}*/
 
 /*				myCacheReader.sendOverlayDefinitions();
 				myCacheReader.sendUnderlayDefinitions();
@@ -1754,9 +1777,9 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 	public void reloadUnrealScene()
 	{
-		final GameStateChanged gameStateChanged = new GameStateChanged();
-		gameStateChanged.setGameState(GameState.HOPPING); //causes unreal to clear scene
-		onGameStateChanged(gameStateChanged);
+		//final GameStateChanged gameStateChanged = new GameStateChanged();
+		//gameStateChanged.setGameState(GameState.HOPPING); //causes unreal to clear scene
+		//onGameStateChanged(gameStateChanged);
 		simulateGameEvents();
 	}
 
@@ -3110,8 +3133,8 @@ skills menu:__________
 	private void onItemSpawned(ItemSpawned event)
 	{
 		if(!config.spawnItems()) {return;}
-		//clientThread.invokeLater(() ->
-		//{
+		clientThread.invokeAtTickEnd(() ->
+		{
 			Buffer actorSpawnPacket = new Buffer(new byte[100]);
 
 			int tilePlane = event.getTile().getPlane();
@@ -3133,28 +3156,31 @@ skills menu:__________
 
 			sharedmem_rm.backBuffer.writePacket(actorSpawnPacket, "ActorSpawn");
 			//myRunnableSender.sendBytes(trimmedBufferBytes(actorSpawnPacket), "ActorSpawn");
-		//});
+		});
 	}
 	@Subscribe
 	private void onItemDespawned(ItemDespawned event)
 	{
-		Buffer actorSpawnPacket = new Buffer(new byte[100]);
+		clientThread.invokeAtTickEnd(() ->
+		{
+			Buffer actorSpawnPacket = new Buffer(new byte[100]);
 
-		int tilePlane = event.getTile().getPlane();
-		if (event.getTile().getBridge()!=null) {
-			tilePlane++;
-		}
+			int tilePlane = event.getTile().getPlane();
+			if (event.getTile().getBridge()!=null) {
+				tilePlane++;
+			}
 
-		int tileX = event.getTile().getSceneLocation().getX();
-		int tileY = event.getTile().getSceneLocation().getY();
-		int itemDefinitionId = event.getItem().getId();
-		actorSpawnPacket.writeByte(3); //write tileItem data type
-		actorSpawnPacket.writeByte(tilePlane);
-		actorSpawnPacket.writeByte(tileX);
-		actorSpawnPacket.writeByte(tileY);
-		actorSpawnPacket.writeShort(itemDefinitionId);
+			int tileX = event.getTile().getSceneLocation().getX();
+			int tileY = event.getTile().getSceneLocation().getY();
+			int itemDefinitionId = event.getItem().getId();
+			actorSpawnPacket.writeByte(3); //write tileItem data type
+			actorSpawnPacket.writeByte(tilePlane);
+			actorSpawnPacket.writeByte(tileX);
+			actorSpawnPacket.writeByte(tileY);
+			actorSpawnPacket.writeShort(itemDefinitionId);
 
-		sharedmem_rm.backBuffer.writePacket(actorSpawnPacket, "ActorDeSpawn");
+			sharedmem_rm.backBuffer.writePacket(actorSpawnPacket, "ActorDeSpawn");
+		});
 		//myRunnableSender.sendBytes(trimmedBufferBytes(actorSpawnPacket), "ActorDeSpawn");
 	}
 
@@ -3743,6 +3769,7 @@ skills menu:__________
 				int spotAnimationFrameCycle = -1;
 				int spotAnimationHeight = 0;
 				int sceneId = -1;
+				Boolean newSpotAnimSpawned = false;
 				if (config.spawnPlayerGFX()) {
 					for(ActorSpotAnim spotAnim : player.getSpotAnims()) {
 						spotAnimationFrame = spotAnim.getFrame();
@@ -3750,6 +3777,12 @@ skills menu:__________
 						spotAnimationHeight = spotAnim.getHeight();
 
 						sceneId = spotAnim.hashCode();
+
+						if(!hashedEntitys_LastFrame.contains(sceneId)) {
+							System.out.println("new SpotAnimSpawned. id: "+sceneId);
+							newSpotAnimSpawned = true;
+						}
+
 						hashedEntitys_ThisFrame.add(spotAnim.hashCode());
 					}
 				}
@@ -3768,6 +3801,7 @@ skills menu:__________
 				perFramePacket.writeShort(spotAnimationFrameCycle);
 				perFramePacket.writeShort(spotAnimationHeight);
 				perFramePacket.writeInt(sceneId);
+				perFramePacket.writeBoolean(newSpotAnimSpawned);
 			}
 		}
 		//local player;
@@ -3780,6 +3814,10 @@ skills menu:__________
 		if (config.spawnStaticGFX()) {
 			for (GraphicsObject graphicsObject : client.getGraphicsObjects()) {
 				noGraphicsObjects++;
+				if(!hashedEntitys_LastFrame.contains(graphicsObject.hashCode())) {
+					System.out.println("graphicsObjSpawn. id: "+graphicsObject.getId());
+				}
+				hashedEntitys_ThisFrame.add(graphicsObject.hashCode());
 			}
 		}
 
@@ -3889,18 +3927,17 @@ skills menu:__________
 
 		//getRlObjects();
 
-		sharedmem_rm.backBuffer.writePacket(perFramePacket, "PerFramePacket");
-
 		if(hashedEntitys_LastFrame !=null) {
 			for (Integer lastFrameHashedEntity : hashedEntitys_LastFrame) {
 				if(hashedEntitys_ThisFrame.contains(lastFrameHashedEntity) == false) { //if lats frames entity is not present this frame, means it has despawned.
-					System.out.println("hashedEntityDespawned");
+					System.out.println("hashedEntityDespawned. Entity " + lastFrameHashedEntity);
 					hashedEntityDespawned(lastFrameHashedEntity);
 				}
 			}
 		}
-
 		hashedEntitys_LastFrame = hashedEntitys_ThisFrame;
+
+		sharedmem_rm.backBuffer.writePacket(perFramePacket, "PerFramePacket");
 
 		//myRunnableSender.sendBytes(perFramePacket.array, "PerFramePacket");
 
