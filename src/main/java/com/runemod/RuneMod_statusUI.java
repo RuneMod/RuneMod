@@ -91,12 +91,12 @@ public class RuneMod_statusUI extends JPanel {
         if (statusText_caseless.contains("updating")) {
             StatusDetail.setForeground(Color.orange);
             iconHolder.setVisible(true);
-            iconHolder.setIcon(new ImageIcon("loading_shrimps_large.gif"));
+            iconHolder.setIcon(new ImageIcon("loading_shrimps_small.gif"));
         }else {
             if (statusText_caseless.contains("ing")||statusText_caseless.contains("logged")) {
                 StatusDetail.setForeground(Color.yellow);
                 iconHolder.setVisible(true);
-                iconHolder.setIcon(new ImageIcon("loading_shrimps_large.gif"));
+                iconHolder.setIcon(new ImageIcon("loading_shrimps_small.gif"));
             }else {
                 if(statusText_caseless.contains("fail")||statusText_caseless.contains("not ")||statusText_caseless.contains("cant")) {
                     StatusDetail.setForeground(Color.red);

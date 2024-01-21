@@ -743,6 +743,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 				}
 			}
 		//}*/
+
 		long plane = hash >> 49 & 3;
 		//if(plane==client.getPlane()) {
 			Model model = renderable instanceof Model ? (Model) renderable : renderable.getModel();
@@ -753,8 +754,11 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 				{
 					renderable.setModelHeight(model.getModelHeight());
 				}
+
 				client.checkClickbox(model, orientation, pitchSin, pitchCos, yawSin, yawCos, x, y, z, hash);
 			}
+
+
 		//}
 	}
 
@@ -953,6 +957,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 		registerWindowEventListeners();
 
+		mapVarbitsToObjDefs(); //make map that shows us which objdef is linked to which varbit index
 
 		//int GpuFlags = DrawCallbacks.GPU | (computeMode == ComputeMode.NONE ? 0 : DrawCallbacks.HILLSKEW);
 		client.getScene().setDrawDistance(50);
@@ -997,7 +1002,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		JFrame window = (JFrame) SwingUtilities.getAncestorOfClass(Frame.class, client.getCanvas());
 		runeMod_statusUI = new RuneMod_statusUI(window);
 
-		runeModLauncher =  new RuneMod_Launcher(config.AltRuneModLocation(), config.StartRuneModOnStart());
+		runeModLauncher =  new RuneMod_Launcher(config.UseAltRuneModLocation() ? config.AltRuneModLocation() : "", config.StartRuneModOnStart());
 		myCacheReader = new CacheReader();
 
 		Dimension screenSize = Toolkit.getDefaultToolkit().getScreenSize();
@@ -2556,7 +2561,7 @@ skills menu:__________
 	private HashMap<Integer, Integer> VarbitObjDef_Map = new HashMap<Integer, Integer>();
 	private HashMap<Integer, Integer> VarpObjDef_Map = new HashMap<Integer, Integer>();
 
-/*	private void mapVarbitsToObjDefs() {
+	private void mapVarbitsToObjDefs() {
 		int objDefCount = myCacheReader.getCacheFiles(IndexType.CONFIGS, ConfigType.OBJECT.getId()).size();
 		//System.out.println(objDefCount+" ObjDefs");
 		for (int i = 0; i < objDefCount; i++) {
@@ -2572,9 +2577,9 @@ skills menu:__________
 				}
 			}
 		}
-	}*/
+	}
 
-/*	@Subscribe
+	@Subscribe
 	private void onVarbitChanged(VarbitChanged event) {
 
 		//for VarbitChanged func in unreal, we send: varType. varId. varValue. custom0.
@@ -2586,7 +2591,8 @@ skills menu:__________
 			buffer.writeInt(event.getVarbitId());
 			buffer.writeInt(event.getValue());
 			buffer.writeInt(VarbitObjDef_Map.getOrDefault(event.getVarbitId(),-1));
-			myRunnableSender.sendBytes(buffer.array, "Varbit");
+			//myRunnableSender.sendBytes(buffer.array, "Varbit");
+			sharedmem_rm.backBuffer.writePacket(buffer, "Varbit");
 
 			if (VarbitObjDef_Map.containsKey(event.getVarbitId())) {
 				System.out.println("objDef: " +VarpObjDef_Map.getOrDefault(event.getVarpId(),-1)+ " Imposter Changed");
@@ -2595,12 +2601,13 @@ skills menu:__________
 			buffer.writeInt(event.getVarpId());
 			buffer.writeInt(event.getValue());
 			buffer.writeInt(VarpObjDef_Map.getOrDefault(event.getVarpId(),-1));
-			myRunnableSender.sendBytes(buffer.array, "Varp");
+			//myRunnableSender.sendBytes(buffer.array, "Varp");
+			sharedmem_rm.backBuffer.writePacket(buffer, "Varp");
 			if (VarpObjDef_Map.containsKey(event.getVarpId())) {
 				System.out.println("objDef: " +VarpObjDef_Map.getOrDefault(event.getVarpId(),-1)+ " Imposter Changed");
 			}
 		}
-	}*/
+	}
 
 /*	public void getVarbits() {
 		HashMap<Integer, Integer> varbits = new HashMap<Integer, Integer>();
@@ -2860,18 +2867,18 @@ skills menu:__________
 		clientThread.invokeAtTickEnd(() -> //invoking later because baslocation likely hasnt been sent to unreal yet
 		{
 			Tile tile;
-			if (event.getTile().getBridge() != null) {
+/*			if (event.getTile().getBridge() != null) {
 				tile = event.getTile().getBridge();
-			} else {
+			} else {*/
 				tile = event.getTile();
-			}
+			//}
 
 			Buffer actorSpawnPacket = new Buffer(new byte[100]);
 
-			int tilePlane = tile.getPlane();
-			if (event.getTile().getBridge() != null) {
+			int tilePlane = tile.getRenderLevel();
+/*			if (event.getTile().getBridge() != null) {
 				tilePlane++;
-			}
+			}*/
 
 			int tileX = tile.getSceneLocation().getX();
 			int tileY = tile.getSceneLocation().getY();
@@ -2882,6 +2889,10 @@ skills menu:__________
 			}
 			if (event.getGameObject().getId() == 30373) {
 				System.out.println("unAnimated alter version DeSpawned");
+			}
+
+			if(event.getGameObject().getId() == 26185) {
+				System.out.println("fire DeSpawned");
 			}
 
 			actorSpawnPacket.writeByte(4); //write tileObject data type

@@ -384,7 +384,7 @@ public class SharedMemoryManager
 			System.out.println("found rl window");
 			return handle;
 		} else {
-			System.out.println("Not found rl window");
+			System.out.println("rl window not yet found");
 			return null;
 		}
 	}

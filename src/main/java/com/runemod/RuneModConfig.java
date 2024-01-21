@@ -41,6 +41,18 @@ public interface RuneModConfig extends Config
 	}
 
 	@ConfigItem(
+			keyName = "UseAltRuneModLocation",
+			name = "UseAltRuneModLocation",
+			description = "UseAltRuneModLocation",
+			position = 8,
+			section = developerStuff
+	)
+	default boolean UseAltRuneModLocation()
+	{
+		return false;
+	}
+
+	@ConfigItem(
 			position = 9,
 			keyName = "AltRuneModLocation",
 			name = "AltRuneModLocation",
