@@ -1232,6 +1232,68 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		}
 	}*/
 
+	//send one texture
+	public void sendTexture_test() {
+		int counter = 0;
+		int i = 4;
+		//for (int i = 0; i < client.getTextureProvider().getTextures().length; i++) { //sends the textures to unreal to be saved as texture defs and materialdefs
+			short texSizeX = 128;
+			short texSizeY = 128;
+			TextureProvider textureProvider = client.getTextureProvider();
+			Texture tex = textureProvider.getTextures()[i];
+			int[] pixels = textureProvider.load(i);
+			if (tex!=null) {
+				if (pixels != null) {
+					counter++;
+					//System.out.println("pixel len =" + pixels.length);
+					Buffer mainBuffer = new Buffer (new byte[3+2+2+4+(texSizeX*texSizeY*4)]);
+					mainBuffer.writeByte (i);
+					mainBuffer.writeByte (tex.getAnimationDirection());
+					mainBuffer.writeByte (tex.getAnimationSpeed());
+
+					mainBuffer.writeShort (texSizeX); //write texSizeX. required by readImage ue4 function
+					mainBuffer.writeShort (texSizeY); //write texSizeX. required by readImage ue4 function
+					mainBuffer.writeInt((int)texSizeX*(int)texSizeY*4); //write byte array length. required  by readByteArray function in ue4
+					//System.out.println("len "+pixels.length);
+					boolean hasAlpha = false;
+
+					for (int i0 = 0; i0 < texSizeX*texSizeY; i0++) { //write byte array content
+						int pixelValue = pixels[i0];
+						byte a = (byte)((pixelValue >> 24) & 0xff);
+						if (a != 0){hasAlpha = true;}
+					}
+
+					//System.out.println("hasALpha: " + hasAlpha);
+
+					for (int i0 = 0; i0 < texSizeX*texSizeY; i0++) { //write byte array content
+						int pixelValue = pixels[i0];
+						//byte a = (byte)((pixelValue >> 24) & 0xff);
+						byte a = (byte)255;
+						byte r = (byte) ((pixelValue >> 16) & 0xff);
+						byte g = (byte) ((pixelValue >> 8) & 0xff);
+						byte b = (byte)((pixelValue >> 0) & 0xff);
+						if (r == 0 && b == 0 && g == 0) {
+							a = 0;
+						}
+/*					r = 5;
+					g = 5;
+					b = 5;
+					a = 5;*/
+						mainBuffer.writeByte(b);
+						mainBuffer.writeByte(g);
+						mainBuffer.writeByte(r);
+						mainBuffer.writeByte(a);
+					}
+					RuneModPlugin.sharedmem_rm.backBuffer.writePacket(mainBuffer, "Texture");
+					//myRunnableSender.sendBytes(pixelsBuffer.array,"Texture");
+				}
+			}
+		//}
+		System.out.println("Sent "+ counter +" Textures");
+		//System.out.println("anim speed: "+ tex.getAnimationSpeed());
+		//System.out.println("anim direction: "+ tex.getAnimationDirection());
+	}
+
 	public void sendTextures() {
 		int counter = 0;
 			for (int i = 0; i < client.getTextureProvider().getTextures().length; i++) { //sends the textures to unreal to be saved as texture defs and materialdefs
@@ -1907,7 +1969,8 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		{
 			clientThread.invokeAtTickEnd(() ->
 				{
-					myCacheReader.sendModels();
+					sendTexture_test();
+/*					myCacheReader.sendModels();
 					myCacheReader.sendKitDefinitions();
 					myCacheReader.sendObjectDefinitions();
 					myCacheReader.sendItemDefinitions();
@@ -1919,7 +1982,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 					myCacheReader.sendTiles();
 					sendTextures();
 					myCacheReader.sendOverlayDefinitions();
-					myCacheReader.sendUnderlayDefinitions();
+					myCacheReader.sendUnderlayDefinitions();*/
 				});
 
 			//System.out.println("sending textures");
@@ -2148,6 +2211,7 @@ skills menu:__________
 		//{
 			lastGameState = curGamestate;
 			curGamestate = event.getGameState();
+			System.out.print("gameStateChanged to: ");
 
 			byte newEventTypeByte = 0;
 			if (curGamestate == GameState.LOGIN_SCREEN) {
@@ -2266,6 +2330,7 @@ skills menu:__________
 			if (event.getTile().getBridge() != null) {
 				tilePlane++;
 			}
+
 			int tileX = tile.getSceneLocation().getX();
 			int tileY = tile.getSceneLocation().getY();
 			long tag = event.getWallObject().getHash();
@@ -2684,8 +2749,10 @@ skills menu:__________
 								{
 									if(gameObject.getRenderable() != null) {
 										if(gameObject.getRenderable() instanceof DynamicObject) {
+
 											DynamicObject dynamicObject = (DynamicObject)gameObject.getRenderable();
 											if(dynamicObject.getAnimation()!= null) {
+
 												allGameObjects.put(gameObject.getHash(), dynamicObject);
 /*												if(gameObject.getId() == 5589 ) {
 													System.out.println("animFrameCycle = " + dynamicObject.getAnimCycle());
@@ -2763,10 +2830,10 @@ skills menu:__________
 			}
 
 			if (objectDefinitionId == 34818) {
-				System.out.println("animated alter version spawned");
+				System.out.println("animated alter version spawned"+"(hash:"+event.getGameObject().getHash()+" )");
 			}
 			if (objectDefinitionId == 30373) {
-				System.out.println("unAnimated alter version spawned");
+				System.out.println("unAnimated alter version spawned"+"(hash:"+event.getGameObject().getHash()+" )");
 			}
 
 			int plane = tile.getRenderLevel();

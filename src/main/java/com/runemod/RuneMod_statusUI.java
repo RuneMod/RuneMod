@@ -113,7 +113,7 @@ public class RuneMod_statusUI extends JPanel {
             iconHolder.setVisible(false);
         }
 
-        System.out.println("status:"+statusText);
+        //System.out.println("status:"+statusText);
 
         if (statusText.equalsIgnoreCase("ready")) {
             RuneModPlugin.toggleRuneModLoadingScreen(false);
