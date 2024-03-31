@@ -253,7 +253,7 @@ class RuneMod_Launcher implements Runnable {
         String fileName = theFile.getName();
         System.out.println(fileName);
 
-        if(AutoLaunch == false) { RuneModPlugin.runeMod_statusUI.SetStatus_Detail("Auto launch turned off, will not launch RuneMod.exe."); return;}
+        if(AutoLaunch == false) { RuneModPlugin.runeMod_statusUI.SetStatus_Detail("Auto launch turned off, will not auto-start runemod.exe. Awaiting manual start of runemod.exe..."); return;}
 
         Desktop desktop = Desktop.getDesktop();
         try

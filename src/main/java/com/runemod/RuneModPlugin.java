@@ -595,7 +595,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		}
 
 		long waitForUnrealTimeout = 1000/(consecutiveTimeouts+1);
-		boolean unrealStartedNewFrame = sharedmem_rm.AwaitUnrealMutex_Locked(clamp(waitForUnrealTimeout, 60, 500)); //unreal locks it's mutex when it has started frame
+		boolean unrealStartedNewFrame = sharedmem_rm.AwaitUnrealMutex_Locked(clamp(waitForUnrealTimeout, 30, 500)); //unreal locks it's mutex when it has started frame
 
 		long frameSyncStartTime = System.nanoTime();
 
@@ -2644,6 +2644,24 @@ skills menu:__________
 		}
 	}
 
+/*	private void mapVarbitsToNpcDefs() {
+		int npcDefCount = myCacheReader.getCacheFiles(IndexType.CONFIGS, ConfigType.NPC.getId()).size();
+		//System.out.println(objDefCount+" ObjDefs");
+		for (int i = 0; i < npcDefCount; i++) {
+			NPCComposition npcDef = client.getNpcDefinition(i);
+			if (npcDef!= null) {
+				if (npcDef.getVarbitId()!=-1) {
+					//System.out.println("stored objdef varbit");
+					VarbitNpcDef_Map.put(objDef.getVarbitId(), i);
+				}
+				if (npcDef.getVarPlayerId()!=-1) {
+					//System.out.println("stored objdef varp");
+					VarpNpcDef_Map.put(objDef.getVarPlayerId(), i);
+				}
+			}
+		}
+	}*/
+
 	@Subscribe
 	private void onVarbitChanged(VarbitChanged event) {
 
@@ -3264,6 +3282,14 @@ skills menu:__________
 
 	@Subscribe
 	private void onNpcSpawned(NpcSpawned event) {
+
+/*		if(event.getNpc().getComposition()!=null && (event.getNpc().getId() == 12668 || event.getNpc().getId() == 12669)) {
+			System.out.println("npc id "+event.getNpc().getId() + " has configs: ");
+			for (int i = 0; i < event.getNpc().getComposition().getConfigs().length; i++) {
+				System.out.println(event.getNpc().getComposition().getConfigs()[i]);
+			}
+		}*/
+
 		if (!config.spawnNPCs()) { return; }
 		clientThread.invokeLater(() -> {
 			clientThread.invokeLater(() -> {
@@ -3291,7 +3317,14 @@ skills menu:__________
 
 	@Subscribe
 	private void onNpcChanged(NpcChanged event) {
+/*		System.out.println("NPC Chnaged Event");
+
+		if(event.getNpc()!=null && event.getNpc().getComposition()!=null && event.getOld()!=null) {
+			System.out.println("npcChanged. old comp was: "+event.getOld()+" new comp is: "+event.getNpc().getComposition());
+		}*/
+
 		if (!config.spawnNPCs()) { return; }
+
 		clientThread.invokeLater(() -> {
 			clientThread.invokeLater(() -> {
 				clientThread.invokeLater(() -> {
