@@ -381,10 +381,10 @@ public class SharedMemoryManager
 	public WinDef.HWND findRuneModWindow() {
 		WinDef.HWND handle = User32.INSTANCE.FindWindow(null,"RuneModWin");
 		if(User32.INSTANCE.IsWindow(handle)) {
-			System.out.println("found rl window");
+			System.out.println("found runemod window");
 			return handle;
 		} else {
-			System.out.println("rl window not yet found");
+			System.out.println("runemod window not yet found");
 			return null;
 		}
 	}

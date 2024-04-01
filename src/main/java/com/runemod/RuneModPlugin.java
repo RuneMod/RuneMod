@@ -669,7 +669,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 				System.out.println("Unreal Has just Connected");
 				//if unreal connected while we were already logged in, trigger a reload rs scene.
-				simulateGameEvents();
+				//simulateGameEvents(); //decided not to allow connection while loaded for now
 
 				//runeMod_statusUI.SetStatus_Detail("Connected");
 				return;
@@ -2662,34 +2662,37 @@ skills menu:__________
 		}
 	}*/
 
+	private HashMap<Integer, Integer> imposterToOriginal_Map = new HashMap<Integer, Integer>();
 	@Subscribe
 	private void onVarbitChanged(VarbitChanged event) {
 
 		//for VarbitChanged func in unreal, we send: varType. varId. varValue. custom0.
 
 		//System.out.println("varbitChanged");
-		Buffer buffer = new Buffer(new byte[20]);
+		Buffer buffer = new Buffer(new byte[12]);
 
 		if (event.getVarbitId()!=-1) {
 			buffer.writeInt(event.getVarbitId());
 			buffer.writeInt(event.getValue());
-			buffer.writeInt(VarbitObjDef_Map.getOrDefault(event.getVarbitId(),-1));
-			//myRunnableSender.sendBytes(buffer.array, "Varbit");
-			sharedmem_rm.backBuffer.writePacket(buffer, "Varbit");
+			int objDefId = VarbitObjDef_Map.getOrDefault(event.getVarbitId(),-1);
+			if(objDefId!=-1) {
+				buffer.writeInt(objDefId);
+				sharedmem_rm.backBuffer.writePacket(buffer, "Varbit");
 
-			if (VarbitObjDef_Map.containsKey(event.getVarbitId())) {
-				System.out.println("objDef: " +VarpObjDef_Map.getOrDefault(event.getVarpId(),-1)+ " Imposter Changed");
+				System.out.println("objDef: " + objDefId + " Imposter Changed to index " + event.getValue());
 			}
 		} else {
 			buffer.writeInt(event.getVarpId());
 			buffer.writeInt(event.getValue());
-			buffer.writeInt(VarpObjDef_Map.getOrDefault(event.getVarpId(),-1));
-			//myRunnableSender.sendBytes(buffer.array, "Varp");
-			sharedmem_rm.backBuffer.writePacket(buffer, "Varp");
-			if (VarpObjDef_Map.containsKey(event.getVarpId())) {
-				System.out.println("objDef: " +VarpObjDef_Map.getOrDefault(event.getVarpId(),-1)+ " Imposter Changed");
+			int objDefId = VarpObjDef_Map.getOrDefault(event.getVarpId(),-1);
+			if(objDefId!=-1) {
+				buffer.writeInt(objDefId);
+				sharedmem_rm.backBuffer.writePacket(buffer, "Varp");
+
+				System.out.println("objDef: " + objDefId + " Imposter Changed to index " + event.getValue());
 			}
 		}
+
 	}
 
 /*	public void getVarbits() {
@@ -2842,7 +2845,17 @@ skills menu:__________
 			int var4 = ((event.getGameObject().getConfig()) >> 6) & 3;
 			int objectOrientationA = event.getGameObject().getOrientation();
 			int objectOrientationB = 65535;
-			int objectDefinitionId = event.getGameObject().getId();
+			int objectDefinitionId = event.getGameObject().getId();//note when a gameobject spawns, the id relates to the untransformed/original objectdef.
+
+			if(objectDefinitionId == 12166) {
+				System.out.println("12166 spawned");
+			}
+
+			if(objectDefinitionId == 12144) {
+				System.out.println("12144 spawned");
+			}
+
+
 			if(objectDefinitionId == 144) {
 				System.out.println("gate GO spawned (id 144)");
 			}
