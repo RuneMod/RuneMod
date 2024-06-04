@@ -116,6 +116,7 @@ public class RuneMod_statusUI extends JPanel {
         //System.out.println("status:"+statusText);
 
         if (statusText.equalsIgnoreCase("ready")) {
+            //System.out.println("runemod says it is ready");
             RuneModPlugin.toggleRuneModLoadingScreen(false);
         }
     }

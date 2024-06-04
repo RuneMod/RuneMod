@@ -97,8 +97,8 @@ class RuneMod_Launcher implements Runnable {
 
         if (currentAppVersion < 0 || latestAppVersion > currentAppVersion) {
             Files.createDirectories(Paths.get(rmAppLocation));
-            String zipFilePath = rmAppLocation +"WindowsNoEditor.zip";
-            downloadZip("https://runemod.net/downloadables/application/WindowsNoEditor.zip", zipFilePath);
+            String zipFilePath = rmAppLocation +"Windows.zip";
+            downloadZip("https://runemod.net/downloadables/application/Windows.zip", zipFilePath);
             UnzipFile(zipFilePath, rmAppLocation);
             SetCurrentAppVersion(latestAppVersion);
             try {
@@ -107,14 +107,14 @@ class RuneMod_Launcher implements Runnable {
                 e.printStackTrace();
             }
 
-            if(Files.exists(Paths.get(rmAppLocation +"WindowsNoEditor\\RuneMod\\Binaries\\Win64\\"+"RuneMod-Win64-Shipping.exe"))) {
-                LaunchApp(rmAppLocation +"WindowsNoEditor\\RuneMod\\Binaries\\Win64\\"+"RuneMod-Win64-Shipping.exe");
+            if(Files.exists(Paths.get(rmAppLocation +"Windows\\RuneMod\\Binaries\\Win64\\"+"RuneMod-Win64-Shipping.exe"))) {
+                LaunchApp(rmAppLocation +"Windows\\RuneMod\\Binaries\\Win64\\"+"RuneMod-Win64-Shipping.exe");
             } else  {
                 RuneModPlugin.runeMod_statusUI.SetStatus_Detail("Launch failed: Runemod.exe could not be found");
             }
         } else {
-            if(Files.exists(Paths.get(rmAppLocation +"WindowsNoEditor\\RuneMod\\Binaries\\Win64\\"+"RuneMod-Win64-Shipping.exe"))) {
-                LaunchApp(rmAppLocation +"WindowsNoEditor\\RuneMod\\Binaries\\Win64\\"+"RuneMod-Win64-Shipping.exe");
+            if(Files.exists(Paths.get(rmAppLocation +"Windows\\RuneMod\\Binaries\\Win64\\"+"RuneMod-Win64-Shipping.exe"))) {
+                LaunchApp(rmAppLocation +"Windows\\RuneMod\\Binaries\\Win64\\"+"RuneMod-Win64-Shipping.exe");
             } else {
                 RuneModPlugin.runeMod_statusUI.SetStatus_Detail("Launch failed: Runemod.exe could not be found");
             }

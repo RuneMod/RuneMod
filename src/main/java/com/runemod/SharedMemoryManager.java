@@ -6,10 +6,6 @@ import com.sun.jna.Pointer;
 import com.sun.jna.platform.win32.*;
 import com.sun.jna.win32.W32APIOptions;
 import lombok.SneakyThrows;
-import net.runelite.api.GameState;
-import net.runelite.client.ui.ContainableFrame;
-
-import javax.swing.*;
 
 import java.awt.*;
 
@@ -164,7 +160,7 @@ public class SharedMemoryManager
 			} else {
 				myKernel32.ReleaseMutex(UnrealMutex);
 				waitNanos(10000);
-				if (System.nanoTime()-awaitStart > timeOutMs*1000000) { //if waited more than timeout
+				if (System.nanoTime()-awaitStart > timeOutMs*1000000 || RuneModPlugin.isShutDown) { //if waited more than timeout, or runemod plugin has shutdown, abort  waiting
 					return false;
 				}
 			}
@@ -343,15 +339,16 @@ public class SharedMemoryManager
 		if(!runeModWindowsExist()) {return;}
 
 		WinDef.HWND hwnd = User32.INSTANCE.FindWindow(null,"RuneModWin");
+		if(hwnd.getPointer() == null) {return;}
 		//WinDef.HWND hwnd2 = User32.INSTANCE.FindWindow(null,"RuneModControls");
 		System.out.println("SettingRmWindowVisibility to "+visibility);
 		curRmWindowVisibility = visibility;
 		if(visibility) {
 			User32.INSTANCE.ShowWindow(hwnd, WinUser.SW_SHOWNOACTIVATE);
-			//User32.INSTANCE.ShowWindow(hwnd2, WinUser.SW_SHOWNOACTIVATE);
+			runeModPlugin.RmVisChanged();
 		} else {
 			User32.INSTANCE.ShowWindow(hwnd, WinUser.SW_HIDE);
-			//User32.INSTANCE.ShowWindow(hwnd2, WinUser.SW_HIDE);
+			runeModPlugin.RmVisChanged();
 		}
 	}
 
@@ -502,7 +499,7 @@ public class SharedMemoryManager
 				case 5: //RequestRsCacheHashes
 					runeModPlugin.clientThread.invokeAtTickEnd(() -> //invoke at end of tick, because we cannot communicate with unreal at this point in the communiucation process. (tecnically we can, but only if we dont overflow the backbuffer, which we will do when sending cache)
 					{
-						runeModPlugin.myCacheReader.provideRsCacheHashes();
+						runeModPlugin.runeModAwaitingRsCacheHashes = true;
 					});
 					break;
 				case 6: //RequestSceneReload
@@ -633,7 +630,7 @@ public class SharedMemoryManager
 			case "PlaneChanged":
 				dataTypeByte = 26;
 				break;
-			case "WindowEvent":
+			case "RmVisChanged":
 				dataTypeByte = 27;
 				break;
 			case "BaseCoordinate":

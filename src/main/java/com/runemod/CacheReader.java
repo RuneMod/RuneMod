@@ -57,18 +57,19 @@ public class CacheReader {
     }
 
     public int[] provideRsCacheHashes() {
-        List<Index> indexes = store.getIndexes();
-        int[] hashes = new int[indexes.size()];
-        for(Index index : indexes) {
-            hashes[index.getId()] = index.getCrc();
-            System.out.println("index "+index.getId() + " crc32 hash is "+index.getCrc());
-        }
+            List<Index> indexes = store.getIndexes();
+            int[] hashes = new int[indexes.size()];
+            for(Index index : indexes) {
+                hashes[index.getId()] = index.getCrc();
+                System.out.println("index "+index.getId() + " crc32 hash is "+index.getCrc());
+            }
 
-        Buffer mainBuffer = new Buffer(new byte[(hashes.length*4)+12]);
-        mainBuffer.writeInt_Array(hashes, hashes.length);
-        RuneModPlugin.sharedmem_rm.backBuffer.writePacket(mainBuffer, "RsCacheHashesProvided");
-        System.out.println("RsCacheHashes have been provided To Unreal");
-        return hashes;
+            Buffer mainBuffer = new Buffer(new byte[(hashes.length*4)+12]);
+            mainBuffer.writeInt_Array(hashes, hashes.length);
+            RuneModPlugin.sharedmem_rm.backBuffer.writePacket(mainBuffer, "RsCacheHashesProvided");
+
+            System.out.println("RsCacheHashes have been provided To Unreal");
+            return hashes;
     }
 
     @SneakyThrows
@@ -458,7 +459,7 @@ public class CacheReader {
                                 mainBuffer.writeLong(tileId); //write cacheElment id
 
                                 Buffer elementBuffer = new Buffer(new byte[20]);//create cacheElementBytes;
-                                elementBuffer.writeByte((region.getTileHeight(z,x,y)/8)*-1);
+                                elementBuffer.writeShort((region.getTileHeight(z,x,y)/8)*-1);
                                 elementBuffer.writeShort(tile.overlayId);
                                 elementBuffer.writeByte(tile.overlayRotation);
                                 elementBuffer.writeByte(tile.overlayPath);

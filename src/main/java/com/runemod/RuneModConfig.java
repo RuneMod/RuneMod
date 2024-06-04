@@ -111,6 +111,18 @@ public interface RuneModConfig extends Config
 	}
 
 	@ConfigItem(
+			keyName = "spawnNpcGFX",
+			name = "spawnNpcGFX",
+			description = "spawnNpcGFX",
+			position = 15,
+			section = debugStuff
+	)
+	default boolean spawnNpcGFX()
+	{
+		return true;
+	}
+
+	@ConfigItem(
 			keyName = "spawnStaticGFX",
 			name = "spawnStaticGFX",
 			description = "spawnStaticGFX",
