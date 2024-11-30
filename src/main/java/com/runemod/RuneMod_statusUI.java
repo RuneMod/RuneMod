@@ -1,12 +1,16 @@
 package com.runemod;
 
+import com.runemod.cache.fs.flat.FlatStorage;
 import net.runelite.client.ui.FontManager;
+import net.runelite.client.util.ImageUtil;
 
 import javax.swing.*;
 import javax.swing.text.StyleContext;
 import java.awt.*;
+import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URL;
 
 public class RuneMod_statusUI extends JPanel {
 
@@ -88,15 +92,30 @@ public class RuneMod_statusUI extends JPanel {
 
         String statusText_caseless =  statusText.toLowerCase();
 
+        //Image iconPath = ImageUtil.loadImageResource(RuneModPlugin.class, "/loading_shrimps_small.gif");
+/*        String iconPath = "loading_shrimps_small.gif";
+
+        String baseName = RuneModPlugin.class.getPackageName();
+        if (baseName != null && !baseName.isEmpty()) {
+            iconPath = baseName.replace('.', '/') + "/" + iconPath;
+        }*/
+
+        //String iconPath = RuneModPlugin.class.getResource("loading_shrimps_small.gif").getPath();
+
+        //System.out.println(iconPath);
+
+        //String iconPath = RuneModPlugin.class.getResource("loading_shrimps_small.gif").getPath();
+        //String icon = RuneModPlugin.class.;
+
         if (statusText_caseless.contains("updating")) {
             StatusDetail.setForeground(Color.orange);
             iconHolder.setVisible(true);
-            iconHolder.setIcon(new ImageIcon("loading_shrimps_small.gif"));
+            iconHolder.setIcon(new ImageIcon(getClass().getResource("/loading_shrimps_small.gif")));
         }else {
             if (statusText_caseless.contains("ing")||statusText_caseless.contains("logged")) {
                 StatusDetail.setForeground(Color.yellow);
                 iconHolder.setVisible(true);
-                iconHolder.setIcon(new ImageIcon("loading_shrimps_small.gif"));
+                iconHolder.setIcon(new ImageIcon(getClass().getResource("/loading_shrimps_small.gif")));
             }else {
                 if(statusText_caseless.contains("fail")||statusText_caseless.contains("not ")||statusText_caseless.contains("cant")) {
                     StatusDetail.setForeground(Color.red);
@@ -116,8 +135,11 @@ public class RuneMod_statusUI extends JPanel {
         //System.out.println("status:"+statusText);
 
         if (statusText.equalsIgnoreCase("ready")) {
-            //System.out.println("runemod says it is ready");
-            RuneModPlugin.toggleRuneModLoadingScreen(false);
+            if(!RuneModPlugin.unrealIsReady) {
+                System.out.println("runemod says it is ready");
+                RuneModPlugin.toggleRuneModLoadingScreen(false);
+                RuneModPlugin.unrealIsReady = true;
+            }
         }
     }
 

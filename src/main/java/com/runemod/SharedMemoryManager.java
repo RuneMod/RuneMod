@@ -28,7 +28,7 @@ public class SharedMemoryManager
 	Buffer backBuffer; //used to write packets while shared memory is unavailable
 	private RuneModPlugin runeModPlugin;
 
-	int SharedMemorySize_Static = 0;
+	int SharedMemoryDataSize = 0;
 	int Offset;
 
 	public interface MyKernel32 extends Kernel32
@@ -89,7 +89,7 @@ public class SharedMemoryManager
 	{
 		System.out.println("Created Shared Memory: "+sharedMemoryName + "Size: " + (float)sharedMemorySize/1000000.0 + "MB");
 		SharedMemoryName = sharedMemoryName;
-		SharedMemorySize_Static = sharedMemorySize;
+		SharedMemoryDataSize = sharedMemorySize;
 
 		SharedMemoryHandle = myKernel32.CreateFileMapping(INVALID_HANDLE_VALUE,
 			null, PAGE_READWRITE,
@@ -107,8 +107,9 @@ public class SharedMemoryManager
 		if (SharedMemoryData == null) return;
 
 		backBuffer = new Buffer(new byte[10000000]); //10mb backbuffer.
+		System.out.println("Created backbuffer with Size: " + (float)10000000/1000000.0 + "MB");
 
-		SharedMemoryData.setInt(0, sharedMemorySize); //first 4 bytes contain sharedMemoryDataSize
+		//SharedMemoryData.setInt(0, sharedMemorySize); //first 4 bytes contain sharedMemoryDataSize
 	}
 
 	public boolean CreateMutexes() {
@@ -217,7 +218,7 @@ public class SharedMemoryManager
 
 	public void CloseSharedMemory()
 	{
-		setByte(SharedMemorySize_Static-1, (byte)0); //last byte defines DataType; 2 = unrealdata. 1 = rsdata. on close, set this to 0 so unreal can run without crash
+		setByte(SharedMemoryDataSize -1, (byte)0); //last byte defines DataType; 2 = unrealdata. 1 = rsdata. on close, set this to 0 so unreal can run without crash
 		if (SharedMemoryMutex != null)
 		{
 			UnlockMutex();
@@ -276,6 +277,7 @@ public class SharedMemoryManager
 		backBuffer.reset();
 	}
 
+/*
 	@SneakyThrows
 	public boolean awaitUnrealData() {
 		int timeOut = 40000000;
@@ -318,6 +320,7 @@ public class SharedMemoryManager
 			}
 		}
 	}
+*/
 
 
 	void waitNanos(int Nanos) {
@@ -334,6 +337,7 @@ public class SharedMemoryManager
 	volatile boolean curRmWindowVisibility = true;
 
 	public void setRuneModVisibility(boolean visibility) {
+		if(!RuneModPlugin.unrealIsReady) {return;}
 		if(!runeModPlugin.config.attachRmWindowToRL()) {return;}
 		if(curRmWindowVisibility == visibility) {return;}
 		if(!runeModWindowsExist()) {return;}
@@ -389,6 +393,7 @@ public class SharedMemoryManager
 	WinDef.HWND RuneModHandle = null;
 	public boolean ChildRuneModWinToRl() {
 		//if(runeModPlugin.client.getGameState().ordinal()<=GameState.LOGIN_SCREEN.ordinal()) { return false; }  //prevents childing while on login screen, because that causes a period where the client becomes unfocused which prevents you typing your user/pass
+		if(!RuneModPlugin.unrealIsReady) {return false;}
 
 		if(!runeModPlugin.config.attachRmWindowToRL()) {return false;}
 
@@ -402,10 +407,12 @@ public class SharedMemoryManager
 /*		User32.INSTANCE.SetWindowLongPtr(RuneModHandle *//*The handle of the window to remove its borders*//*, User32.GWL_STYLE, User32.WS_POPUP);
 		User32.INSTANCE.SetWindowLongPtr(RuneModHandle *//*The handle of the window to remove its borders*//*, User32.GWL_STYLE, User32.WS_POPUP, );*/
 
-		System.out.println("AttchinRuneModWindowsToRL");
+		System.out.println("ChildingRuneModWindowToRL");
 
 		WinDef.HWND RLHandle = User32.INSTANCE.FindWindow(null,"RuneLite");
 		User32.INSTANCE.SetWindowLongPtr(RuneModHandle, User32.GWL_HWNDPARENT, RLHandle.getPointer());
+
+		User32.INSTANCE.ShowWindow(RuneModHandle, User32.SW_SHOWNORMAL); //unreal minimizes itself when it starts, so we show it here.
 
 /*		WinDef.HWND ModModeWindow = User32.INSTANCE.FindWindow(null,"ModModeTogglerWin");
 		User32.INSTANCE.SetWindowLongPtr(ModModeWindow, GWLP_HWNDPARENT, RLHandle.getPointer());*/
@@ -414,6 +421,13 @@ public class SharedMemoryManager
 
 		//runeModPlugin.maintainRuneModStatusAttachment();
 		return true;
+	}
+
+	public void UnChildRuneModWinToRl() {
+		System.out.println("UnChildingRuneModWindowToRL");
+		User32.INSTANCE.DestroyWindow(RuneModHandle);
+		//User32.INSTANCE.SetWindowLongPtr(RuneModHandle, User32.GWL_HWNDPARENT, RuneModHandle.getPointer());
+		//User32.INSTANCE.PostMessage(RuneModHandle,  0x0010, new WinDef.WPARAM(0), new WinDef.LPARAM(0));
 	}
 
 /*	public boolean ChildRuneModStatusToRl() {
@@ -429,7 +443,24 @@ public class SharedMemoryManager
 		return true;
 	}*/
 
+	void checkIsRsData() {
+		byte dataType = SharedMemoryData.getByte(SharedMemoryDataSize-1); //last byte defines DataType; 2 = unrealdata. 1 = rsdata
+		if(dataType!=1) {
+			System.out.println("is not unreal data. dataType is " + dataType);
+		}
+	}
+
+	boolean checkIsUnrealData() {
+		byte dataType = SharedMemoryData.getByte(SharedMemoryDataSize-1); //last byte defines DataType; 2 = unrealdata. 1 = rsdata
+		if(dataType!=2) {
+			System.out.println("is not unreal data. dataType is " + dataType);
+			return false;
+		}
+		return true;
+	}
+
 	public void updateRmWindowTransform() {
+		if(!RuneModPlugin.unrealIsReady) {return;}
 		if(!runeModPlugin.config.attachRmWindowToRL()) {return;}
 		//if(RuneModHandle == null) {System.out.println("null rmHandle, cant uodate transform");}
 		System.out.println("updating RuneMod windows");
@@ -456,6 +487,8 @@ public class SharedMemoryManager
 	public void handleUnrealData() {
 		//System.out.println("handling unrealData");
 		Offset = 0;
+		if(!checkIsUnrealData()) {return;} //check, just incase something has gone wrong. if its not unreal data, we dont want to read it.
+
 		while (true) {
 			byte PacketOpCode = SharedMemoryData.getByte(Offset); //read packet opcode
 			//System.out.println("read packetOpCode: " + PacketOpCode);
@@ -486,17 +519,20 @@ public class SharedMemoryManager
 					//System.out.println("UnrealsTick: " + gameCycle_Unreal);
 					break;
 				case 3: //StatusReport
-					//System.out.println("recieved unrealStatusReport");
-					RuneModPlugin.runeMod_statusUI.SetStatus_Detail(packet.readStringCp1252NullTerminated());
+					String string = packet.readStringCp1252NullTerminated();
+					System.out.println("[unrealStatusReport] "+string);
+					RuneModPlugin.runeMod_statusUI.SetStatus_Detail(string);
 					break;
 				case 4: //RequestRsCacheData
 					//System.out.println("recieved RsCacheData request");
+					System.out.println("rm says it is awaiting RsCacheData, sending it next tick.");
 					runeModPlugin.clientThread.invokeAtTickEnd(() -> //invoke at end of tick, because we cannot communicate with unreal at this point in the communiucation process. (tecnically we can, but only if we dont overflow the backbuffer, which we will do when sending cache)
 					{
 						runeModPlugin.provideRsCacheData();
 					});
 					break;
 				case 5: //RequestRsCacheHashes
+					System.out.println("rm says it is awaiting rscacheHashes, sending them next tick.");
 					runeModPlugin.clientThread.invokeAtTickEnd(() -> //invoke at end of tick, because we cannot communicate with unreal at this point in the communiucation process. (tecnically we can, but only if we dont overflow the backbuffer, which we will do when sending cache)
 					{
 						runeModPlugin.runeModAwaitingRsCacheHashes = true;
@@ -508,6 +544,9 @@ public class SharedMemoryManager
 					{
 						runeModPlugin.reloadUnrealScene();
 					});
+					break;
+				case 7: //StatusReport
+					//RuneModPlugin.runeMod_statusUI.SetStatus_Detail(packet.readStringCp1252NullTerminated());
 					break;
 				default:
 					System.out.println("unhandled unrealDataType at: " + " Offset: "+Offset+" PacketLen: " + packetLength);
@@ -521,7 +560,7 @@ public class SharedMemoryManager
 
 	public void startNewRsData() {
 		Offset = 0;
-		setByte(SharedMemorySize_Static-1, (byte)1); //last byte defines DataType; 2 = unrealdata. 1 = rsdata
+		setByte(SharedMemoryDataSize -1, (byte)1); //last byte defines DataType; 2 = unrealdata. 1 = rsdata
 		//System.out.println("Started new rsData");
 	}
 
@@ -537,7 +576,7 @@ public class SharedMemoryManager
 	}
 
 	public boolean isUnrealData() {
-		if(SharedMemoryData.getByte(SharedMemorySize_Static-1)==(byte)2) {
+		if(SharedMemoryData.getByte(SharedMemoryDataSize -1)==(byte)2) {
 			return true;
 		} else {
 			return false;
@@ -645,7 +684,7 @@ public class SharedMemoryManager
 			case "RsCacheHashesProvided":
 				dataTypeByte = 31;
 				break;
-			case "32":
+			case "InstancedAreaState":
 				dataTypeByte = 32;
 				break;
 			case "Varbit":

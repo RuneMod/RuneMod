@@ -161,7 +161,7 @@ public class Buffer {
     boolean isOverFlowed = false;
 
     public void writePacket(Buffer packetContent, String dataType) {
-        if ((offset + packetContent.offset) > (array.length-10000)) { //if packet would overflow backBuffer, send backbuffer to unreal, then continue;
+        if ((offset + packetContent.offset) > (array.length-100)) { //if packet would overflow this buffer (aka the backBuffer), send backbuffer to unreal, then continue;
             try {
                 System.out.println("backbuffer has overflowed, sending existing packets before continuing");
                 Thread.sleep(200);

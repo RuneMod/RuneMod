@@ -81,6 +81,25 @@ class RuneMod_Launcher implements Runnable {
         Files.write(Paths.get(rmAppLocation +"\\version.txt"), version_string.getBytes());
     }
 
+    public static void deleteDirectory(File file) {
+        if (file == null || !file.exists()) {
+            System.out.println("The specified path does not exist.");
+            return;
+        }
+
+        if (file.isDirectory()) {
+            for (File subfile : file.listFiles()) {
+                deleteDirectory(subfile);
+            }
+        }
+
+        if (file.delete()) {
+            System.out.println("Deleted: " + file.getAbsolutePath());
+        } else {
+            System.out.println("Failed to delete: " + file.getAbsolutePath());
+        }
+    }
+
     @SneakyThrows
     public void onStart() {
 
@@ -96,7 +115,13 @@ class RuneMod_Launcher implements Runnable {
         System.out.println("current version = " + currentAppVersion);
 
         if (currentAppVersion < 0 || latestAppVersion > currentAppVersion) {
+           //delete old app folder.
+            System.out.println("Deleting old rm app at"+ rmAppLocation+"Windows");
+            File directoryToDelete = new File(rmAppLocation+"Windows");
+            deleteDirectory(directoryToDelete);
+
             Files.createDirectories(Paths.get(rmAppLocation));
+
             String zipFilePath = rmAppLocation +"Windows.zip";
             downloadZip("https://runemod.net/downloadables/application/Windows.zip", zipFilePath);
             UnzipFile(zipFilePath, rmAppLocation);
@@ -258,11 +283,12 @@ class RuneMod_Launcher implements Runnable {
         Desktop desktop = Desktop.getDesktop();
         try
         {
-            //desktop.open(new File(filePath));
+            desktop.open(new File(filePath));
+            desktop.enableSuddenTermination();
             //Process p = new ProcessBuilder(filePath).start();
-            ProcessBuilder pb = new ProcessBuilder(
+/*            ProcessBuilder pb = new ProcessBuilder(
                     "cmd", "/c", "cd \"" + folderPath+ "\" " + "&& start "+ fileName + " -NOSPLASH -game -windowed -WinX=0 -WinY=0 -ResX=1 -ResY=1"); //launches program with arguments
-            pb.start();
+            RuneModPlugin.unrealGameProcess = pb.start();*/
         }
         catch (IOException e)
         {
