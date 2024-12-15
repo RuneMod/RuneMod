@@ -82,10 +82,10 @@ public class RuneMod_statusUI extends JPanel {
         frame.toFront();*/
 
         SetStatusHeading("RuneMod: ");
-        SetStatus_Detail("");
+        SetStatus_Detail("", false);
     }
 
-    public void SetStatus_Detail(String statusText) {
+    public void SetStatus_Detail(String statusText, boolean print) {
         if(statusText.length()>100) { return; };
         //loadingBar.setString(statusText +" - " + loadingBar.getValue() + "%");
         StatusDetail.setText(statusText);
@@ -136,10 +136,13 @@ public class RuneMod_statusUI extends JPanel {
 
         if (statusText.equalsIgnoreCase("ready")) {
             if(!RuneModPlugin.unrealIsReady) {
-                System.out.println("runemod says it is ready");
                 RuneModPlugin.toggleRuneModLoadingScreen(false);
                 RuneModPlugin.unrealIsReady = true;
             }
+        }
+
+        if(print) {
+            System.out.println("..." + statusText);
         }
     }
 

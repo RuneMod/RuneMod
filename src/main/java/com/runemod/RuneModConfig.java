@@ -12,13 +12,37 @@ public interface RuneModConfig extends Config
 			keyName = "RuneModVisibility",
 			name = "RuneModVisibility",
 			description = "Toggles visibility of runemod",
-			position = 6
+			position = 4
 	)
 
 	default boolean RuneModVisibility()
 	{
 		return true;
 	}
+
+	@ConfigItem(
+			keyName = "MaxFps",
+			name = "MaxFps",
+			description = "Note, increasing the fps beyond 50 may lead to a less responsive experience",
+			position = 5
+	)
+
+	default int MaxFps()
+	{
+		return 50;
+	}
+
+/*	@ConfigItem(
+			keyName = "DrawDistance",
+			name = "DrawDistance",
+			description = "Increases the distance you can click. Has a significant performance cost.",
+			position = 6
+	)
+
+	default int DrawDistance()
+	{
+		return 50;
+	}*/
 
 	@ConfigSection(
 			name = "Developer Stuff",
@@ -72,6 +96,18 @@ public interface RuneModConfig extends Config
 			closedByDefault = false
 	)
 	String debugStuff = "DebugStuff";
+
+	@ConfigItem(
+			keyName = "useTwoRenderers",
+			name = "useTwoRenderers",
+			description = "useful for debugging or comparing between runemod and vanilla. uncheck attach attachRmWindowToRL and move the rl window, to separate the two render views.",
+			position = 11,
+			section = debugStuff
+	)
+	default boolean useTwoRenderers()
+	{
+		return false;
+	}
 
 	@ConfigItem(
 			keyName = "attachRmWindowToRL",

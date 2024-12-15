@@ -167,6 +167,7 @@ public class Buffer {
                 Thread.sleep(200);
                 isOverFlowed = true;
                 RuneModPlugin.runeModPlugin.alreadyCommunicatedUnreal = false;
+                System.out.println("dot4");
                 RuneModPlugin.runeModPlugin.communicateWithUnreal();
                 isOverFlowed = false;
             } catch (InterruptedException e) {

@@ -336,6 +336,7 @@ public class SharedMemoryManager
 
 	volatile boolean curRmWindowVisibility = true;
 
+
 	public void setRuneModVisibility(boolean visibility) {
 		if(!RuneModPlugin.unrealIsReady) {return;}
 		if(!runeModPlugin.config.attachRmWindowToRL()) {return;}
@@ -460,26 +461,39 @@ public class SharedMemoryManager
 	}
 
 	public void updateRmWindowTransform() {
-		if(!RuneModPlugin.unrealIsReady) {return;}
-		if(!runeModPlugin.config.attachRmWindowToRL()) {return;}
-		//if(RuneModHandle == null) {System.out.println("null rmHandle, cant uodate transform");}
-		System.out.println("updating RuneMod windows");
-		if(!runeModPlugin.client.getCanvas().isShowing()) { return;}
+		if (!RuneModPlugin.unrealIsReady) { return; }
+		if (!runeModPlugin.config.attachRmWindowToRL()) { return; }
+		if (!runeModPlugin.client.getCanvas().isShowing()) { return; }
+
 		Container parent = runeModPlugin.client.getCanvas().getParent();
 		int canvasPosX = parent.getLocationOnScreen().x;
 		int canvasPosY = parent.getLocationOnScreen().y;
 		int canvasSizeX = parent.getWidth();
 		int canvasSizeY = parent.getHeight();
 
+		float dpiScalingFactor = Toolkit.getDefaultToolkit().getScreenResolution() / 96.0f; // 96 DPI is the standard
 
-		//WinDef.HWND HWND_TOP = new WinDef.HWND(new Pointer(0));
-		User32.INSTANCE.SetWindowPos(RuneModHandle, null, canvasPosX, canvasPosY, canvasSizeX, canvasSizeY,  0);
+		// Adjust position and size based on DPI scaling
+		canvasPosX = Math.round(canvasPosX * dpiScalingFactor);
+		canvasPosY = Math.round(canvasPosY * dpiScalingFactor);
+		canvasSizeX = Math.round(canvasSizeX * dpiScalingFactor);
+		canvasSizeY = Math.round(canvasSizeY * dpiScalingFactor);
 
-		//runeModPlugin.maintainRuneModStatusAttachment();
+		System.out.println("Updating RuneMod windows. PosX: " + canvasPosX + " posY: " + canvasPosY + " sizeX: " + canvasSizeX + " sizeY: " + canvasSizeY);
 
-/*		WinDef.HWND ModModeWindow = User32.INSTANCE.FindWindow(null,"ModModeTogglerWin");
-		int SWP_NOSIZE = 0x0001;
-		User32.INSTANCE.SetWindowPos(ModModeWindow, null, canvasPosX+(canvasSizeX/2)-16, canvasPosY-29, 0, 0,  SWP_NOSIZE);*/
+		User32.INSTANCE.SetWindowPos(RuneModHandle, null, canvasPosX, canvasPosY, canvasSizeX, canvasSizeY, 0);
+		/*		// Create POINT for the position
+		WinDef.POINT point = new WinDef.POINT();
+		point.x = canvasPosX;
+		point.y = canvasPosY;
+
+		// Create SIZE for the size
+		WinUser.SIZE size = new WinUser.SIZE();
+		size.cx = canvasSizeX;
+		size.cy = canvasSizeY;
+
+		// Call UpdateLayeredWindow
+		User32.INSTANCE.UpdateLayeredWindow(RuneModHandle, null, point, size, null, null, 0, null, WinUser.ULW_ALPHA);*/
 	}
 
 	public int gameCycle_Unreal = -1;
@@ -520,8 +534,7 @@ public class SharedMemoryManager
 					break;
 				case 3: //StatusReport
 					String string = packet.readStringCp1252NullTerminated();
-					System.out.println("[unrealStatusReport] "+string);
-					RuneModPlugin.runeMod_statusUI.SetStatus_Detail(string);
+					RuneModPlugin.runeMod_statusUI.SetStatus_Detail(string, true);
 					break;
 				case 4: //RequestRsCacheData
 					//System.out.println("recieved RsCacheData request");

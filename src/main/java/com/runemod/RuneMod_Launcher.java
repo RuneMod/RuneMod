@@ -43,7 +43,7 @@ class RuneMod_Launcher implements Runnable {
 
     public int getLatestAppVersion() {
         HttpClient client = HttpClient.newHttpClient();
-        HttpRequest request = HttpRequest.newBuilder().uri(URI.create("https://runemod.net/downloadables/application/version.txt")).build();
+        HttpRequest request = HttpRequest.newBuilder().uri(URI.create("https://pub-64c85893ea904aedab24caeb10432ae1.r2.dev/application/version.txt")).build();
         HttpResponse<String> response = null;
         try {
             response = client.send(request, HttpResponse.BodyHandlers.ofString());
@@ -123,7 +123,7 @@ class RuneMod_Launcher implements Runnable {
             Files.createDirectories(Paths.get(rmAppLocation));
 
             String zipFilePath = rmAppLocation +"Windows.zip";
-            downloadZip("https://runemod.net/downloadables/application/Windows.zip", zipFilePath);
+            downloadZip("https://pub-64c85893ea904aedab24caeb10432ae1.r2.dev/application/windows.zip", zipFilePath);
             UnzipFile(zipFilePath, rmAppLocation);
             SetCurrentAppVersion(latestAppVersion);
             try {
@@ -135,20 +135,20 @@ class RuneMod_Launcher implements Runnable {
             if(Files.exists(Paths.get(rmAppLocation +"Windows\\RuneMod\\Binaries\\Win64\\"+"RuneMod-Win64-Shipping.exe"))) {
                 LaunchApp(rmAppLocation +"Windows\\RuneMod\\Binaries\\Win64\\"+"RuneMod-Win64-Shipping.exe");
             } else  {
-                RuneModPlugin.runeMod_statusUI.SetStatus_Detail("Launch failed: Runemod.exe could not be found");
+                RuneModPlugin.runeMod_statusUI.SetStatus_Detail("Launch failed: Runemod.exe could not be found", true);
             }
         } else {
             if(Files.exists(Paths.get(rmAppLocation +"Windows\\RuneMod\\Binaries\\Win64\\"+"RuneMod-Win64-Shipping.exe"))) {
                 LaunchApp(rmAppLocation +"Windows\\RuneMod\\Binaries\\Win64\\"+"RuneMod-Win64-Shipping.exe");
             } else {
-                RuneModPlugin.runeMod_statusUI.SetStatus_Detail("Launch failed: Runemod.exe could not be found");
+                RuneModPlugin.runeMod_statusUI.SetStatus_Detail("Launch failed: Runemod.exe could not be found", true);
             }
         }
     }
 
     public void downloadZip(String URL, String filePath) {
         System.out.println(rmAppLocation);
-        RuneModPlugin.runeMod_statusUI.SetStatus_Detail("Starting RuneMod download...");
+        RuneModPlugin.runeMod_statusUI.SetStatus_Detail("Starting RuneMod download...", true);
         try {
 
             URL url = new URL(URL);
@@ -168,7 +168,7 @@ class RuneMod_Launcher implements Runnable {
             int count = 0;
 
             while ((count = bis.read(buffer, 0, buffer.length)) != -1) {
-                RuneModPlugin.runeMod_statusUI.SetStatus_Detail("Downloaded: "+(((int)fis.getChannel().size()/100000)/10.0f)+" / " + (((int)fileSize/100000)/10.0f) + "mb");
+                RuneModPlugin.runeMod_statusUI.SetStatus_Detail("Downloaded: "+(((int)fis.getChannel().size()/100000)/10.0f)+" / " + (((int)fileSize/100000)/10.0f) + "mb", true);
                 fis.write(buffer, 0, count);
             }
 
@@ -176,7 +176,7 @@ class RuneMod_Launcher implements Runnable {
             bis.close();
 
         } catch (IOException e) {
-            RuneModPlugin.runeMod_statusUI.SetStatus_Detail("RuneMod Download failed");
+            RuneModPlugin.runeMod_statusUI.SetStatus_Detail("RuneMod Download failed", true);
             e.printStackTrace();
         }
     }
@@ -195,7 +195,7 @@ class RuneMod_Launcher implements Runnable {
     }
 
     public void UnzipFile(String fileZip, String destPath) throws IOException {
-        RuneModPlugin.runeMod_statusUI.SetStatus_Detail("Unzipping...");
+        RuneModPlugin.runeMod_statusUI.SetStatus_Detail("Unzipping...", true);
 
         File destDir = new File(destPath);
         byte[] buffer = new byte[8192];
@@ -222,7 +222,7 @@ class RuneMod_Launcher implements Runnable {
                     noBytesDecompressed = noBytesDecompressed+len;
 
                     if(noBytesDecompressed%1000 == 0) { //set status message ever 1kb
-                        RuneModPlugin.runeMod_statusUI.SetStatus_Detail("UnZipped "+ noBytesDecompressed/1000000 + "mb");
+                        RuneModPlugin.runeMod_statusUI.SetStatus_Detail("UnZipped "+ noBytesDecompressed/1000000 + "mb", true);
                     }
 
                     fos.write(buffer, 0, len);
@@ -258,27 +258,25 @@ class RuneMod_Launcher implements Runnable {
             }
             zis.closeEntry();
             zis.close();*/
-        RuneModPlugin.runeMod_statusUI.SetStatus_Detail("UnZipping finished ");
+        RuneModPlugin.runeMod_statusUI.SetStatus_Detail("UnZipping finished", true);
     }
 
     public void LaunchApp(String filePath) throws IOException {
 
         if(AltRuneModLocation.length()>1) {
-            RuneModPlugin.runeMod_statusUI.SetStatus_Detail("Launching Alt RuneMod.exe...");
+            RuneModPlugin.runeMod_statusUI.SetStatus_Detail("Launching Alt RuneMod.exe...", true);
         } else {
-            RuneModPlugin.runeMod_statusUI.SetStatus_Detail("Launching RuneMod.exe...");
+            RuneModPlugin.runeMod_statusUI.SetStatus_Detail("Launching RuneMod.exe...", true);
         }
 
-
-        File theFile = new File(filePath);
+/*        File theFile = new File(filePath);
 
         String folderPath = theFile.getParent();
-        System.out.println(folderPath);
+        String fileName = theFile.getName();*/
 
-        String fileName = theFile.getName();
-        System.out.println(fileName);
+        System.out.println("Launch filePath:" + filePath);
 
-        if(AutoLaunch == false) { RuneModPlugin.runeMod_statusUI.SetStatus_Detail("Auto launch turned off, will not auto-start runemod.exe. Awaiting manual start of runemod.exe..."); return;}
+        if(AutoLaunch == false) { RuneModPlugin.runeMod_statusUI.SetStatus_Detail("Auto launch turned off, will not auto-start runemod.exe. Awaiting manual start of runemod.exe...", true); return;}
 
         Desktop desktop = Desktop.getDesktop();
         try
@@ -292,7 +290,7 @@ class RuneMod_Launcher implements Runnable {
         }
         catch (IOException e)
         {
-            RuneModPlugin.runeMod_statusUI.SetStatus_Detail("Failed to execute RuneMod.exe...");
+            RuneModPlugin.runeMod_statusUI.SetStatus_Detail("Failed to execute RuneMod.exe...", true);
             e.printStackTrace();
         }
 
