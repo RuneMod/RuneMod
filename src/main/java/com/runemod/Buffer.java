@@ -99,6 +99,14 @@ public class Buffer {
         }
     }
 
+    void writeShort_Array(short[] var1, int arrayLen)
+    {
+        writeInt(arrayLen);
+        for (int i = 0; i < arrayLen; i++) {
+            writeShort(var1[i]);
+        }
+    }
+
     public int readUnsignedByte() {
         return this.array[++this.offset - 1] & 255;
     }

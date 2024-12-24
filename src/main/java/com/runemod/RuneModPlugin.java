@@ -26,6 +26,7 @@ import net.runelite.client.ui.DrawManager;
 import net.runelite.client.ui.overlay.OverlayManager;
 import net.runelite.client.util.HotkeyListener;
 
+import javax.annotation.Nullable;
 import javax.inject.Inject;
 import javax.swing.*;
 import java.awt.*;
@@ -789,6 +790,10 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		} else {
 			if(renderable instanceof NPC) {
 				visibleActors.add(renderable);
+			} else {
+				if(renderable instanceof GraphicsObject) {
+					visibleActors.add(renderable);
+				}
 			}
 		}
 
@@ -1552,6 +1557,46 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		});
 	}
 
+	// Define a class to represent a Point
+	class NpcOverrides_Copy {
+		int[] modelIds;
+
+		short[] colorToReplaceWith;
+
+		short[] textureToReplaceWith;
+
+		boolean useLocalPlayer;
+
+		public NpcOverrides_Copy(NpcOverrides overrides) {
+			this.modelIds = overrides.getModelIds();
+			this.colorToReplaceWith = overrides.getColorToReplaceWith();
+			this.textureToReplaceWith = overrides.getTextureToReplaceWith();
+			this.useLocalPlayer = overrides.useLocalPlayer();
+		}
+
+		public boolean isIdenticalTo(NpcOverrides_Copy other) {
+			boolean isEqual = true;
+			if(!Arrays.equals(other.modelIds, modelIds)) {
+				isEqual = false;
+			}
+			if(!Arrays.equals(other.colorToReplaceWith, colorToReplaceWith)) {
+				isEqual = false;
+			}
+			if(!Arrays.equals(other.textureToReplaceWith, textureToReplaceWith)) {
+				isEqual = false;
+			}
+			if(!other.useLocalPlayer == useLocalPlayer) {
+				isEqual = false;
+			}
+			return isEqual;
+		}
+	}
+
+	private HashMap<NPC, NpcOverrides_Copy> npcsWithOverrides_LastFrame =  new HashMap<NPC, NpcOverrides_Copy>();
+	//if npc in curfram has overrides, and it didnt in last frame, overridesChanged.
+	//if npcsWithOverrides in last frame is missing from npcsWithOverrides in currentFrame, overridesChanged.
+	//if npc With Overrides is present in last and current frame, check if the overrides from each frame are equal. if they are not, , overridesChanged.
+
 	private static final Keybind myKeybindQ = new Keybind(KeyEvent.VK_Q, InputEvent.CTRL_DOWN_MASK);
 	private final HotkeyListener hotkeyListenerq = new HotkeyListener(() -> myKeybindQ)
 	{
@@ -1561,7 +1606,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		{
 			clientThread.invokeLater(() ->
 			{
-				configManager.setConfiguration("RuneMod","RuneModVisibility", !configManager.getConfiguration("RuneMod","RuneModVisibility").equalsIgnoreCase("true"));
+				//configManager.setConfiguration("RuneMod","RuneModVisibility", !configManager.getConfiguration("RuneMod","RuneModVisibility").equalsIgnoreCase("true"));
 				//myCacheReader.sendColourPallette();
 
 				//sendTextures();
@@ -4255,7 +4300,6 @@ skills menu:__________
 				//int npcHeight = Perspective.getTileHeight(client, LocationToSampleHeightFrom, client.getTopLevelWorldView().getPlane())*-1;
 				int npcHeight = Perspective.getTileHeight(client, npc.getLocalLocation(), client.getTopLevelWorldView().getPlane())*-1;
 				int npcOrientation = npc.getCurrentOrientation();
-
 /*				int npcAnimationId = -1;
 				int npcAnimationFrame = -1;
 				int npcAnimationFrameCycle = -1;
@@ -4332,6 +4376,16 @@ skills menu:__________
 						}
 					}
 				}
+
+				//started writing npc overrides. maybe should make something to detect when overrides are changed and fire a npcOverridesChanged event?
+/*				boolean hasNpcOverrides = npc.getModelOverrides()!=null;
+				perFramePacket.writeBoolean(hasNpcOverrides);
+				if(npc.getModelOverrides() != null) {
+					perFramePacket.writeInt_Array(npc.getModelOverrides().getModelIds(), npc.getModelOverrides().getModelIds().length);
+					perFramePacket.writeShort_Array(npc.getModelOverrides().getColorToReplaceWith(), npc.getModelOverrides().getColorToReplaceWith().length);
+					perFramePacket.writeShort_Array(npc.getModelOverrides().getTextureToReplaceWith(), npc.getModelOverrides().getTextureToReplaceWith().length);
+					perFramePacket.writeBoolean(npc.getModelOverrides().useLocalPlayer());
+				}*/
 			}
 		}
 
@@ -4459,6 +4513,11 @@ skills menu:__________
 				if (graphicsObject instanceof RuneLiteObject) {
 					System.out.println("encountered runeliteObject");
 				}
+
+				if(clientCycle < graphicsObject.getStartCycle()) { //graphicsObj should not draw before it's startCycle.
+					shouldDraw = false;
+				}
+
 				int sceneId = graphicsObject.hashCode();
 				perFramePacket.writeInt(sceneId);
 				short localX = (short)graphicsObject.getLocation().getX();
