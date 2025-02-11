@@ -1,5 +1,6 @@
-Adds a different renderer to RS.
-RuneMod also has tools to create and install graphical mods.
-Still in development so dont expect it to work.
+# RuneMod
+This plugin adds a different renderer to Runescape.
+There are also some graphical modding tools.
+This is still in development so it will have bugs and may cause your client to crash.
 
 ![Example image](https://i.imgur.com/MHk8NX8.gif)
