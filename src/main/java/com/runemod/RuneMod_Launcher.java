@@ -3,7 +3,6 @@ package com.runemod;
 import lombok.SneakyThrows;
 
 import javax.net.ssl.HttpsURLConnection;
-import java.awt.*;
 import java.io.*;
 import java.net.URI;
 import java.net.URL;
@@ -16,10 +15,7 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
 
-// This class downloads a file from a URL.
-class RuneMod_Launcher implements Runnable {
-    volatile boolean run = true;
-    private boolean firstrun = true;
+class RuneMod_Launcher {
     public String rmAppLocation = System.getProperty("user.home") + "\\.runemod\\application\\";
     public String AltRuneModLocation = "";
     boolean AutoLaunch;
@@ -28,17 +24,6 @@ class RuneMod_Launcher implements Runnable {
     RuneMod_Launcher(String altRuneModLocation, boolean AutoLaunch_) {
         AltRuneModLocation = altRuneModLocation;
         AutoLaunch = AutoLaunch_;
-    }
-
-    @SneakyThrows
-    @Override
-    public void run() {
-        if (run) {
-            if (firstrun) {
-                onStart();
-                firstrun = false;
-            }
-        }
     }
 
 
@@ -102,9 +87,7 @@ class RuneMod_Launcher implements Runnable {
     }
 
     @SneakyThrows
-    public void onStart() {
-
-
+    public void launch() {
         if(AltRuneModLocation.length()>1) {
             LaunchApp(AltRuneModLocation);
             return;
@@ -241,30 +224,6 @@ class RuneMod_Launcher implements Runnable {
 
         zis.close();
 
-
-
-
-
-/*                Path path = Paths.get(app_root).resolve(entry.getName()).normalize();
-                if (!path.startsWith(app_root)) {
-                    throw new IOException("Invalid ZIP");
-                }
-                if (entry.isDirectory()) {
-                    Files.createDirectories(path);
-                } else {
-                    try (OutputStream os = Files.newOutputStream(path)) {
-                        int len;
-                        while ((len = zis.read(buffer)) > 0) {
-                            noBytesDecompressed = noBytesDecompressed+len;
-                            runeMod_statusUI.SetMessage("UnZipped "+ noBytesDecompressed/1000000 + "mb");
-                            os.write(buffer, 0, len);
-                        }
-                    }
-                }
-                entry = zis.getNextEntry();
-            }
-            zis.closeEntry();
-            zis.close();*/
         RuneModPlugin.runeMod_statusUI.SetStatus_Detail("UnZipping finished", true);
     }
 
@@ -277,11 +236,6 @@ class RuneMod_Launcher implements Runnable {
         } else {
             RuneModPlugin.runeMod_statusUI.SetStatus_Detail("Launching RuneMod.exe...", true);
         }
-
-/*        File theFile = new File(filePath);
-
-        String folderPath = theFile.getParent();
-        String fileName = theFile.getName();*/
 
         System.out.println("Launch filePath:" + filePath);
 

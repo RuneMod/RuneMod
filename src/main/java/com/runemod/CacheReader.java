@@ -106,7 +106,7 @@ public class CacheReader {
         return archiveFiles;
     }
 
-    public SpotAnimationDefinition SpotAnimationDefinition_get(int id) {
+/*    public SpotAnimationDefinition SpotAnimationDefinition_get(int id) {
         byte[] bytes = GetCacheFileBytes(IndexType.CONFIGS, ConfigType.SPOTANIM.getId(), id);
 
         //decode(buffer)
@@ -116,7 +116,7 @@ public class CacheReader {
         spotAnimDef.decode(var1);
 
         return spotAnimDef;
-    }
+    }*/
 
     @SneakyThrows
     public List<FSFile> getCacheFiles(IndexType IndexId, int ArchiveId)
@@ -318,17 +318,6 @@ public class CacheReader {
         System.out.println("Sent "+ counter +" Models");
     }
 
-/*    public void sendTileData() {
-        int archiveCount = GetArchiveCount(IndexType.MODELS);
-        for (int i = 0; i < archiveCount; i++) {
-            byte[] bytes = GetCacheFileBytes(IndexType.MODELS, i,0);
-            if (bytes != null) {
-                bytes = RuneModPlugin.insertIDToByteArray(bytes, i);
-                //RuneModPlugin.myRunnableSender.sendBytes(bytes,"ModelData");
-                System.out.println("Sent Model: " + i);
-            }
-        }
-    }*/
 
     long MakeAssetId_ue4(long userId_in, long contentId_in) {
         long AssetId = ((long) userId_in << 32) | contentId_in;
