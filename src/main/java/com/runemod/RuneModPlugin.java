@@ -9,6 +9,7 @@ import net.runelite.api.coords.LocalPoint;
 import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.events.*;
 import net.runelite.api.hooks.DrawCallbacks;
+import net.runelite.client.Notifier;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.callback.Hooks;
 import net.runelite.client.config.ConfigManager;
@@ -16,6 +17,7 @@ import net.runelite.client.config.Keybind;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.input.KeyManager;
+import net.runelite.client.input.MouseManager;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.plugins.PluginInstantiationException;
@@ -26,7 +28,6 @@ import net.runelite.client.ui.DrawManager;
 import net.runelite.client.ui.overlay.OverlayManager;
 import net.runelite.client.util.HotkeyListener;
 
-import javax.annotation.Nullable;
 import javax.inject.Inject;
 import javax.swing.*;
 import java.awt.*;
@@ -39,19 +40,23 @@ import java.util.List;
 import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
 import static net.runelite.api.Constants.CHUNK_SIZE;
 import static net.runelite.api.Constants.TILE_FLAG_BRIDGE;
 import static net.runelite.client.RuneLite.RUNELITE_DIR;
 
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import java.io.BufferedReader;
+import java.io.FileReader;
 
 @PluginDescriptor(
 		name = "RuneMod",
 		enabledByDefault = true,
 		description = "Graphics modding tool",
-		tags = {"rm", "rune", "mod", "hd", "unreal", "ue4", "graphics"}
+		tags = {"rm", "rune", "mod", "hd", "graphics", "high", "detail", "graphics", "shaders", "textures", "gpu", "shadows", "lights", "unreal", "ue4"},
+		conflicts = {"GPU", "117 HD"}
 )
 
 @Slf4j
@@ -67,7 +72,6 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	private boolean keyEvent = false;
 	//public SharedMemoryManager rsclient_ui_pixels = new SharedMemoryManager(this);
 	public static SharedMemoryManager sharedmem_rm = null;
-	public boolean canvasSizeChanged = false;
 	public boolean newRegionLoaded = false;
 	public boolean sendTerrain = false;
 
@@ -94,6 +98,9 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	public static Process unrealGameProcess;
 
 	int clientCycle_unreal = 0;
+
+	@Inject
+	private Notifier notifier;
 
 	@Inject
 	private ClientToolbar clientToolbar;
@@ -131,50 +138,15 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	private Hooks hooks;
 
 
-/*	@Inject
+	@Inject
 	private MouseManager mouseManager;
 
-	net.runelite.client.input.MouseListener rlMouseListener = new net.runelite.client.input.MouseListener() {
-		@Override
-		public MouseEvent mouseClicked(MouseEvent mouseEvent) {
-			return mouseEvent;
-		}
-
-		@Override
-		public MouseEvent mousePressed(MouseEvent mouseEvent) {
-			return mouseEvent;
-		}
-
-		@Override
-		public MouseEvent mouseReleased(MouseEvent mouseEvent) {
-			return mouseEvent;
-		}
-
-		@Override
-		public MouseEvent mouseEntered(MouseEvent mouseEvent) {
-			return mouseEvent;
-		}
-
-		@Override
-		public MouseEvent mouseExited(MouseEvent mouseEvent) {
-			return mouseEvent;
-		}
-
-		@Override
-		public MouseEvent mouseDragged(MouseEvent mouseEvent) {
-			return mouseEvent;
-		}
-
-		@Override
-		public MouseEvent mouseMoved(MouseEvent mouseEvent) {
-			return mouseEvent;
-		}
-	};*/
-
-/*	@Subscribe
+	@Subscribe
 	public void onFocusChanged(FocusChanged focusChanged)
 	{
-		if (focusChanged.isFocused() == false)
+		//System.out.printf("FocusChanged");
+		// Create a Robot instance
+/*		if (focusChanged.isFocused() == false)
 		{
 			maintainRuneModStatusAttachment(true, false);
 			return;
@@ -183,8 +155,8 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		{
 			maintainRuneModStatusAttachment(true, true);
 			return;
-		}
-	}*/
+		}*/
+	}
 
 	//public Boolean runeModToggled = true;
 
@@ -225,45 +197,53 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	}
 
 /*	public void unRegisterWindowEventListeners() {
+		if(true){return;}
 		//JFrame window = (JFrame)SwingUtilities.getAncestorOfClass(ContainableFrame.class, client.getCanvas());
-*//*		JFrame window = (JFrame)SwingUtilities.windowForComponent(client.getCanvas());
+		JFrame window = (JFrame)SwingUtilities.windowForComponent(client.getCanvas());
 		window.removeWindowFocusListener(WindowFocusListener);
 		window.removeComponentListener(componentAdapter0);
 		window.removeComponentListener(componentAdapter1);
 		window.removeWindowListener(windowListener);
-		Toolkit.getDefaultToolkit().removeAWTEventListener(mouseListener);*//*
+		Toolkit.getDefaultToolkit().removeAWTEventListener(mouseListener);
 	}*/
 
+	public boolean mouseIsDown = false;
+
 /*
+	@SneakyThrows
 	public void registerWindowEventListeners() {
-*/
-/*		//setup window event listeners
+		if(true){return;}
+		//setup window event listeners
 
 		//JFrame window = (JFrame)SwingUtilities.getAncestorOfClass(ContainableFrame.class, client.getCanvas());
-		JFrame window = (JFrame)SwingUtilities.windowForComponent(client.getCanvas());
+		JFrame window = (JFrame)SwingUtilities.getWindowAncestor(runeModPlugin.client.getCanvas());
 
 		window.addWindowFocusListener(WindowFocusListener = new WindowAdapter() {
+			@SneakyThrows
 			public void windowGainedFocus(WindowEvent e) {
-				maintainRuneModStatusAttachment(true, true);
+				System.out.printf("windowGainedFocus");
+				//maintainRuneModStatusAttachment();
 			}
 		});
 
 		window.addComponentListener(componentAdapter0 = new ComponentAdapter() {
 			public void componentMoved(ComponentEvent e) {
-				maintainRuneModStatusAttachment(true, true);
+				//maintainRuneModStatusAttachment(true, true);
 			}
 		});
 
 		window.addComponentListener(componentAdapter1 = new ComponentAdapter() {
 			public void componentResized(ComponentEvent e) {
-				maintainRuneModStatusAttachment(true, true);
+				//maintainRuneModStatusAttachment(true, true);
 			}
 		});
+
+
 
 		window.addWindowListener(windowListener = new WindowListener() {
 			@Override
 			public void windowOpened(WindowEvent e) {
-					maintainRuneModStatusAttachment(true, true);
+					//maintainRuneModStatusAttachment(true, true);
 			}
 
 			@Override
@@ -278,30 +258,60 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 			@Override
 			public void windowIconified(WindowEvent e) {
-					maintainRuneModStatusAttachment(false, true);
+					//maintainRuneModStatusAttachment(false, true);
 			}
 
 			@Override
 			public void windowDeiconified(WindowEvent e) {
-					maintainRuneModStatusAttachment(true, true);
+					//maintainRuneModStatusAttachment(true, true);
 			}
 
+			@SneakyThrows
 			@Override
 			public void windowActivated(WindowEvent e) {
 				System.out.println("activated");
-					maintainRuneModStatusAttachment(true, true);
+				//SwingUtilities.invokeAndWait(() -> {sharedmem_rm.putRuneModOnTop();});
 			}
 
 			@Override
 			public void windowDeactivated(WindowEvent e) {
-					maintainRuneModStatusAttachment(true, false);
+					//maintainRuneModStatusAttachment(true, false);
+			}
+		});
+
+*/
+/*		window.addFocusListener(new FocusAdapter() {
+			@Override
+			public void focusGained(FocusEvent e) {
+				try {
+					SwingUtilities.invokeAndWait(() -> {
+						Robot  robot = null;
+						try {
+							robot = new Robot();
+							System.out.println("Drawing screenshot to canvas");
+							Rectangle screenRect = new Rectangle(client.getCanvas().getBounds());
+							BufferedImage screenImage = robot.createScreenCapture(screenRect);
+							client.getCanvas().getGraphics().drawImage(screenImage, 0, 0, null);
+						} catch (AWTException awtException) {
+							awtException.printStackTrace();
+						}
+					});
+				} catch (Exception ex) {
+					ex.printStackTrace();
+				}
+			}
+
+			@Override
+			public void focusLost(FocusEvent e) {
+				// Handle focus lost if necessary
 			}
 		});*//*
 
 
 
-*/
-/*		Toolkit.getDefaultToolkit().addAWTEventListener(mouseListener = new AWTEventListener() { //keeps game window on top
+
+
+		Toolkit.getDefaultToolkit().addAWTEventListener(mouseListener = new AWTEventListener() { //keeps game window on top
 			public void eventDispatched(AWTEvent event) {
 				if(event instanceof KeyEvent){
 
@@ -309,19 +319,23 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 				if(event instanceof MouseEvent){
 					MouseEvent evt = (MouseEvent)event;
 					if(evt.getID() == MouseEvent.MOUSE_PRESSED){
-						new Thread(() -> {
-							maintainRuneModStatusAttachment(true, true);
-						}).start();
+						System.out.println("mousePressed");
+						mouseIsDown = true;
+					}
+					if(evt.getID() == MouseEvent.MOUSE_RELEASED){
+						System.out.println("mouseReleased");
+						mouseIsDown = false;
 					}
 				}
 			}
-		}, AWTEvent.MOUSE_EVENT_MASK);*//*
+		}, AWTEvent.MOUSE_EVENT_MASK);
+
 
 
 */
 /*		Toolkit.getDefaultToolkit().addAWTEventListener(new AWTEventListener() { //keeps game window on top
 			public void eventDispatched(AWTEvent event) {
-				if (!config.keepOverlayOnTop()) {return;}
+				if (!config.attachRmWindowToRL()) {return;}
 				if(event instanceof KeyEvent){
 					KeyEvent evt = (KeyEvent)event;
 					System.out.println("keyPressedEvent: ");
@@ -336,13 +350,15 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 						System.out.println("mousePressed");
 						Buffer buffer = new Buffer(new byte[20]);
 						buffer.writeByte(9);
-						myRunnableSender.sendBytes(trimmedBufferBytes(buffer),"WindowEvent");
+						//myRunnableSender.sendBytes(trimmedBufferBytes(buffer),"WindowEvent");
 					}
 				}
 			}
-		}, AWTEvent.MOUSE_EVENT_MASK);
+		}, AWTEvent.MOUSE_EVENT_MASK);*//*
 
-		client.getCanvas().addKeyListener(new KeyAdapter()
+
+*/
+/*		client.getCanvas().addKeyListener(new KeyAdapter()
 		{
 			@Override
 			public void keyPressed(KeyEvent keyEvent)
@@ -354,29 +370,26 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 				System.out.println("paramString: " + keyEvent.paramString());
 				System.out.println("modifiers: " + keyEvent.getModifiersEx());
 			}
-		});
-
-		client.getCanvas().addMouseListener(new MouseAdapter()
-		{
-			@Override
-			public void mousePressed(MouseEvent mouseEvent)
-			{
-				System.out.println("id: "+mouseEvent.getID());
-				System.out.println("modifiers: "+mouseEvent.getModifiersEx());
-				System.out.println("clickCount: "+mouseEvent.getClickCount());
-				System.out.println("button: "+mouseEvent.getButton());
-				System.out.println("isPopupTrigger: "+mouseEvent.isPopupTrigger());
-			}
 		});*//*
 
 	}
 */
+
+	public static float getCurTimeSeconds() {
+		float curT = (float)((System.currentTimeMillis() / 1000.0D)-1736168000D);
+		return curT;
+	}
+
+	public static void log_Timed_Verbose(String message) {
+		//System.out.println("["+getCurTimeSeconds()+"]	"+message);
+	}
 
 	int perFramePacketSentTick = -1;
 	int sharedMemPixelsUpdatedTick = -1;
 	int ticksSincePLuginLoad = 0;
 
 	void maintainRuneModStatusAttachment() {
+		if(sharedmem_rm == null) { return; }
 		return;
 /*			if(!client.getCanvas().isShowing()) {return; }
 			Point loc = client.getCanvas().getParent().getLocationOnScreen();
@@ -400,18 +413,25 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	boolean startedWhileLoggedIn;
 	boolean runeModAwaitingRsCacheHashes = false;
 
+
 	@SneakyThrows
 	@Subscribe
 	private void onBeforeRender(BeforeRender event)
 	{
+		if(config.OrbitCamera()) {
+			client.setCameraYawTarget(client.getCameraYaw()+1);
+		}
+
+		log_Timed_Verbose("onBeforeRender");
 		alreadyCommunicatedUnreal = false;
 
-		if(client.getGameState().ordinal() >= GameState.LOGIN_SCREEN.ordinal()) {
+		if(client.getGameState().ordinal() >= GameState.STARTING.ordinal() && client.getTopLevelWorldView()!=null) {
 			ticksSincePLuginLoad++;
 		}
 
-		if(ticksSincePLuginLoad == 2) {
+		if(ticksSincePLuginLoad == 1) {
 			startUp_Custom();
+
 			if (client.getGameState().ordinal() > GameState.LOGIN_SCREEN_AUTHENTICATOR.ordinal()) {
 				runeMod_statusUI.SetStatus_Detail("To enable RuneMod, you must first logout", true);
 				startedWhileLoggedIn = true;
@@ -448,7 +468,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		}
 
 			//check if rscache is currently being updated. if not, start runemod launcher
-			if(rsCacheIsDownloading == true && ticksSincePLuginLoad > 2 && client.getGameCycle()%50 == 0) {
+			if(rsCacheIsDownloading == true && ticksSincePLuginLoad > 1 && client.getGameState().ordinal() >= GameState.LOGIN_SCREEN.ordinal() && client.getGameCycle()%20 == 0) {
 				String directory = RUNELITE_DIR + "\\jagexcache\\oldschool\\LIVE";
 				File[] files = new File(directory).listFiles();
 				for(File file : files){
@@ -462,7 +482,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 					}
 				}
 
-				if(client.getGameCycle() - cacheLastUpdatedTick > 100) {
+				if(client.getGameCycle() - cacheLastUpdatedTick > 200) {
 					System.out.println("RSCache has finished downloading");
 					runeMod_statusUI.SetStatus_Detail("Downloaded RS cache", true);
 					rsCacheIsDownloading = false;
@@ -479,10 +499,12 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 				runeModAwaitingRsCacheHashes = false;
 			}
 
+			log_Timed_Verbose("_0");
 			JFrame window = (JFrame) SwingUtilities.getWindowAncestor(client.getCanvas());
-			if (!window.getTitle().equals("RuneLite")) {
-				 window.setTitle("RuneLite");
+			if (!window.getTitle().equals("RuneLite - RuneLite")) {
+				 window.setTitle("RuneLite - RuneLite");
 			}
+			log_Timed_Verbose("_1");
 
 /*		if(unrealIsConnected && client.getGameState().ordinal()>=GameState.LOGGING_IN.ordinal() && lastGameState.ordinal()>=GameState.LOGIN_SCREEN.ordinal()) {
 			setGpuFlags(3);
@@ -495,24 +517,22 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		}*/
 
 		//clientThread.invokeAtTickEnd(() -> {
-			if(ticksSincePLuginLoad <= 3 || client.getGameState().ordinal()<GameState.LOGGING_IN.ordinal() || config.RuneModVisibility() == false || config.useTwoRenderers() == true) {//allows us to display logging in... on login screen
+			if(ticksSincePLuginLoad <= 2 || client.getGameState().ordinal()<GameState.LOGGING_IN.ordinal() || config.RuneModVisibility() == false || config.useTwoRenderers() == true) {//allows us to display logging in... on login screen
 					setGpuFlags(0);
 					if(client.getDrawCallbacks() == null) {
-						communicateWithUnreal();
+						communicateWithUnreal("onBeforeRender");
 						//clientThread.invokeAtTickEnd(this::communicateWithUnreal); //for times when scenedraw callback isnt available.
 					}
 			} else {
 				clientThread.invokeAtTickEnd(() -> {
 					if(isShutDown == false) {
 						if(storedGpuFlags!=3) {
-							communicateWithUnreal(); //here to set rm visibility before gpu flags get set. we do this to prevent momentarily showing unrendered client before rm visibility is set to true;
+							communicateWithUnreal("onBeforeRender_TickEnd"); //here to set rm visibility before gpu flags get set. we do this to prevent momentarily showing unrendered client before rm visibility is set to true;
 							setGpuFlags(3);
 						}
 					}
 				});
 			}
-
-
 
 
 /*			if (curGamestate == GameState.LOGIN_SCREEN) {
@@ -570,33 +590,45 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 	long timeCommunicatedWithUnreal = 0;
 
-	static volatile boolean maintainingAttachment = false; //used to prevent many threads piling up
 	void MaintainRuneModAttachment() {
-		if(maintainingAttachment) { return; }
+
 		if(sharedmem_rm == null) {
 			return;
 		}
 
-		if(!runeModPlugin.config.attachRmWindowToRL()) {return;}
+		if(!runeModPlugin.config.attachRmWindowToRL()) {
+			return;
+		}
 
-		if(!unrealIsReady) {return;}
+		if(!unrealIsReady) {
+			return;
+		}
 
-		maintainingAttachment = true;
+		//maintainingAttachment = true;
+/*
+		clientThread.invokeAtTickEnd(() ->
+		{
+			childing = true;
+
+			childing = false;
+		});*/
 
 		sharedmem_rm.ChildRuneModWinToRl();
 
-		//if(sharedmem_rm.ChildRuneModWinToRl()) { //if RuneMod win exists and is childed to rl
+		//sharedmem_rm.checkMessages();
 
-		if (config.RuneModVisibility() == true && runemodLoadingScreenVisibility == false) {
-			sharedmem_rm.setRuneModVisibility(true);
-		} else {
-			sharedmem_rm.setRuneModVisibility(false);
-		}
+		//if(sharedmem_rm.ChildRuneModWinToRl()) { //if RuneMod win exists and is childed to rl
 
 		if(RmNeedsWindowUpdate()) {
 			sharedmem_rm.updateRmWindowTransform();
 		}
-		maintainingAttachment = false;
+
+		if (config.RuneModVisibility() == true) {
+			sharedmem_rm.setRuneModVisibility(true);
+		} else {
+			sharedmem_rm.setRuneModVisibility(false);
+		}
+		//maintainingAttachment = false;
 	}
 
 	public static long clamp(long val, long min, long max) {
@@ -607,27 +639,76 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		return Math.max(min, Math.min(max, val));
 	}
 
+	public boolean isRuneliteTopmost() {
+		JFrame window = (JFrame) SwingUtilities.getWindowAncestor(client.getCanvas());
+		return window.isFocused() && window.isActive();
+		//return sharedmem_rm.isTopMostWindow();
+	}
+
+	public boolean isRuneliteVisible() {
+		JFrame window = (JFrame) SwingUtilities.getWindowAncestor(client.getCanvas());
+		boolean isRlVisible = window.isShowing() && (window.getExtendedState() & JFrame.ICONIFIED) == 0;
+		return isRlVisible;
+	}
+
+	public boolean isTopMost = false;
+
+	public void sendWindowUpdatePacket() {
+		//if(true) { return; }
+		if (config.RuneModVisibility() == true) {
+			boolean curIsTopMost = isRuneliteTopmost();
+			if(isTopMost != curIsTopMost) {
+				isTopMost = curIsTopMost;
+				System.out.println("isTopMost: "+isTopMost);
+
+				Buffer packet = new Buffer(new byte[20]);
+				packet.writeBoolean(isTopMost);
+
+				//blank data for future use
+				packet.writeBoolean(false);
+				packet.writeInt(0);
+				packet.writeInt(0);
+
+				sharedmem_rm.backBuffer.writePacket(packet, "WindowUpdate");
+
+				System.out.println("sent WindowUpdate");
+			}
+		}
+	}
+
 	//int consecutiveTimeouts = 0;
 	boolean alreadyCommunicatedUnreal = false; //whether we have communicated with unreal this frame.
-	void communicateWithUnreal() {
+	void communicateWithUnreal(String funcLocation) {
 		//System.out.println(System.currentTimeMillis());
 		//if(!clientUI.isFocused()) {return;}
 
-		if(ticksSincePLuginLoad < 3) { return; }
+		if(ticksSincePLuginLoad < 3) {
+			log_Timed_Verbose("ticksSincePLuginLoad < 3"); return; }
 
-		if(isShutDown) { return; }
+		if(isShutDown) {
+			log_Timed_Verbose("isShutDown"); return; }
 
-		if(alreadyCommunicatedUnreal) { return; }
+		if(alreadyCommunicatedUnreal) {
+			log_Timed_Verbose("Already communicated. cancelled communicateWithUnreal::"+funcLocation); return; }
 
 		alreadyCommunicatedUnreal = true;
 
-		//MaintainRuneModAttachment();
-		Thread thready = new Thread(this::MaintainRuneModAttachment);
-		thready.start();
+
+		log_Timed_Verbose("communicateWithUnreal::"+funcLocation);
+
+
+		//sendWindowUpdatePacket();
+
+		SwingUtilities.invokeLater(() -> {
+			MaintainRuneModAttachment();
+		});
+
 
 		if (client.getGameState().ordinal() < GameState.LOGIN_SCREEN.ordinal()) { //prevents communicating with unreal before client is loaded.
 			return;
 		}
+
+		log_Timed_Verbose("Start");
 
 		if(!sharedmem_rm.backBuffer.isOverFlowed) {
 			WritePerFramePacket(); //we start writing the perframe apcket before unreal has indidcated its started a new frame, for a small performance optimization
@@ -635,6 +716,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 		//long waitForUnrealTimeout = 1000/(consecutiveTimeouts+1);
 		//clamp(waitForUnrealTimeout, 30, 500)
+		log_Timed_Verbose("0");
 		boolean unrealStartedNewFrame = sharedmem_rm.AwaitUnrealMutex_Locked(600000000); //unreal locks it's mutex when it has started frame
 
 		long frameSyncStartTime = System.nanoTime();
@@ -659,21 +741,29 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		sharedmem_rm.startNewRsData();
 		sharedmem_rm.transferBackBufferToSharedMem();
 
+		log_Timed_Verbose("1");
 
 		sharedmem_rm.writeTerminatingPacket();
 		//System.out.println("ExportedRuneliteFrame");
 
 		sharedmem_rm.LockRuneliteMutex(); //indicates to unreal that runelite has exported it's framedata
 
+		log_Timed_Verbose("2");
+
 		//System.out.println("LockedRuneliteMutex");
 		sharedmem_rm.AwaitUnrealMutex_UnLocked(); //unreal sends data back to us, and unlocks it's mutex when it has imported rl frame.
 		//System.out.println("Unreal Has Unlocked it's mutex");
 
+		log_Timed_Verbose("3");
+
 		//import unrealdata
 		sharedmem_rm.handleUnrealData();
 
+		log_Timed_Verbose("4");
+
 		sharedmem_rm.UnLockRuneliteMutex(); //indicates ruenlite is now busy rendering the current frame and calcing the next frame.
 
+		log_Timed_Verbose("5");
 		//long frameSyncWaitTime = System.nanoTime()-frameSyncStartTime;
 		//System.out.println("frameSyncWaitTime: "+(float)frameSyncWaitTime/1000000.0 + "ms");
 		//System.out.println("commedWithUnreal");
@@ -739,13 +829,16 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	@SneakyThrows
 	@Override
 	public void drawScene(double cameraX, double cameraY, double cameraZ, double cameraPitch, double cameraYaw, int plane) {
-		if(storedGpuFlags <= 0) {return;}
-		if(!client.isGpu()){return;}
-		communicateWithUnreal();
+		log_Timed_Verbose("drawScene");
+		if(storedGpuFlags <= 0) {
+			log_Timed_Verbose("storedGpuFlags <= 0"); return;}
+		if(!client.isGpu()){
+			log_Timed_Verbose("!client.isGpu()"); return;}
+		communicateWithUnreal("drawScene");
 
 		visibleActors.clear();
 		//System.out.println("drawScene");
-
+		//System.out.println("drawScene at "+System.currentTimeMillis());
 
 
 
@@ -793,6 +886,10 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			} else {
 				if(renderable instanceof GraphicsObject) {
 					visibleActors.add(renderable);
+				} else {
+					if(renderable instanceof Projectile) {
+						visibleActors.add(renderable);
+					}
 				}
 			}
 		}
@@ -826,14 +923,87 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		//GpuPluginDrawCallbacks.drawSceneModel(orientation, pitchSin, pitchCos, yawSin, yawCos, x, y, z, model, tileZ, tileX, tileY, zoom, centerX, centerY);
 	}
 
+	boolean focused_lastFrame = false;
+
+	void overlayColourChanged() {
+		Buffer packet = new Buffer(new byte[6]);
+
+		packet.writeInt(overlayColor_LastFrame);
+		//blank data for future use
+/*		packet.writeByte(0);
+		packet.writeByte(0);*/
+
+		sharedmem_rm.backBuffer.writePacket(packet, "OverlayColorChanged");
+
+		System.out.println("overlayColourChanged");
+	}
+
+	public int overlayColor_LastFrame = 0;
+	@SneakyThrows
 	@Override
 	public void draw(int overlayColor) {
+		if(overlayColor_LastFrame!=overlayColor) {
+			overlayColor_LastFrame = overlayColor;
+			overlayColourChanged();
+		}
+		//System.out.println("draw at "+System.currentTimeMillis());
+/*		if(mouseIsDown) {
+			mouseIsDown = false;
+			SwingUtilities.invokeAndWait(() -> {
+				Robot  robot = null;
+				try {
+					robot = new Robot();
+					System.out.println("Drawing screenshot to canvas");
+					Rectangle screenRect = new Rectangle(client.getCanvas().getBounds());
+					screenRect.x = rsUiPosX;
+					screenRect.y = rsUiPosY;
+					BufferedImage screenImage = robot.createScreenCapture(screenRect);
+					client.getCanvas().getGraphics().drawImage(screenImage, 0, 0, null);
+
+					SharedMemoryManager.waitNanos(1000000*300);
+
+				} catch (AWTException awtException) {
+					awtException.printStackTrace();
+				}
+			});
+		}*/
+
+		//BufferedImage screenImage = sharedmem_rm.captureScreen();
+		//client.getCanvas().getGraphics().drawImage(screenImage, 0, 0, null);
+
+
+/*		if(focused_lastFrame!=client.getCanvas().hasFocus()) {
+			focused_lastFrame = client.getCanvas().hasFocus();
+			SwingUtilities.invokeAndWait(() ->
+			{
+				Robot robot = null;
+				try {
+					robot = new Robot();
+					System.out.println("drawing screenshot to canvas");
+					// Capture the area occupied by the JFrame
+					Rectangle screenRect = new Rectangle(client.getCanvas().getBounds());
+					screenRect.x = rsUiPosX;
+					screenRect.y = rsUiPosY;
+					BufferedImage screenImage = robot.createScreenCapture(screenRect);
+					client.getCanvas().getGraphics().drawImage(screenImage,0,0, (ImageObserver)null);
+				} catch (AWTException awtException) {
+					awtException.printStackTrace();
+				}
+			});
+		}*/
+
+
+		log_Timed_Verbose("draw");
 		//communicateWithUnreal();
 		//UpdateSharedMemoryUiPixels();
-		UpdateSharedMemoryUiPixels();
 		//SwingUtilities.invokeLater(this::UpdateSharedMemoryUiPixels); //we do this on swing thread cos if we do it on client thread it causes freeze up when a new swing window opens such as a color picker or similar popupwindow. freezes on this line, idk why client.getCanvas().getParent().getLocationOnScreen().x-client.getCanvas().getLocationOnScreen().x;
+		UpdateSharedMemoryUiPixels();
+		communicateWithUnreal("Draw");
+/*		clientThread.invokeAtTickEnd(() ->
+		{
+			communicateWithUnreal("Draw");
+		});*/
 
-		clientThread.invokeAtTickEnd(this::communicateWithUnreal);
 /*		BufferedImage image = new BufferedImage(client.getBufferProvider().getWidth(), client.getBufferProvider().getHeight(), BufferedImage.TYPE_INT_RGB);
 
 		System.arraycopy(client.getBufferProvider().getPixels(), 0, ((DataBufferInt) image.getRaster().getDataBuffer()).getData(), 0, client.getBufferProvider().getPixels().length-1);
@@ -854,6 +1024,11 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	@SneakyThrows
 	@Override
 	public void postDrawScene() {
+/*		if(client.getGameCycle()%50 == 0)
+				BufferedImage screenImage = sharedmem_rm.captureScreen();
+				client.getCanvas().getGraphics().drawImage(screenImage, 0, 0, null);
+		}*/
+		log_Timed_Verbose("postDrawScene");
 		//client.setReplaceCanvasNextFrame(true);
 		//GpuPluginDrawCallbacks.postDrawScene();
 	}
@@ -889,7 +1064,14 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		isShutDown = true;
 		System.out.println("RuneMod plugin shutDown");
 		clientThread.invoke(() -> {
+			if(runeModLauncher != null) {
+				if(runeModLauncher.runemodApp != null) {
+					runeModLauncher.runemodApp.destroyForcibly();
+				}
+			}
+
 			setDefaults();
+			//unRegisterWindowEventListeners();
 		});
 	}
 
@@ -993,8 +1175,12 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		});
 	}
 
+	public ApplicationSettings appSettings;
+	//public Overlay_UI UI_Overlay;
 	@SneakyThrows
 	void startUp_Custom() {
+//		clientUI.requestFocus();
+
 		client_static = client;
 		isShutDown = false;
 
@@ -1003,23 +1189,6 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		RuneModPlugin.toggleRuneModLoadingScreen(true);
 
 		configManager.setConfiguration("stretchedmode","keepAspectRatio", true);
-
-		for (Plugin plugin : pluginManager.getPlugins()) {
-			if (plugin.getName().equalsIgnoreCase("GPU")) {
-				if (pluginManager.isPluginEnabled(plugin)) {
-					SwingUtilities.invokeAndWait(() ->
-					{
-						try {
-							pluginManager.setPluginEnabled(plugin, false);
-							pluginManager.stopPlugin(plugin);
-						} catch (PluginInstantiationException e) {
-							e.printStackTrace();
-						}
-						System.out.println("Disabled the GpuPlugin, as it is not compatible with runemod");
-					});
-				}
-			}
-		}
 
 		System.out.println("runelitDir: " + RUNELITE_DIR);
 
@@ -1056,30 +1225,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		setGpuFlags(0);
 		setDrawCallbacks(this);
 
-/*		ObjectLoader loader = new ObjectLoader();
-
-		Storage storage = myCacheReader.store.getStorage();
-		Index index = myCacheReader.store.getIndex(IndexType.CONFIGS);
-		Archive archive = index.getArchive(ConfigType.OBJECT.getId());
-
-		byte[] archiveData = storage.loadArchive(archive);
-		ArchiveFiles files = archive.getFiles(archiveData);
-
-		ObjectDefinition def = loader.load(f.getFileId(), f.getContents());
-
-		for (FSFile f : files.getFiles())
-		{
-			ObjectDefinition def = loader.load(f.getFileId(), f.getContents());
-			objects.put(f.getFileId(), def);
-		}*/
-
-
-/*			Window window = SwingUtilities.getWindowAncestor(client.getCanvas());
-			JFrame frame = (JFrame) window;
-			System.out.println("menuBarLocation: " + frame.getTitle());
-			frame.setComponentZOrder(runeMod_statusUI.StatusDetail, 1);*/
-			//return true;
-		//});
+		//registerWindowEventListeners();
 	}
 
 	@Override
@@ -1089,11 +1235,18 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 			sharedmem_rm = new SharedMemoryManager(this);
 			sharedmem_rm.createSharedMemory("sharedmem_rm", 50000000); //50 mb
+			sharedmem_rm.createSharedMemory_ViewPort("sharedmem_rm_viewport", 50000000); //50 mb
 
 			runeModPlugin = this;
 
 			JFrame window = (JFrame) SwingUtilities.getAncestorOfClass(Frame.class, client.getCanvas());
-			runeMod_statusUI = new RuneMod_statusUI(window);
+			window.setIgnoreRepaint(true);
+
+			runeMod_statusUI = new RuneMod_statusUI(window, this);
+
+
+			//overlay.setLocationRelativeTo(runeModPlugin.client.getCanvas());
+			//overlay.setVisible(true);
 
 			runeModLauncher =  new RuneMod_Launcher(config.UseAltRuneModLocation() ? config.AltRuneModLocation() : "", config.StartRuneModOnStart());
 			myCacheReader = new CacheReader();
@@ -1108,26 +1261,6 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		});
 	}
 
-
-	//block disabled due to missing api
-/*	private byte[] runGetSkeletonBytes (int id) {
-		IndexDataBase var0 = client.getSequenceDefinition_animationsArchive();
-		System.out.println("Animation frame Count: "+ var0.getFileIds().length);
-
-		IndexDataBase var1 = client.getSequenceDefinition_skeletonsArchive();
-		System.out.println("skeleton Count: "+ var1.getGroupCount());
-
-		IndexDataBase var2 = client.getSequenceDefinition_archive();
-		System.out.println("Sequence Count: "+ var2.getGroupCount());
-
-		int count = 0;
-		for (int i = 0; i < var2.getFileCounts().length; i++) {
-			count = count+ var2.getFileCounts()[i];
-		}
-		System.out.println("Sequence file file Count: "+ count);
-		//return (getSkeletonBytes(var0, var1, id, false));
-		return null;
-	}*/
 
 	public static byte[] insertIDToByteArray(byte[] bytes, int id) {
 		//byte[] concatenated = new byte[bytes.length+4];
@@ -1544,6 +1677,14 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 					}
 
 					client.setUnlockedFpsTarget(MaxFps);
+				}
+
+				if(event.getKey().equalsIgnoreCase("attachRmWindowToRL")) {
+					if(event.getNewValue().equalsIgnoreCase("true")) {
+						sharedmem_rm.ChildRuneModWinToRl();
+					} else {
+						sharedmem_rm.UnChildRuneModWinToRl();
+					}
 				}
 
 
@@ -2051,8 +2192,12 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	public void simulateGameEvents()
 	{
 		System.out.println("simulating game-events");
-		if (client.getGameState() != GameState.LOGGED_IN)
+
+		if (client.getGameState() != GameState.LOGGED_IN) //if not logged in, just resend game state
 		{
+			final GameStateChanged gameStateChanged = new GameStateChanged();
+			gameStateChanged.setGameState(client.getGameState());
+			onGameStateChanged(gameStateChanged);
 			return;
 		}
 
@@ -2167,7 +2312,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		{
 			clientThread.invokeAtTickEnd(() ->
 				{
-					sendTexture_test();
+					//sendTexture_test();
 /*					myCacheReader.sendModels();
 					myCacheReader.sendKitDefinitions();
 					myCacheReader.sendObjectDefinitions();
@@ -2347,6 +2492,38 @@ skills menu:__________
 
 	@Subscribe
 	private void onGameTick(GameTick event) {
+/*		client.getCanvas().setVisible(false);
+		client.getCanvas().getParent().setVisible(false);
+		client.getCanvas().getParent().getParent().setVisible(false);
+		client.getCanvas().getParent().getParent().getParent().setVisible(false);
+		client.getCanvas().getParent().getParent().getParent().getParent().setVisible(false);*/
+		//clientUI.requestFocus();
+		//sharedmem_rm.putRuneModOnTop();
+/*		var notif = defaultNotification(TrayIcon.MessageType.NONE);
+		notify(notif, message);*/
+		//notifier.notify("crashTest");
+		//clientUI.flashTaskbar();
+
+		//clientUI.requestFocus();//causes crash if rm window is childed
+
+		//clientUI.forceFocus();
+/*		Toolkit.getDefaultToolkit().beep();
+		if (clientUI.getTrayIcon() != null)
+		{
+			clientUI.getTrayIcon().displayMessage("title", "message", TrayIcon.MessageType.NONE);
+		}*/
+/*		switch (notification.getRequestFocus())
+		{
+			case REQUEST:
+				clientUI.requestFocus();
+				break;
+			case TASKBAR:
+				clientUI.flashTaskbar();
+				break;
+			case FORCE:
+				clientUI.forceFocus();
+				break;
+		}*/
 		//getVarbits();
 
 /*		MapDefinition.Tile standingTile = myCacheReader.getTileAtCoordinate(client.getLocalPlayer().getWorldLocation().getX(), client.getLocalPlayer().getWorldLocation().getY(),0);
@@ -2399,6 +2576,14 @@ skills menu:__________
 		return flags & 63;
 	}
 
+	public void resendGameStateChanged() {
+			clientThread.invokeAtTickEnd(() ->
+			{
+				final GameStateChanged gameStateChanged = new GameStateChanged();
+				gameStateChanged.setGameState(client.getGameState());
+				onGameStateChanged(gameStateChanged);
+			});
+	}
 
 	GameState curGamestate = GameState.STARTING;
 	GameState lastGameState = GameState.STARTING;
@@ -2413,45 +2598,57 @@ skills menu:__________
 
 			byte newEventTypeByte = 0;
 			if (curGamestate == GameState.LOGIN_SCREEN) {
+				appSettings = loadAppSettings(); //reload appSettings
+
+				if(appSettings != null) { //makes login screen background transparent if animeLoginScreen appsetting is true
+					if(appSettings.animateLoginScreen) {
+						SpritePixels spritePixels = client.createSpritePixels(new int[0],0,0);
+						client.setLoginScreen(spritePixels);
+						client.setShouldRenderLoginScreenFire(false);
+					} else {
+						client.setLoginScreen(null);
+					}
+				} else {
+					System.out.println("appsettings is null");
+				}
+
+
 				//sendVarbits();
 				System.out.println("Login SCREEN...");
 				baseX = -1;
 				baseY = -1;
-				newEventTypeByte = 1;
+				//newEventTypeByte = 1;
 			} else if (curGamestate == GameState.LOGGING_IN) {
-				//SendPerFramePacket();
+
 				System.out.println("logging in...");
-				newEventTypeByte = 2;
+				//newEventTypeByte = 2;
 			} else if (curGamestate == GameState.LOGGED_IN) {
-				//SendPerFramePacket();
+
 				System.out.println("logged in...");
-				newEventTypeByte = 3;
+				//newEventTypeByte = 3;
 			} else if (curGamestate == GameState.HOPPING) {
 				baseX = -1;
 				baseY = -1;
-				//SendPerFramePacket();
+
 				System.out.println("hopping...");
-				newEventTypeByte = 4;
+				//newEventTypeByte = 4;
 			} else if (curGamestate == GameState.LOADING) {
-				//SendPerFramePacket();
 				System.out.println("loading...");
-				newEventTypeByte = 5;
+				//newEventTypeByte = 5;
 				newRegionLoaded = true;
 			} else if (curGamestate == GameState.LOGIN_SCREEN_AUTHENTICATOR) {
-
+				System.out.println("Authenticator SCREEN...");
 			} else if (curGamestate == GameState.CONNECTION_LOST) {
 				System.out.println("ConnectionLost...");
+			} else if (curGamestate == GameState.STARTING) {
+				System.out.println("STARTING...");
+			} else if (curGamestate == GameState.UNKNOWN) {
+				System.out.println("UNKNOWN...");
 			}
-
-			if (curGamestate == GameState.STARTING) {
-
-			}
-			if (curGamestate == GameState.UNKNOWN) {
-
-			}
+		System.out.println("ordsinal: "+event.getGameState().ordinal());
 
 			Buffer packet = new Buffer(new byte[10]);
-			packet.writeByte(newEventTypeByte);
+			packet.writeByte(event.getGameState().ordinal());
 			sharedmem_rm.backBuffer.writePacket(packet, "GameStateChanged");
 			//myRunnableSender.sendBytes(new byte[] {newEventTypeByte,0,0},"GameStateChanged");
 		//});
@@ -2507,13 +2704,13 @@ skills menu:__________
 		System.out.println("Scalar: "+projectile.getScalar());*/
 	}
 
-	public void RmVisChanged()
+	public void RmVisChanged(boolean visibility)
 	{
-		clientThread.invokeAtTickEnd(() -> //invoking later because baslocation likely hasnt been sent to unreal yet
+		clientThread.invoke(() ->
 		{
 			Buffer packet = new Buffer(new byte[5]);
 
-			packet.writeBoolean(configManager.getConfiguration("RuneMod","RuneModVisibility").equalsIgnoreCase("true"));
+			packet.writeBoolean(visibility);
 
 			sharedmem_rm.backBuffer.writePacket(packet, "RmVisChanged");
 		});
@@ -2919,6 +3116,7 @@ skills menu:__________
 			Buffer buffer = new Buffer(new byte[12]);
 
 			if (event.getVarbitId() != -1) {
+				//System.out.println("varbit "+ event.getVarbitId()+"cahnged to "+event.getValue());
 				buffer.writeInt(event.getVarbitId());
 				buffer.writeInt(event.getValue());
 				//int objDefId = VarbitObjDef_Map.getOrDefault(event.getVarbitId(), -1);
@@ -2929,6 +3127,7 @@ skills menu:__________
 					//System.out.println("objDef: " + objDefId + " Imposter Changed to index " + event.getValue());
 				//}
 			} else {
+				//System.out.println("varP "+ event.getVarbitId()+"cahnged to "+event.getValue());
 				buffer.writeInt(event.getVarpId());
 				buffer.writeInt(event.getValue());
 				//int objDefId = VarpObjDef_Map.getOrDefault(event.getVarpId(), -1);
@@ -3005,7 +3204,7 @@ skills menu:__________
 								RuneLiteObject runeLiteObject = (RuneLiteObject) gameObject.getRenderable();
 								if(runeLiteObject!=null) {
 									rlObjects.add(runeLiteObject);
-									System.out.println("Found RuneLiteObject wirth id: "+runeLiteObject.getId());
+									System.out.println("Found RuneLiteObject");
 								}
 							}
 						}
@@ -3582,6 +3781,7 @@ skills menu:__________
 			if (event.getTile().getBridge()!=null) {
 				tilePlane++;
 			}
+
 			int tileX = event.getTile().getSceneLocation().getX();
 			int tileY = event.getTile().getSceneLocation().getY();
 			//short height = (short)(event.getItem().getModelHeight());
@@ -3630,7 +3830,6 @@ skills menu:__________
 	@Subscribe
 	private void onNpcSpawned(NpcSpawned event) {
 		if(event.getNpc() == null) { return; }
-
 		boolean shouldDraw = hooks.draw(event.getNpc(), false);
 		if(!shouldDraw) { return; }
 
@@ -3768,7 +3967,8 @@ skills menu:__________
 		actorSpawnPacket.writeByte(isFemale); //isFemale
 
 		//temp actorSpawnPacket.writeInt(player.getPlayerComposition().getTransformedNpcId()); //npcTransformID
-		actorSpawnPacket.writeInt(-1); //npcTransformID //temp
+		actorSpawnPacket.writeInt(player.getPlayerComposition().getTransformedNpcId()); //npcTransformID //temp
+		//player.getPlayerComposition().setTransformedNpcId();
 
 		//System.out.println("player change id: "+InstanceId);
 		sharedmem_rm.backBuffer.writePacket(actorSpawnPacket, "ActorSpawn");
@@ -3863,7 +4063,7 @@ skills menu:__________
 		actorSpawnPacket.writeByte(isFemale); //isFemale
 
 		//temp actorSpawnPacket.writeInt(player.getPlayerComposition().getTransformedNpcId()); //npcTransformID
-		actorSpawnPacket.writeInt(-1); //npcTransformID //temp
+		actorSpawnPacket.writeInt(player.getPlayerComposition().getTransformedNpcId()); //npcTransformID //temp
 
 		System.out.println("player spawn. id: "+InstanceId);
 		sharedmem_rm.backBuffer.writePacket(actorSpawnPacket, "ActorSpawn");
@@ -3884,7 +4084,9 @@ skills menu:__________
 
 	@Subscribe
 	private void onCanvasSizeChanged(CanvasSizeChanged event) {
-		canvasSizeChanged = true;
+/*		if(sharedmem_rm!=null) {
+			sharedmem_rm.initScreenCaptureObjects();
+		}*/
 	}
 
 	private void sendPlaneChanged() {
@@ -3895,13 +4097,6 @@ skills menu:__________
 		//myRunnableSender.sendBytes(buffer.array, "PlaneChanged");
 	}
 
-/*
-	@Subscribe
-	private void onDrawFinished_Ui(DrawFinished_Ui event)
-	{
-		//SendPerFramePacket();
-	}
-*/
 
 	@Subscribe
 	private void onClientTick(ClientTick event)
@@ -3951,18 +4146,28 @@ skills menu:__________
 
 	volatile int rsUiPosOffsetX = 0;
 	volatile int rsUiPosOffsetY = 0;
+	volatile int rsUiPosX = 0;
+	volatile int rsUiPosY = 0;
 
 	private void UpdateUiPosOffsets() { //sets the pos offsets, using swing thread, to avoid crash.
 		float dpiScalingFactor = Toolkit.getDefaultToolkit().getScreenResolution() / 96.0f; // 96 DPI is the standard
 
 		rsUiPosOffsetX =  Math.round(dpiScalingFactor*(client.getCanvas().getParent().getLocationOnScreen().x-client.getCanvas().getLocationOnScreen().x)*-1);
 		rsUiPosOffsetY =  Math.round(dpiScalingFactor*(client.getCanvas().getParent().getLocationOnScreen().y-client.getCanvas().getLocationOnScreen().y)*-1);
+		rsUiPosX = client.getCanvas().getLocationOnScreen().x;
+		rsUiPosY = client.getCanvas().getLocationOnScreen().y;
 		//rsUiPosOffsetX*=dpiScalingFactor;
 		//rsUiPosOffsetY*=dpiScalingFactor;
 	}
 
 
 	private void UpdateSharedMemoryUiPixels() {
+/*		if(UI_Overlay!=null) {
+			UI_Overlay.repaint();
+		}*/
+
+
+		log_Timed_Verbose("_UpdateSharedMemoryUiPixels_0");
 		if(client.getDrawCallbacks() == null) {return;}
 		if(sharedmem_rm == null) {return;}
 		if(sharedMemPixelsUpdatedTick == client.getGameCycle()) {return;}
@@ -3986,11 +4191,11 @@ skills menu:__________
 
 		float ratioX = 1;
 		float ratioY = 1;
+
 		if (client.isStretchedEnabled()) {
 			ratioX = (float)client.getStretchedDimensions().width/(float)bufferProvider.getWidth();
 			ratioY = (float)client.getStretchedDimensions().height/(float)bufferProvider.getHeight();
 		}
-
 /*		// Adjust position and size based on DPI scaling
 		canvasPosX = Math.round(canvasPosX * dpiScalingFactor);
 		canvasPosY = Math.round(canvasPosY * dpiScalingFactor);
@@ -4008,16 +4213,28 @@ skills menu:__________
 		sharedmem_rm.setInt(30000015, rsUiPosOffsetY);
 		//3d viewport size
 		float View3dSizeX = client.getViewportWidth();
+
+		boolean onLoginScreen = client.getGameState() == GameState.LOGIN_SCREEN || client.getGameState() == GameState.LOGGING_IN || client.getGameState() == GameState.LOGIN_SCREEN_AUTHENTICATOR;
 		View3dSizeX*=dpiScalingFactor;
 		View3dSizeX*=ratioX;
+		if(onLoginScreen) { //when we first arrive on login screen, viewport is 0 width because it is uninitialized. In such cases, I am using the canvas dimensions instead.
+			View3dSizeX = client.getCanvas().getParent().getWidth();
+		}
+
 		float View3dSizeY = client.getViewportHeight();
 		View3dSizeY*=dpiScalingFactor;
 		View3dSizeY*=ratioY;
+		if(onLoginScreen) { //when we first arrive on login screen, viewport is 0 width because it is uninitialized. In such cases, I am using the canvas dimensions instead.
+			View3dSizeY = client.getCanvas().getParent().getHeight();
+		}
 
 		//View3dSizeX = Math.round(View3dSizeX * dpiScalingFactor);
 		//View3dSizeY = Math.round(View3dSizeY * dpiScalingFactor);
 
+		//System.out.println("vieSizeX:"+View3dSizeX);
+
 		sharedmem_rm.setInt(30000020,  Math.round(View3dSizeX));
+		//System.out.println("vieSizeY:"+View3dSizeY);
 		sharedmem_rm.setInt(30000025, Math.round(View3dSizeY));
 
 		//System.out.println(""+client.getStretchedDimensions().getWidth() + " " + client.getStretchedDimensions().getHeight());
@@ -4027,10 +4244,17 @@ skills menu:__________
 		View3dOffsetX*=dpiScalingFactor;
 		View3dOffsetX*=ratioX;
 		View3dOffsetX+=rsUiPosOffsetX;
+		if(onLoginScreen) {
+			View3dOffsetX = 0;
+		}
+
 		float View3dOffsetY = client.getViewportYOffset();
 		View3dOffsetY*=dpiScalingFactor;
 		View3dOffsetY*=ratioY;
 		View3dOffsetY+=rsUiPosOffsetY;
+		if(onLoginScreen) {
+			View3dOffsetY = 0;
+		}
 
 		sharedmem_rm.setInt(30000030, Math.round(View3dOffsetX));
 		sharedmem_rm.setInt(30000035, Math.round(View3dOffsetY));
@@ -4046,6 +4270,7 @@ skills menu:__________
 		sharedmem_rm.setInt(30000045, Math.round(canvasSizeY));
 
 		sharedmem_rm.SharedMemoryData.write(30000050, bufferProvider.getPixels(),0, bufferProvider.getHeight()*bufferProvider.getWidth());
+		log_Timed_Verbose("_UpdateSharedMemoryUiPixels_1");
 	}
 
 	int baseX = 0;
@@ -4232,6 +4457,17 @@ skills menu:__________
 		//client.isInInstancedRegion();
 		//client.getScene().getInstanceTemplateChunks();
 
+		if(client.getGameState() == GameState.LOGIN_SCREEN || curGamestate == GameState.LOGIN_SCREEN_AUTHENTICATOR) {
+			if (client.getGameCycle()%20 == 0) {
+				//constantly resize canvas in order to force it to repaint, so as to keep transparency
+				SwingUtilities.invokeLater(() -> {client.resizeCanvas();});
+			}
+		}
+
+		if(client.getGameState() == GameState.LOGIN_SCREEN || client.getGameState() == GameState.LOGGING_IN || curGamestate == GameState.LOGIN_SCREEN_AUTHENTICATOR) { //dont send perframe packet while on login screen because doing so would interfere with animated login screen
+			return;
+		}
+
 		perFramePacketSentTick = client.getGameCycle();
 		//System.out.println("canvasSizeChanged"+viewWidth+" X "+viewHeight);
 		if (client.getTopLevelWorldView().getPlane() != clientPlane) {
@@ -4255,7 +4491,8 @@ skills menu:__________
 		int camYaw = client.getCameraYaw();
 		int camPitch = client.getCameraPitch();
 		int camZoom = client.getScale();
-		int maxVisiblePlane = 3; //used to be client.getSceneMaxPlane(), but thats gone now.
+		//int maxVisiblePlane = 3; //used to be client.getSceneMaxPlane(), but thats gone now.
+		boolean removeRoofs = client.getVarbitValue(12378) > 0;
 		int clientCycle = client.getGameCycle();
 		short canvasWidth = (short)client.getViewportWidth();
 		short canvasHeight = (short)client.getViewportHeight();
@@ -4273,7 +4510,7 @@ skills menu:__________
 		perFramePacket.writeShort(camYaw);
 		perFramePacket.writeShort(camPitch);
 		perFramePacket.writeShort(camZoom);
-		perFramePacket.writeByte(maxVisiblePlane);
+		perFramePacket.writeBoolean(removeRoofs);
 		perFramePacket.writeInt(clientCycle);
 		perFramePacket.writeShort(canvasWidth);
 		perFramePacket.writeShort(canvasHeight);
@@ -4300,6 +4537,7 @@ skills menu:__________
 				//int npcHeight = Perspective.getTileHeight(client, LocationToSampleHeightFrom, client.getTopLevelWorldView().getPlane())*-1;
 				int npcHeight = Perspective.getTileHeight(client, npc.getLocalLocation(), client.getTopLevelWorldView().getPlane())*-1;
 				int npcOrientation = npc.getCurrentOrientation();
+
 /*				int npcAnimationId = -1;
 				int npcAnimationFrame = -1;
 				int npcAnimationFrameCycle = -1;
@@ -4585,8 +4823,19 @@ skills menu:__________
 				perFramePacket.writeShort(spotAnimId);
 				short animationFrameIdx = (short)projectile.getAnimationFrame();
 
-				if(!hooks.draw(projectile, false)) {
+/*				if(!visibleActors.contains(projectile)) {
+				System.out.println("projectile visible");
+				}else {
+					System.out.println("projectile invisible");
+				}*/
+
+				boolean shouldDraw = visibleActors.contains(projectile) && hooks.draw(projectile, false);
+
+				if(!shouldDraw) {
+					//System.out.println("shoudlDraw = false");
 					animationFrameIdx = -2; //-1 anim mean hide entity
+				} else {
+					//System.out.println("shoudlDraw = true");
 				}
 
 				perFramePacket.writeShort(animationFrameIdx);
@@ -4741,8 +4990,9 @@ skills menu:__________
 			System.out.println("Cant Update RmWindow because rl canvas isnt showing");
 			return false;
 		}
-		int curCavansX = client.getCanvas().getLocationOnScreen().x+client.getViewportXOffset();
-		int curCavansY = client.getCanvas().getLocationOnScreen().y+client.getViewportYOffset();
+		int curCavansX = rsUiPosX+client.getViewportXOffset();
+		int curCavansY = rsUiPosY+client.getViewportYOffset();
+
 		int curCavansSizeX = client.getViewportWidth();
 		int curCavansSizeY = client.getViewportHeight();
 		if(curCavansX!=lastCavansX||curCavansY!=lastCavansY||curCavansSizeX!=lastCavansSizeX||curCavansSizeY!=lastCavansSizeY) {
@@ -4768,7 +5018,18 @@ skills menu:__________
 		int r = (BGR >> 16) & 0xFF/255;
 		int g = (BGR >> 8) & 0xFF/255;
 		int b = BGR & 0xFF/255;
+	}
 
+	public ApplicationSettings loadAppSettings() {
+		String jsonFileLocation = System.getProperty("user.home") + "\\.runemod\\AppSettings.json";
+
+		Gson gson = new GsonBuilder().create();
+		try (BufferedReader reader = new BufferedReader(new FileReader(jsonFileLocation))) {
+			return gson.fromJson(reader, ApplicationSettings.class);
+		} catch (IOException e) {
+			e.printStackTrace();
+			return null;
+		}
 	}
 }
 

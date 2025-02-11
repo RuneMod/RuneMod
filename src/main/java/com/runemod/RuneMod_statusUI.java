@@ -1,20 +1,15 @@
 package com.runemod;
 
-import com.runemod.cache.fs.flat.FlatStorage;
 import net.runelite.client.ui.FontManager;
-import net.runelite.client.util.ImageUtil;
 
 import javax.swing.*;
-import javax.swing.text.StyleContext;
 import java.awt.*;
-import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.URL;
 
 public class RuneMod_statusUI extends JPanel {
 
-
+    RuneModPlugin runeModPlugin = null;
     public JLabel StatusHeading = new JLabel();
     public JLabel StatusDetail = new JLabel();
     JLabel iconHolder = new JLabel();
@@ -40,9 +35,9 @@ public class RuneMod_statusUI extends JPanel {
         }
     }
 
-    RuneMod_statusUI(Frame owner) {
+    RuneMod_statusUI(Frame owner, RuneModPlugin plugin) {
         StatusHeading.setText("");
-
+        runeModPlugin = plugin;
 
 /*        frame = createFrame("RuneModStatus", owner);
 
@@ -136,13 +131,15 @@ public class RuneMod_statusUI extends JPanel {
 
         if (statusText.equalsIgnoreCase("ready")) {
             if(!RuneModPlugin.unrealIsReady) {
-                RuneModPlugin.toggleRuneModLoadingScreen(false);
+                //RuneModPlugin.toggleRuneModLoadingScreen(false);
                 RuneModPlugin.unrealIsReady = true;
+                runeModPlugin.appSettings = runeModPlugin.loadAppSettings();
+                runeModPlugin.resendGameStateChanged();
             }
         }
 
         if(print) {
-            System.out.println("..." + statusText);
+            RuneModPlugin.log_Timed_Verbose("..." + statusText);
         }
     }
 

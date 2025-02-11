@@ -23,6 +23,7 @@ class RuneMod_Launcher implements Runnable {
     public String rmAppLocation = System.getProperty("user.home") + "\\.runemod\\application\\";
     public String AltRuneModLocation = "";
     boolean AutoLaunch;
+    public Process runemodApp = null;
 
     RuneMod_Launcher(String altRuneModLocation, boolean AutoLaunch_) {
         AltRuneModLocation = altRuneModLocation;
@@ -114,7 +115,19 @@ class RuneMod_Launcher implements Runnable {
         int currentAppVersion = getLocalAppVersion();
         System.out.println("current version = " + currentAppVersion);
 
-        if (currentAppVersion < 0 || latestAppVersion > currentAppVersion) {
+        //if the local version is correct but somehow the user is missing the runemod exe file, we download the runemod app files regardless of the local version.
+        boolean runeModExeExists = Files.exists(Paths.get(rmAppLocation +"Windows\\RuneMod\\Binaries\\Win64\\"+"RuneMod-Win64-Shipping.exe"));
+
+        if(!runeModExeExists) {
+            RuneModPlugin.runeMod_statusUI.SetStatus_Detail("Runemod.exe could not found, so downloading rm app files", true);
+        } else {
+            if(currentAppVersion < 0 || latestAppVersion > currentAppVersion) {
+                RuneModPlugin.runeMod_statusUI.SetStatus_Detail("Runemod.exe exists, but local version is not up to date, so downloading rm app files", true);
+            }
+        }
+
+
+        if (currentAppVersion < 0 || latestAppVersion > currentAppVersion || !runeModExeExists) {
            //delete old app folder.
             System.out.println("Deleting old rm app at"+ rmAppLocation+"Windows");
             File directoryToDelete = new File(rmAppLocation+"Windows");
@@ -131,18 +144,12 @@ class RuneMod_Launcher implements Runnable {
             } catch (IOException e) {
                 e.printStackTrace();
             }
+        }
 
-            if(Files.exists(Paths.get(rmAppLocation +"Windows\\RuneMod\\Binaries\\Win64\\"+"RuneMod-Win64-Shipping.exe"))) {
-                LaunchApp(rmAppLocation +"Windows\\RuneMod\\Binaries\\Win64\\"+"RuneMod-Win64-Shipping.exe");
-            } else  {
-                RuneModPlugin.runeMod_statusUI.SetStatus_Detail("Launch failed: Runemod.exe could not be found", true);
-            }
-        } else {
-            if(Files.exists(Paths.get(rmAppLocation +"Windows\\RuneMod\\Binaries\\Win64\\"+"RuneMod-Win64-Shipping.exe"))) {
-                LaunchApp(rmAppLocation +"Windows\\RuneMod\\Binaries\\Win64\\"+"RuneMod-Win64-Shipping.exe");
-            } else {
-                RuneModPlugin.runeMod_statusUI.SetStatus_Detail("Launch failed: Runemod.exe could not be found", true);
-            }
+        if(Files.exists(Paths.get(rmAppLocation +"Windows\\RuneMod\\Binaries\\Win64\\"+"RuneMod-Win64-Shipping.exe"))) {
+            LaunchApp(rmAppLocation +"Windows\\RuneMod\\Binaries\\Win64\\"+"RuneMod-Win64-Shipping.exe");
+        } else  {
+            RuneModPlugin.runeMod_statusUI.SetStatus_Detail("Launch failed: Runemod.exe could not be found", true);
         }
     }
 
@@ -263,6 +270,8 @@ class RuneMod_Launcher implements Runnable {
 
     public void LaunchApp(String filePath) throws IOException {
 
+        if(AutoLaunch == false) { RuneModPlugin.runeMod_statusUI.SetStatus_Detail("Auto launch turned off, will not auto-start runemod.exe. Awaiting manual start of runemod.exe...", true); return;}
+
         if(AltRuneModLocation.length()>1) {
             RuneModPlugin.runeMod_statusUI.SetStatus_Detail("Launching Alt RuneMod.exe...", true);
         } else {
@@ -276,23 +285,38 @@ class RuneMod_Launcher implements Runnable {
 
         System.out.println("Launch filePath:" + filePath);
 
-        if(AutoLaunch == false) { RuneModPlugin.runeMod_statusUI.SetStatus_Detail("Auto launch turned off, will not auto-start runemod.exe. Awaiting manual start of runemod.exe...", true); return;}
 
-        Desktop desktop = Desktop.getDesktop();
+
+        String[] command = {filePath, "-windowed", "-nosplash", "-ResX=2", "-ResY=2", "-WinX=1", "-WinY=1"};
+
+        ProcessBuilder processBuilder = new ProcessBuilder(command);
+        processBuilder.redirectErrorStream(true); // Combine error and output streams
+        runemodApp = processBuilder.start();
+
+
+        /*        if(AutoLaunch == false) { RuneModPlugin.runeMod_statusUI.SetStatus_Detail("Auto launch turned off, will not auto-start runemod.exe. Awaiting manual start of runemod.exe...", true); return;}
+
+        //String exePath = "C:\\path\\to\\your\\executable.exe";
+
+/*        try {
+
+            //int exitCode = process.waitFor(); // Wait for the process to finish
+            //System.out.println("Process exited with code: " + exitCode);
+        } catch (IOException | InterruptedException e) {
+            e.printStackTrace();
+        }*/
+
+/*        Desktop desktop = Desktop.getDesktop();
         try
         {
             desktop.open(new File(filePath));
             desktop.enableSuddenTermination();
-            //Process p = new ProcessBuilder(filePath).start();
-/*            ProcessBuilder pb = new ProcessBuilder(
-                    "cmd", "/c", "cd \"" + folderPath+ "\" " + "&& start "+ fileName + " -NOSPLASH -game -windowed -WinX=0 -WinY=0 -ResX=1 -ResY=1"); //launches program with arguments
-            RuneModPlugin.unrealGameProcess = pb.start();*/
         }
         catch (IOException e)
         {
             RuneModPlugin.runeMod_statusUI.SetStatus_Detail("Failed to execute RuneMod.exe...", true);
             e.printStackTrace();
-        }
+        }*/
 
     }
 

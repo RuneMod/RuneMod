@@ -91,6 +91,18 @@ public class Buffer {
         }
     }
 
+    byte[] readByte_Array()
+    {
+        int arrayLen = readInt();
+        byte[] arr = new byte[arrayLen];
+        for (int i = 0; i < arrayLen; i++)
+        {
+            arr[i] = array[offset+i];
+        }
+        offset += arrayLen;
+        return arr;
+    }
+
     void writeInt_Array(int[] var1, int arrayLen)
     {
         writeInt(arrayLen);
@@ -176,7 +188,7 @@ public class Buffer {
                 isOverFlowed = true;
                 RuneModPlugin.runeModPlugin.alreadyCommunicatedUnreal = false;
                 System.out.println("dot4");
-                RuneModPlugin.runeModPlugin.communicateWithUnreal();
+                RuneModPlugin.runeModPlugin.communicateWithUnreal("writePacket");
                 isOverFlowed = false;
             } catch (InterruptedException e) {
                 e.printStackTrace();

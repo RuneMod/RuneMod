@@ -77,6 +77,18 @@ public interface RuneModConfig extends Config
 	}
 
 	@ConfigItem(
+			keyName = "OrbitCamera",
+			name = "OrbitCamera",
+			description = "OrbitCamera",
+			position = 8,
+			section = developerStuff
+	)
+	default boolean OrbitCamera()
+	{
+		return false;
+	}
+
+	@ConfigItem(
 			position = 9,
 			keyName = "AltRuneModLocation",
 			name = "AltRuneModLocation",
