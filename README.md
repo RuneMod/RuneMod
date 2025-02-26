@@ -1,3 +1,7 @@
-Adds a different renderer to RS.
-RuneMod also has tools to create and install graphical mods.
-Still in development so dont expect it to work.
+# RuneMod
+This plugin adds a different renderer to Runescape.
+
+IMPORTANT: A private beta key is required in order to enable this plugin.
+Once you have installed this plugin, please enter your beta key in the plugin's settings.
+
+![Example image](https://i.imgur.com/MHk8NX8.gif)
