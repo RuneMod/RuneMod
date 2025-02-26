@@ -9,10 +9,52 @@ import net.runelite.client.config.ConfigSection;
 public interface RuneModConfig extends Config
 {
 	@ConfigItem(
+			keyName = "BetaTesterKey",
+			name = "Enter Your Beta Key.",
+			description = "RuneMod is not yet ready for public use. It is currently only useable by those with beta keys.",
+			position = 2
+	)
+
+	default String BetaTesterKey()
+	{
+		return "";
+	}
+
+	@ConfigSection(
+			name = "Settings",
+			description = "Settings",
+			position = 3,
+			closedByDefault = true
+	)
+	String settings = "settings";
+
+	@ConfigItem(
+			keyName = "MaxFps",
+			name = "MaxFps",
+			description = "Note, increasing the fps beyond 50 may produce a less responsive experience",
+			position = 4,
+			section = settings
+	)
+
+	default int MaxFps()
+	{
+		return 50;
+	}
+
+	@ConfigSection(
+			name = "Developer",
+			description = "Developer",
+			position = 7,
+			closedByDefault = true
+	)
+	String Developer = "Developer";
+
+	@ConfigItem(
 			keyName = "RuneModVisibility",
 			name = "RuneModVisibility",
 			description = "Toggles visibility of runemod",
-			position = 4
+			position = 5,
+			section = Developer
 	)
 
 	default boolean RuneModVisibility()
@@ -21,43 +63,11 @@ public interface RuneModConfig extends Config
 	}
 
 	@ConfigItem(
-			keyName = "MaxFps",
-			name = "MaxFps",
-			description = "Note, increasing the fps beyond 50 may lead to a less responsive experience",
-			position = 5
-	)
-
-	default int MaxFps()
-	{
-		return 50;
-	}
-
-/*	@ConfigItem(
-			keyName = "DrawDistance",
-			name = "DrawDistance",
-			description = "Increases the distance you can click. Has a significant performance cost.",
-			position = 6
-	)
-
-	default int DrawDistance()
-	{
-		return 50;
-	}*/
-
-	@ConfigSection(
-			name = "Developer Stuff",
-			description = "Developer Stuff",
-			position = 7,
-			closedByDefault = false
-	)
-	String developerStuff = "DeveloperStuff";
-
-	@ConfigItem(
 			keyName = "startRuneModOnStart",
 			name = "startRuneModOnStart",
 			description = "startRuneModOnStart",
 			position = 6,
-			section = developerStuff
+			section = Developer
 	)
 	default boolean StartRuneModOnStart()
 	{
@@ -69,7 +79,7 @@ public interface RuneModConfig extends Config
 			name = "UseAltRuneModLocation",
 			description = "UseAltRuneModLocation",
 			position = 8,
-			section = developerStuff
+			section = Developer
 	)
 	default boolean UseAltRuneModLocation()
 	{
@@ -81,7 +91,7 @@ public interface RuneModConfig extends Config
 			name = "OrbitCamera",
 			description = "OrbitCamera",
 			position = 8,
-			section = developerStuff
+			section = Developer
 	)
 	default boolean OrbitCamera()
 	{
@@ -93,7 +103,7 @@ public interface RuneModConfig extends Config
 			keyName = "AltRuneModLocation",
 			name = "AltRuneModLocation",
 			description = "",
-			section = developerStuff
+			section = Developer
 	)
 
 	default String AltRuneModLocation()
@@ -102,19 +112,19 @@ public interface RuneModConfig extends Config
 	}
 
 	@ConfigSection(
-			name = "DebugStuff",
-			description = "Debug Stuff",
+			name = "Developer_Debug",
+			description = "Developer_Debug",
 			position = 10,
-			closedByDefault = false
+			closedByDefault = true
 	)
-	String debugStuff = "DebugStuff";
+	String Developer_Debug = "Developer_Debug";
 
 	@ConfigItem(
 			keyName = "useTwoRenderers",
 			name = "useTwoRenderers",
 			description = "useful for debugging or comparing between runemod and vanilla. uncheck attach attachRmWindowToRL and move the rl window, to separate the two render views.",
 			position = 11,
-			section = debugStuff
+			section = Developer_Debug
 	)
 	default boolean useTwoRenderers()
 	{
@@ -126,7 +136,7 @@ public interface RuneModConfig extends Config
 			name = "attachRmWindowToRL",
 			description = "attachRmWindowToRL",
 			position = 12,
-			section = debugStuff
+			section = Developer_Debug
 	)
 	default boolean attachRmWindowToRL()
 	{
@@ -138,7 +148,7 @@ public interface RuneModConfig extends Config
 			name = "spawnAnimations",
 			description = "spawnAnimations",
 			position = 13,
-			section = debugStuff
+			section = Developer_Debug
 	)
 
 	default boolean spawnAnimations()
@@ -151,7 +161,7 @@ public interface RuneModConfig extends Config
 			name = "spawnPlayerGFX",
 			description = "spawnPlayerGFX",
 			position = 14,
-			section = debugStuff
+			section = Developer_Debug
 	)
 	default boolean spawnPlayerGFX()
 	{
@@ -163,7 +173,7 @@ public interface RuneModConfig extends Config
 			name = "spawnNpcGFX",
 			description = "spawnNpcGFX",
 			position = 15,
-			section = debugStuff
+			section = Developer_Debug
 	)
 	default boolean spawnNpcGFX()
 	{
@@ -175,7 +185,7 @@ public interface RuneModConfig extends Config
 			name = "spawnStaticGFX",
 			description = "spawnStaticGFX",
 			position = 20,
-			section = debugStuff
+			section = Developer_Debug
 	)
 	default boolean spawnStaticGFX()
 	{
@@ -187,7 +197,7 @@ public interface RuneModConfig extends Config
 			name = "spawnProjectiles",
 			description = "spawnProjectiles",
 			position = 30,
-			section = debugStuff
+			section = Developer_Debug
 	)
 	default boolean spawnProjectiles()
 	{
@@ -199,7 +209,7 @@ public interface RuneModConfig extends Config
 			name = "spawnNPCs",
 			description = "spawnNPCs",
 			position = 40,
-			section = debugStuff
+			section = Developer_Debug
 	)
 	default boolean spawnNPCs()
 	{
@@ -211,7 +221,7 @@ public interface RuneModConfig extends Config
 			name = "spawnGameObjects",
 			description = "spawnGameObjects",
 			position = 60,
-			section = debugStuff
+			section = Developer_Debug
 	)
 	default boolean spawnGameObjects()
 	{
@@ -223,7 +233,7 @@ public interface RuneModConfig extends Config
 			name = "spawnPlayers",
 			description = "spawnPlayers",
 			position = 70,
-			section = debugStuff
+			section = Developer_Debug
 	)
 	default boolean spawnPlayers()
 	{
@@ -235,7 +245,7 @@ public interface RuneModConfig extends Config
 			name = "spawnItems",
 			description = "spawnItems",
 			position = 90,
-			section = debugStuff
+			section = Developer_Debug
 	)
 	default boolean spawnItems()
 	{

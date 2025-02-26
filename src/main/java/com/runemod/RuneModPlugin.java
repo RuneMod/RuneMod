@@ -9,7 +9,6 @@ import net.runelite.api.coords.LocalPoint;
 import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.events.*;
 import net.runelite.api.hooks.DrawCallbacks;
-import net.runelite.client.Notifier;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.callback.Hooks;
 import net.runelite.client.config.ConfigManager;
@@ -22,7 +21,6 @@ import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.plugins.PluginInstantiationException;
 import net.runelite.client.plugins.PluginManager;
 import net.runelite.client.ui.ClientUI;
-import net.runelite.client.ui.overlay.OverlayManager;
 import net.runelite.client.util.HotkeyListener;
 
 import javax.inject.Inject;
@@ -30,9 +28,14 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.Container;
 import java.awt.event.*;
+import java.awt.geom.AffineTransform;
 import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.Field;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.util.List;
 import java.util.*;
 import java.util.function.Consumer;
@@ -43,6 +46,7 @@ import static net.runelite.client.RuneLite.RUNELITE_DIR;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+
 import java.io.BufferedReader;
 import java.io.FileReader;
 
@@ -50,7 +54,7 @@ import java.io.FileReader;
 		name = "RuneMod",
 		enabledByDefault = true,
 		description = "Graphics modding tool",
-		tags = {"rm", "rune", "mod", "hd", "graphics", "high", "detail", "graphics", "shaders", "textures", "gpu", "shadows", "lights", "unreal", "ue4"},
+		tags = {"rm", "rune", "mod", "hd", "graphics", "high", "detail", "graphics", "shaders", "textures", "gpu", "shadows", "lights"},
 		conflicts = {"GPU", "117 HD"}
 )
 
@@ -68,13 +72,6 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	public static RuneMod_Launcher runeModLauncher;
 
 	public static RuneMod_statusUI runeMod_statusUI;
-
-
-	@Inject
-	private Notifier notifier;
-
-	@Inject
-	private OverlayManager overlayManager;
 
 	@Inject
 	public Client client;
@@ -113,7 +110,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 
 	public static float getCurTimeSeconds() {
-		float curT = (float)((System.currentTimeMillis() / 1000.0D)-1736168000D);
+		float curT = (float)(((double)System.currentTimeMillis() / 1000.0D)-1739538139D);
 		return curT;
 	}
 
@@ -138,21 +135,28 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	boolean startedWhileLoggedIn;
 	boolean runeModAwaitingRsCacheHashes = false;
 
+	int ticksSinceLoggedIn = -1;
 
 	@SneakyThrows
 	@Subscribe
 	private void onBeforeRender(BeforeRender event)
 	{
-		if(config.OrbitCamera()) {
-			client.setCameraYawTarget(client.getCameraYaw()+1);
-		}
-
 		log_Timed_Verbose("onBeforeRender");
+
 		alreadyCommunicatedUnreal = false;
 
 		if(client.getGameState().ordinal() >= GameState.STARTING.ordinal() && client.getTopLevelWorldView()!=null) {
 			ticksSincePLuginLoad++;
 		}
+
+		/*		if(ticksSincePLuginLoad == 1) {
+			sharedmem_rm = new SharedMemoryManager(this);
+			sharedmem_rm.createSharedMemory("sharedmem_rm", 50000000); //50 mb
+			myCacheReader = new CacheReader();
+		}
+		if(ticksSincePLuginLoad > 1 && ticksSincePLuginLoad %200 == 0) {
+			myCacheReader.printCrcs();
+		}*/
 
 		if(ticksSincePLuginLoad == 1) {
 			startUp_Custom();
@@ -185,6 +189,21 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 				runeModLauncher.launch();
 			}
+
+			myCacheReader.printRevs();
+		}
+
+		if(ticksSincePLuginLoad <= 1) {
+			return;
+		}
+
+		if(client.getGameState() == GameState.LOGGED_IN) {
+			ticksSinceLoggedIn ++;
+		}
+
+
+		if(config.OrbitCamera()) {
+			client.setCameraYawTarget(client.getCameraYaw()+1);
 		}
 
 		if(startedWhileLoggedIn) {
@@ -192,7 +211,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		}
 
 			//check if rscache is currently being updated. if not, start runemod launcher
-			if(rsCacheIsDownloading == true && ticksSincePLuginLoad > 1 && client.getGameState().ordinal() >= GameState.LOGIN_SCREEN.ordinal() && client.getGameCycle()%20 == 0) {
+			if(rsCacheIsDownloading == true && client.getGameState().ordinal() >= GameState.STARTING.ordinal() && client.getGameCycle()%20 == 0) {
 				String directory = RUNELITE_DIR + "\\jagexcache\\oldschool\\LIVE";
 				File[] files = new File(directory).listFiles();
 				for(File file : files){
@@ -206,7 +225,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 					}
 				}
 
-				if(client.getGameCycle() - cacheLastUpdatedTick > 200) {
+				if(client.getGameCycle() - cacheLastUpdatedTick > 400) {
 					System.out.println("RSCache has finished downloading");
 					runeMod_statusUI.SetStatus_Detail("Downloaded RS cache", true);
 					rsCacheIsDownloading = false;
@@ -269,11 +288,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			sharedmem_rm.updateRmWindowTransform();
 		}
 
-		if (config.RuneModVisibility() == true) {
-			sharedmem_rm.setRuneModVisibility(true);
-		} else {
-			sharedmem_rm.setRuneModVisibility(false);
-		}
+		sharedmem_rm.setRuneModVisibility(config.RuneModVisibility() == true);
 	}
 
 	public boolean isRuneliteTopmost() {
@@ -290,8 +305,165 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 	public boolean isTopMost = false;
 
+/*	RUNELITE:
+if (ballIsMine) {
+	if(sharedMemIsUnrealData) {
+		read unreal packets
+		copy buffered rl packets to sharedMem
+	} else {
+		release ball and sleep for 500 ns, before trying to aquire it again
+	}
+}
+
+	UNREAL:
+if (ballIsMine) {
+	if(sharedMemIsRlData) {
+		read runelite packets
+		copy buffered unreal packets to sharedMem
+	} else {
+		release ball and sleep for 500 ns, before trying to aquire it again
+	}
+}*/
+
 	//int consecutiveTimeouts = 0;
 	boolean alreadyCommunicatedUnreal = false; //whether we have communicated with unreal this frame.
+
+	void communicateWithUnreal(String funcLocation) {
+		if(ticksSincePLuginLoad < 3) {
+			log_Timed_Verbose("ticksSincePLuginLoad < 3"); return; }
+
+		if(isShutDown) {
+			log_Timed_Verbose("isShutDown"); return; }
+
+		if(alreadyCommunicatedUnreal) {
+			log_Timed_Verbose("Already communicated. cancelled communicateWithUnreal::"+funcLocation); return; }
+
+		alreadyCommunicatedUnreal = true;
+
+
+		log_Timed_Verbose("communicateWithUnreal::"+funcLocation);
+
+		SwingUtilities.invokeLater(() -> {
+			MaintainRuneModAttachment();
+		});
+
+
+		if (client.getGameState().ordinal() < GameState.LOGIN_SCREEN.ordinal()) { //prevents communicating with unreal before client is loaded.
+			return;
+		}
+
+		log_Timed_Verbose("Start");
+
+		if(!sharedmem_rm.backBuffer.isOverFlowed) {
+			WritePerFramePacket(); //we start writing the perframe apcket before unreal has indidcated its started a new frame, for a small performance optimization
+		}
+
+		log_Timed_Verbose("0");
+		//while (true) {
+
+		//wait for ue to signal ueData is ready
+		int val = sharedmem_rm.myKernel32.WaitForSingleObject(sharedmem_rm.EventUeDataReady,100000000);
+		boolean ballIsMine = val == 0; //if acquired ball
+
+		log_Timed_Verbose("1 awaitUeDataIsReady = "+val);
+
+		//unsignal EventUeDataReady, as it has just been signalled (according to infinite wait on line above this).
+		sharedmem_rm.myKernel32.ResetEvent(sharedmem_rm.EventUeDataReady);
+
+		//read unreal packets
+		sharedmem_rm.handleUnrealData();
+
+		//copy buffered rl packets to sharedMem
+		sharedmem_rm.startNewRsData();
+		sharedmem_rm.transferBackBufferToSharedMem();
+
+		sharedmem_rm.writeTerminatingPacket();
+
+		//signal rldata is ready.
+		sharedmem_rm.myKernel32.SetEvent(sharedmem_rm.EventRlDataReady);
+
+		log_Timed_Verbose("2");
+/*		while (true) {
+			boolean ballIsMine = sharedmem_rm.myKernel32.WaitForSingleObject(sharedmem_rm.BallMutex,0) == 0; //if acquired ball
+			if(ballIsMine) {
+				if(sharedmem_rm.checkIsUnrealData()) {
+					//read unreal packets
+					sharedmem_rm.handleUnrealData();
+
+					//copy buffered rl packets to sharedMem
+					sharedmem_rm.startNewRsData();
+					sharedmem_rm.transferBackBufferToSharedMem();
+
+					sharedmem_rm.writeTerminatingPacket();
+
+					sharedmem_rm.myKernel32.ReleaseMutex(sharedmem_rm.BallMutex); //release ball
+					break;
+				} else {
+					sharedmem_rm.myKernel32.ReleaseMutex(sharedmem_rm.BallMutex); //release ball
+					//Sleep for 30000 ns, before trying to acquire ball again
+					sharedmem_rm.waitNanos(30000);
+				}
+			}
+		}*/
+
+		//long waitForUnrealTimeout = 1000/(consecutiveTimeouts+1);
+		//clamp(waitForUnrealTimeout, 30, 500)
+
+		//boolean unrealStartedNewFrame = sharedmem_rm.AwaitUnrealMutex_Locked(600000000); //unreal locks it's mutex when it has started frame
+
+/*		long frameSyncStartTime = System.nanoTime();
+
+
+		if(!unrealStartedNewFrame) { // if the wait for unreal's frame timedout
+			System.out.println("TimedOutWaitingFor unreal");
+			consecutiveTimeouts++;
+			if(consecutiveTimeouts > 0) {
+				setUnrealConnectionStatus(false);
+			}
+
+			return;
+		} else {
+			//consecutiveTimeouts = 0;
+			setUnrealConnectionStatus(true);
+		}
+		//System.out.println("UnrealMutexLocked");
+
+		//export runeliteframe
+		//WritePerFramePacket(); //doing this above, as a small optimization
+
+		sharedmem_rm.startNewRsData();
+		sharedmem_rm.transferBackBufferToSharedMem();
+
+		log_Timed_Verbose("1");
+
+		sharedmem_rm.writeTerminatingPacket();
+		//System.out.println("ExportedRuneliteFrame");
+
+		sharedmem_rm.LockRuneliteMutex(); //indicates to unreal that runelite has exported it's framedata
+
+		log_Timed_Verbose("2");
+
+		//System.out.println("LockedRuneliteMutex");
+		sharedmem_rm.AwaitUnrealMutex_UnLocked(); //unreal sends data back to us, and unlocks it's mutex when it has imported rl frame.
+		//System.out.println("Unreal Has Unlocked it's mutex");
+
+		log_Timed_Verbose("3");
+
+		//import unrealdata
+		sharedmem_rm.handleUnrealData();
+
+		log_Timed_Verbose("4");
+
+		sharedmem_rm.UnLockRuneliteMutex(); //indicates ruenlite is now busy rendering the current frame and calcing the next frame.
+
+		log_Timed_Verbose("5");*/
+		//long frameSyncWaitTime = System.nanoTime()-frameSyncStartTime;
+		//System.out.println("frameSyncWaitTime: "+(float)frameSyncWaitTime/1000000.0 + "ms");
+		//System.out.println("commedWithUnreal");
+	}
+
+/*
+
 	void communicateWithUnreal(String funcLocation) {
 		//System.out.println(System.currentTimeMillis());
 		//if(!clientUI.isFocused()) {return;}
@@ -338,10 +510,12 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 		if(!unrealStartedNewFrame) { // if the wait for unreal's frame timedout
 			System.out.println("TimedOutWaitingFor unreal");
+*/
 /*			consecutiveTimeouts++;
 			if(consecutiveTimeouts > 0) {
 				setUnrealConnectionStatus(false);
-			}*/
+			}*//*
+
 			return;
 		} else {
 			//consecutiveTimeouts = 0;
@@ -382,6 +556,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		//System.out.println("frameSyncWaitTime: "+(float)frameSyncWaitTime/1000000.0 + "ms");
 		//System.out.println("commedWithUnreal");
 	}
+*/
 
 	int storedGpuFlags = -1;
 	void setGpuFlags(int flags) {
@@ -390,12 +565,11 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			client.resizeCanvas(); //resize canvas to force rebuild for working alpha channel
 			storedGpuFlags = flags;
 			client.getCanvas().setIgnoreRepaint(true);
-			client.resizeCanvas();
 			System.out.println("GPU Flags have been changed to "+flags);
 		}
 	}
 
-	void setUnrealConnectionStatus(boolean currentValue) {
+/*	void setUnrealConnectionStatus(boolean currentValue) {
 		if(currentValue) {
 			if(unrealIsConnected == false) {
 				unrealIsConnected = true;
@@ -415,7 +589,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 				if(unrealIsConnected == true) { //if unreal is disconnecting just now
 					unrealIsConnected = false;
 
-					if(sharedmem_rm.runeModWindowsExist()) {
+					if(sharedmem_rm.findRuneModWindow()!=null) {
 						runeMod_statusUI.SetStatus_Detail("RuneMod gas just Disconnected or become desynced", true);
 					}
 				}
@@ -426,9 +600,9 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 				}
 			}
 		}
-	}
+	}*/
 
-	boolean unrealIsConnected = false;
+	//boolean unrealIsConnected = false;
 	@SneakyThrows
 	@Override
 	public void drawScene(double cameraX, double cameraY, double cameraZ, double cameraPitch, double cameraYaw, int plane) {
@@ -517,7 +691,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	boolean focused_lastFrame = false;
 
 	void overlayColourChanged() {
-		Buffer packet = new Buffer(new byte[6]);
+		Buffer packet = new Buffer(new byte[8]);
 
 		packet.writeInt(overlayColor_LastFrame);
 
@@ -628,6 +802,8 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	}
 
 	void setDefaults() {
+		doneStartupTasks = false;
+
 		clientPlane = -1;
 
 		unrealIsReady = false;
@@ -642,7 +818,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			runeMod_statusUI = null;
 		}
 
-		ticksSincePLuginLoad = -1;
+		//ticksSincePLuginLoad = -1;
 
 		if(sharedmem_rm!=null) {
 			//sharedmem_rm.destroyRuneModWin();
@@ -726,7 +902,24 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	//public Overlay_UI UI_Overlay;
 	@SneakyThrows
 	void startUp_Custom() {
-//		clientUI.requestFocus();
+		setDefaults();
+
+		runeModPlugin = this;
+
+		sharedmem_rm = new SharedMemoryManager(this);
+		sharedmem_rm.createSharedMemory("sharedmem_rm", 50000000); //50 mb
+		sharedmem_rm.CreateNamedEvents();
+
+		JFrame window = (JFrame) SwingUtilities.getAncestorOfClass(Frame.class, client.getCanvas());
+		//window.setIgnoreRepaint(true); //doing this could save a bit of performance however it causes visual issues in runelite.
+
+		runeMod_statusUI = new RuneMod_statusUI(window, this);
+
+		runeModLauncher =  new RuneMod_Launcher(config.UseAltRuneModLocation() ? config.AltRuneModLocation() : "", config.StartRuneModOnStart());
+		myCacheReader = new CacheReader();
+
+		keyManager.registerKeyListener(hotkeyListenerw);
+
 
 		client_static = client;
 		isShutDown = false;
@@ -735,73 +928,93 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 		RuneModPlugin.toggleRuneModLoadingScreen(true);
 
-		configManager.setConfiguration("stretchedmode","keepAspectRatio", true);
+		configManager.setConfiguration("stretchedmode","keepAspectRatio", true); //We need keepAspectRatio enabled, because runemod does not support nonuniform canvas scaling.
 
 		System.out.println("runelitDir: " + RUNELITE_DIR);
 
-		sharedmem_rm.CreateMutexes();
-
-		//start new rsdata. Unreal does not completely block rs (due to timeout), so it is safe to do his.
 		{
-			sharedmem_rm.LockMutex();
 			sharedmem_rm.startNewRsData();
 			sharedmem_rm.transferBackBufferToSharedMem();
 			sharedmem_rm.passRsDataToUnreal();
+			sharedmem_rm.myKernel32.SetEvent(sharedmem_rm.EventRlDataReady); //signal rl  data is ready. either ue or rl has to signal it is ready for the back and forth communication to begin
 		}
-
-		//maintainRuneModStatusAttachment();
-
-		//mapVarbitsToObjDefs(); //make map that shows us which objdef is linked to which varbit index
 
 		//int GpuFlags = DrawCallbacks.GPU | (computeMode == ComputeMode.NONE ? 0 : DrawCallbacks.HILLSKEW);
 		client.getTopLevelWorldView().getScene().setDrawDistance(90);
 		client.setExpandedMapLoading(1);
 
-
-		int MaxFps = Integer.parseInt(configManager.getConfiguration("RuneMod","MaxFps"));
-
-		if(MaxFps > 50) {
-			client.setUnlockedFps(true);
-		} else {
-			client.setUnlockedFps(false);
-		}
-		client.setUnlockedFpsTarget(MaxFps);
+		client.setUnlockedFps(config.MaxFps() > 50);
+		client.setUnlockedFpsTarget(config.MaxFps());
 
 
 		client.getCanvas().setIgnoreRepaint(true);
 		setGpuFlags(0);
 		setDrawCallbacks(this);
-
-		//registerWindowEventListeners();
 	}
 
+	public String getBetaKeys() {
+		HttpClient client = HttpClient.newHttpClient();
+		HttpRequest request = HttpRequest.newBuilder().uri(URI.create("https://pub-64c85893ea904aedab24caeb10432ae1.r2.dev/beta_keys_hashed.txt")).build();
+		HttpResponse<String> response = null;
+		try {
+			response = client.send(request, HttpResponse.BodyHandlers.ofString());
+		} catch (IOException e) {
+			//e.printStackTrace();
+			System.out.println("Failed to fetch beta keys");
+			return "-1";
+		} catch (InterruptedException e) {
+			// e.printStackTrace();
+			System.out.println("Failed to fetch beta keys");
+			return "-2";
+		}
+		if (response!=null && response.statusCode() == 200) {
+			return (response).body();
+		} else {
+			return "-3";
+		}
+	}
+
+	public boolean checkBetaKey() {
+		boolean isValidKey = false;
+
+		if(config.BetaTesterKey().length() > 30) {
+			String hashedBetaTesterKey = keyGen.hashKey(config.BetaTesterKey());
+			String keys = getBetaKeys();
+			isValidKey =  keys.contains(hashedBetaTesterKey);
+		}
+
+
+		if(!isValidKey) {
+			SwingUtilities.invokeLater(() ->
+			{
+				System.out.println("invalid BetaTesterKey, stopping plugin");
+				try {
+					pluginManager.setPluginEnabled(this, false);
+					pluginManager.stopPlugin(this);
+				} catch (PluginInstantiationException ex) {
+				}
+
+				try {
+					shutDown();
+				} catch (Exception exception) {
+					exception.printStackTrace();
+				}
+			});
+		} else {
+			System.out.println("beta key is valid");
+		}
+
+		return isValidKey;
+	}
+
+boolean doneStartupTasks = false;
 	@Override
 	protected void startUp() throws IOException {
-		clientThread.invoke(() -> {
-			setDefaults();
+		checkBetaKey();
 
-			sharedmem_rm = new SharedMemoryManager(this);
-			sharedmem_rm.createSharedMemory("sharedmem_rm", 50000000); //50 mb
-			sharedmem_rm.createSharedMemory_ViewPort("sharedmem_rm_viewport", 50000000); //50 mb
-
-			runeModPlugin = this;
-
-			JFrame window = (JFrame) SwingUtilities.getAncestorOfClass(Frame.class, client.getCanvas());
-			window.setIgnoreRepaint(true);
-
-			runeMod_statusUI = new RuneMod_statusUI(window, this);
-
-
-			//overlay.setLocationRelativeTo(runeModPlugin.client.getCanvas());
-			//overlay.setVisible(true);
-
-			runeModLauncher =  new RuneMod_Launcher(config.UseAltRuneModLocation() ? config.AltRuneModLocation() : "", config.StartRuneModOnStart());
-			myCacheReader = new CacheReader();
-
-			keyManager.registerKeyListener(hotkeyListenerw);
-			keyManager.registerKeyListener(hotkeyListenerr);
-			keyManager.registerKeyListener(hotkeyListenert);
-		});
+		ticksSincePLuginLoad = -1;
+/*		clientThread.invoke(() -> {
+		});*/
 	}
 
 	public static float signedToUnsigned(byte signedByte) {
@@ -880,7 +1093,6 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 							mainBuffer.writeByte(a);
 						}
 						RuneModPlugin.sharedmem_rm.backBuffer.writePacket(mainBuffer, "Texture");
-						//myRunnableSender.sendBytes(pixelsBuffer.array,"Texture");
 					}
 				}
 			}
@@ -946,11 +1158,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 				if(event.getKey().equalsIgnoreCase("MaxFps")) {
 					int MaxFps = Integer.parseInt(event.getNewValue());
 
-					if(MaxFps > 50) {
-						client.setUnlockedFps(true);
-					} else {
-						client.setUnlockedFps(false);
-					}
+					client.setUnlockedFps(MaxFps > 50);
 
 					client.setUnlockedFpsTarget(MaxFps);
 				}
@@ -983,10 +1191,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		}
 
 		public boolean isIdenticalTo(NpcOverrides_Copy other) {
-			boolean isEqual = true;
-			if(!Arrays.equals(other.modelIds, modelIds)) {
-				isEqual = false;
-			}
+			boolean isEqual = Arrays.equals(other.modelIds, modelIds);
 			if(!Arrays.equals(other.colorToReplaceWith, colorToReplaceWith)) {
 				isEqual = false;
 			}
@@ -1000,7 +1205,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		}
 	}
 
-	private HashMap<NPC, NpcOverrides_Copy> npcsWithOverrides_LastFrame =  new HashMap<NPC, NpcOverrides_Copy>();
+	private final HashMap<NPC, NpcOverrides_Copy> npcsWithOverrides_LastFrame =  new HashMap<NPC, NpcOverrides_Copy>();
 	//if npc in curfram has overrides, and it didnt in last frame, overridesChanged.
 	//if npcsWithOverrides in last frame is missing from npcsWithOverrides in currentFrame, overridesChanged.
 	//if npc With Overrides is present in last and current frame, check if the overrides from each frame are equal. if they are not, , overridesChanged.
@@ -1012,32 +1217,6 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		int g = (col >> 8) & 0xFF;
 		int b = col & 0xFF;
 	}
-
-	private void printUIPixelAtMousePos() {
-/*		System.out.println(client.getGraphicsPixelsWidth());
-		int arrayPos = client.getMouseCanvasPosition().getX() + (client.getMouseCanvasPosition().getY()*client.getGraphicsPixelsWidth());
-		int col = client.getGraphicsPixels()[arrayPos];
-		int a = (col >> 24) & 0xFF;
-		int r = (col >> 16) & 0xFF;
-		int g = (col >> 8) & 0xFF;
-		int b = col & 0xFF;
-		System.out.print("a");
-		System.out.print(" "+a+" ");
-		System.out.print("r");
-		System.out.print(" "+r+" ");
-		System.out.print("g");
-		System.out.print(" "+g+" ");
-		System.out.print("b");
-		System.out.print(" "+b+" ");*/
-	}
-
-	public Component component = new Component() {
-		@Override
-		public void addNotify() {
-			super.addNotify();
-		}
-	};
-
 
 
 	private void forEachTile(Consumer<Tile> consumer)
@@ -1102,7 +1281,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			eventBus.post(new ItemContainerChanged(itemContainer.getId(), itemContainer));
 		}*/
 
-		for (NPC npc : client.getCachedNPCs())
+		for (NPC npc : client.getTopLevelWorldView().npcs())
 		{
 			if (npc != null)
 			{
@@ -1111,7 +1290,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			}
 		}
 
-		for (Player player : client.getCachedPlayers())
+		for (Player player : client.getTopLevelWorldView().players())
 		{
 			if (player != null)
 			{
@@ -1198,6 +1377,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		@Override
 		public void hotkeyPressed() //send terrain
 		{
+			System.out.println("shift+w");
 			clientThread.invokeAtTickEnd(() ->
 				{
 					//sendTexture_test();
@@ -1266,9 +1446,6 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 			}*/
 			//sendAnimation(config.animSequenceDefID());
-			System.out.println("shift+w");
-			//byte[] bytes = new byte[3];
-			//myRunnableSender.sendBytesTest(bytes, "LibMesh");
 /*			int[] playerEquipmentIds = client.getLocalPlayer().getPlayerComposition().getEquipmentIds();
 			int[] bodyColors = client.getLocalPlayer().getPlayerComposition().getBodyPartColours();
 
@@ -1282,78 +1459,6 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 				System.out.println("bodyColorIndex "+ i +" = " + bodyColors[i]);
 			}*/
 			//client.setCameraY(client.getCameraY()+100);
-		}
-	};
-
-
-/*
-skills menu:__________
-2
-		57
-		-1
-		20,971,521
-
-	bond pounch:__________
-1
-		57
-		-1
-		7602252
-
-	logout:__________
-1
-		57
-		-1
-		11927560
-
-	drop item no 5__________
-		7
-		1007
-		4
-		9764864
-
-	use slot 5__________
-		0
-		25
-		4
-		9764864
-
-	use slot 5 on 6__________
-		0
-		58
-		5
-		9764864
-*/
-
-	private static final Keybind myKeybindR = new Keybind(KeyEvent.VK_R, InputEvent.ALT_DOWN_MASK);
-	private final HotkeyListener hotkeyListenerr = new HotkeyListener(() -> myKeybindR)
-	{
-		@Override
-		public void hotkeyPressed()
-		{
-			//we just sent stuff to unreal, now we wait for unreal to gte back to us
-			clientThread.invoke(() ->
-			{
-				//sharedmem_rm.AwaitUnrealMutex_Locked();
-				//System.out.println("UnrealMutexIsLocked");
-				//sharedmem_rm.UnrealMutexTest();
-				//sharedmem_rm.setRuneModVisibility(true);
-				//sharedmem_rm.ChildRuneModWinToRl();
-			});
-
-			//client.setCameraY2(client.getCameraY()+100);
-		}
-	};
-
-	private static final Keybind myKeybindT = new Keybind(KeyEvent.VK_T, InputEvent.ALT_DOWN_MASK);
-	private final HotkeyListener hotkeyListenert = new HotkeyListener(() -> myKeybindT)
-	{
-		@Override
-		public void hotkeyPressed()
-		{
-/*			clientThread.invoke(() ->
-			{
-				sharedmem_rm.setRuneModVisibility(false);
-			});*/
 		}
 	};
 
@@ -1378,53 +1483,10 @@ skills menu:__________
 		iStack[iStackSize - 1] = 1;
 	}
 
-	@Subscribe
+/*	@Subscribe
 	private void onGameTick(GameTick event) {
-/*		client.getCanvas().setVisible(false);
-		client.getCanvas().getParent().setVisible(false);
-		client.getCanvas().getParent().getParent().setVisible(false);
-		client.getCanvas().getParent().getParent().getParent().setVisible(false);
-		client.getCanvas().getParent().getParent().getParent().getParent().setVisible(false);*/
-		//clientUI.requestFocus();
-		//sharedmem_rm.putRuneModOnTop();
-/*		var notif = defaultNotification(TrayIcon.MessageType.NONE);
-		notify(notif, message);*/
-		//notifier.notify("crashTest");
-		//clientUI.flashTaskbar();
 
-		//clientUI.requestFocus();//causes crash if rm window is childed
-
-		//clientUI.forceFocus();
-/*		Toolkit.getDefaultToolkit().beep();
-		if (clientUI.getTrayIcon() != null)
-		{
-			clientUI.getTrayIcon().displayMessage("title", "message", TrayIcon.MessageType.NONE);
-		}*/
-/*		switch (notification.getRequestFocus())
-		{
-			case REQUEST:
-				clientUI.requestFocus();
-				break;
-			case TASKBAR:
-				clientUI.flashTaskbar();
-				break;
-			case FORCE:
-				clientUI.forceFocus();
-				break;
-		}*/
-		//getVarbits();
-
-/*		MapDefinition.Tile standingTile = myCacheReader.getTileAtCoordinate(client.getLocalPlayer().getWorldLocation().getX(), client.getLocalPlayer().getWorldLocation().getY(),0);
-		int underlay = standingTile.underlayId;
-		int overlay = standingTile.overlayId;
-
-		System.out.println("underlay: " + underlay + "  Overlay: " + overlay);*/
-
-		//System.out.println("clientPixelsX = "+client.getGraphicsPixelsWidth());
-
-//		System.out.println("tick ahem");
-
-	}
+	}*/
 
 	private int OrientationToAngles(int orient) {
 		int angle = 1;
@@ -1537,71 +1599,19 @@ skills menu:__________
 			Buffer packet = new Buffer(new byte[10]);
 			packet.writeByte(event.getGameState().ordinal());
 			sharedmem_rm.backBuffer.writePacket(packet, "GameStateChanged");
-			//myRunnableSender.sendBytes(new byte[] {newEventTypeByte,0,0},"GameStateChanged");
 		//});
 	}
 
-	@Subscribe
+/*	@Subscribe
 	private void onGraphicChanged(GraphicChanged graphicChanged)
 	{
 		//System.out.println("graphic changed to: " + graphicChanged.getActor().getGraphic());
-	}
+	}*/
 
-	@Subscribe
+/*	@Subscribe
 	private void onProjectileMoved(ProjectileMoved event) {
-/*		if (projectiles.contains(event.getProjectile())) {
-			//System.out.println("projectileMoved");
-		}  else {
-			projectiles.add(event.getProjectile());
-			//System.out.println("projectileSpawned with hash:"+ event.getProjectile().getHash());
-			//System.out.println("java hash:"+ event.getProjectile().hashCode());
-		}*/
-/*		if(!config.spawnProjectiles()) {return;}
 
-		Buffer actorSpawnPacket = new Buffer(new byte[30]);
-
-		Projectile projectile = event.getProjectile();
-
-		int hash = event.hashCode();
-		short localX = (short)projectile.getX();
-		short localY = (short)projectile.getY();
-		short localZ = (short)projectile.getZ();
-		byte plane = (byte)projectile.getFloor();
-
-		actorSpawnPacket.writeInt(hash);
-		actorSpawnPacket.writeShort(localX);
-		actorSpawnPacket.writeShort(localY);
-		actorSpawnPacket.writeShort(localZ);
-		actorSpawnPacket.writeByte(plane);*/
-
-		//myRunnableSender.sendBytes(trimmedBufferBytes(actorSpawnPacket), "ProjectileMoved");
-
-/*		if (projectile!=null) System.out.println("projectile moved: "+projectile.getId());
-		System.out.println(event.hashCode()); //yes, is identifier
-		System.out.println("X: "+); //yes
-		System.out.println("Y: "+projectile.getY()); //yes
-		System.out.println("Z: "+projectile.getZ()); //yes*/
-
-
-/*		System.out.println("Pos: "+event.getPosition().getX()+", "+event.getPosition().getY());
-		System.out.println("Z: "+event.getZ());
-		System.out.println("slope: "+projectile.getSlope());
-		System.out.println("X1: "+projectile.getX1());
-		System.out.println("Y1: "+projectile.getY1());
-		System.out.println("Scalar: "+projectile.getScalar());*/
-	}
-
-	public void RmVisChanged(boolean visibility)
-	{
-		clientThread.invoke(() ->
-		{
-			Buffer packet = new Buffer(new byte[5]);
-
-			packet.writeBoolean(visibility);
-
-			sharedmem_rm.backBuffer.writePacket(packet, "RmVisChanged");
-		});
-	}
+	}*/
 
 	@Subscribe
 	private void onWallObjectDespawned(WallObjectDespawned event)
@@ -1636,7 +1646,6 @@ skills menu:__________
 			actorSpawnPacket.writeLong(tag);
 
 			sharedmem_rm.backBuffer.writePacket(actorSpawnPacket, "ActorDeSpawn");
-			//myRunnableSender.sendBytes(trimmedBufferBytes(actorSpawnPacket), "ActorDeSpawn");
 			System.out.println("wallobject despawned: " + event.getWallObject().getId());
 		});
 	}
@@ -1716,54 +1725,6 @@ skills menu:__________
 
 				sharedmem_rm.backBuffer.writePacket(actorSpawnPacket, "ActorSpawn");
 		});
-			//myRunnableSender.sendBytes(trimmedBufferBytes(actorSpawnPacket), "ActorSpawn");
-		//});
-
-
-
-
-
-
-
-
-/*		int objDefID1 = wallObjectspawned.getWallObject().getId();
-		loadedObjDefinitions[objDefID1] = client.getObjectDefinition(objDefID1);
-
-		WallObject gameObject = wallObjectspawned.getWallObject();
-		Tile tile = wallObjectspawned.getTile();
-		WorldPoint tileLocation = tile.getWorldLocation();
-		if (gameObject != null) {
-			int objDefID = gameObject.getId();
-			int orientation = OrientationToAngles(gameObject.getOrientationA());
-
-			LocalPoint location = gameObject.getLocalLocation();
-			int tilePosZ = ((Perspective.getHeight(client, location.getX(), location.getY(), tile.getPlane())) * -1);
-
-			Long GameObjectHash = Long.parseLong("" + gameObject.getId() + tile.getPlane()+ tile.getSceneLocation().getX() + tile.getSceneLocation().getY());
-
-			spawnedObjectHashes.add(GameObjectHash);
-
-			ObjectDefinition objDef = loadedObjDefinitions[objDefID];
-			int objDefModelIds[] = objDef.getModelIds();
-
-			if (objDefModelIds!= null) {
-				UnrealGameObject uGameObject = client.getUGameObjectsMap().get(GameObjectHash);
-				if (uGameObject != null) {
-					System.out.println("uGameObjectNotNull");
-					uGameObject.setWorldPoint(tileLocation);
-					uGameObject.setOrientation(orientation);
-					uGameObject.setLocalPosX(location.getX());
-					uGameObject.setLocalPosY(location.getY());
-					uGameObject.setLocalPosZ(tilePosZ);
-					if (gameObject.getRenderable2()!= null) {
-						uGameObject.setOrientationB(OrientationToAngles(gameObject.getOrientationB()));
-					}
-
-					client.getUGameObjectsMap().put(GameObjectHash, uGameObject);
-
-				}
-			}
-		}*/
 	}
 
 	@Subscribe
@@ -1797,7 +1758,6 @@ skills menu:__________
 			actorSpawnPacket.writeLong(tag);
 
 			sharedmem_rm.backBuffer.writePacket(actorSpawnPacket, "ActorDeSpawn");
-			//myRunnableSender.sendBytes(trimmedBufferBytes(actorSpawnPacket), "ActorDeSpawn");
 		});
 	}
 
@@ -1881,7 +1841,6 @@ skills menu:__________
 			actorSpawnPacket.writeShort(offsetY);
 
 			sharedmem_rm.backBuffer.writePacket(actorSpawnPacket, "ActorSpawn");
-			//myRunnableSender.sendBytes(trimmedBufferBytes(actorSpawnPacket), "ActorSpawn");
 		});
 	}
 
@@ -1953,9 +1912,6 @@ skills menu:__________
 	}
 
 
-	//private HashMap<Integer, Integer> VarbitObjDef_Map = new HashMap<Integer, Integer>();
-	//private HashMap<Integer, Integer> VarpObjDef_Map = new HashMap<Integer, Integer>();
-
 /*	private void mapVarbitsToObjDefs() {
 		int objDefCount = myCacheReader.getCacheFiles(IndexType.CONFIGS, ConfigType.OBJECT.getId()).size();
 		//System.out.println(objDefCount+" ObjDefs");
@@ -1992,7 +1948,7 @@ skills menu:__________
 		}
 	}*/
 
-	private HashMap<Integer, Integer> imposterToOriginal_Map = new HashMap<Integer, Integer>();
+	private final HashMap<Integer, Integer> imposterToOriginal_Map = new HashMap<Integer, Integer>();
 	@Subscribe
 	private void onVarbitChanged(VarbitChanged event) {
 
@@ -2217,7 +2173,7 @@ skills menu:__________
 			int objectOrientationB = 65535;
 			int objectDefinitionId = event.getGameObject().getId();//note when a gameobject spawns, the id relates to the untransformed/original objectdef.
 
-			if(objectDefinitionId == 12166) {
+/*			if(objectDefinitionId == 12166) {
 				System.out.println("12166 spawned");
 			}
 
@@ -2228,7 +2184,7 @@ skills menu:__________
 
 			if(objectDefinitionId == 144) {
 				System.out.println("gate GO spawned (id 144)");
-			}
+			}*/
 
 
 
@@ -2278,50 +2234,6 @@ skills menu:__________
 			actorSpawnPacket.writeShort(offsetY);
 
 			sharedmem_rm.backBuffer.writePacket(actorSpawnPacket, "ActorSpawn");
-			//myRunnableSender.sendBytes(trimmedBufferBytes(actorSpawnPacket), "ActorSpawn");
-
-
-	/*		Tile tile = gameObjectSpawned.getTile();
-			WorldPoint tilePos = tile.getWorldLocation();
-			int tilePosZ = ((Perspective.getTileHeight(client, tile.getLocalLocation(), tile.getPlane())) * -1);
-
-			int tileLocalHeight = ((Perspective.getTileHeight(client, tile.getLocalLocation(), tile.getPlane())) * -1);
-
-			int dist = playerWorldPos.distanceTo(tilePos);
-
-	//		if (dist < 15) {
-				GameObject gameObject = gameObjectSpawned.getGameObject();
-					Model gameObjectModel = gameObject.getModel();
-					if (gameObjectModel!=null) {
-						if (gameObjectModel.getTrianglesCount() > 0) {
-							if (gameObject.getSceneLocation().getY() == tilePos.getY() && gameObject.getSceneLocation().getX() == tilePos.getX()) { //this location check to to prevent getting the same object twice when it is scaled up over multiple squares
-							}
-							int orientation = (gameObject.getOrientation().getAngle() / 512) * 90;
-							int scale = gameObjectModel.getXYZMag();
-							int libMeshID = gameObject.getId();
-							int libMeshSubID = orientation;
-							LocalPoint location = gameObject.getLocalLocation();
-							int  locationX = location.getX();
-							int  locationY = location.getY();
-							String IDAndSubID = libMeshID+"_"+libMeshSubID;
-							instanceID = ("" + libMeshID + libMeshSubID + locationX + locationY + tilePosZ);
-
-
-							if (libMeshIDs.contains(libMeshID) == false) {
-								//myRunnable.sendMessage("2_" + ID + "_" + orientation + "_" + GetModelVertData(gameObjectModel));
-								sendLibMeshBytes(gameObjectModel, libMeshID, libMeshSubID, orientation);
-								libMeshIDs.add(IDAndSubID);
-							}
-
-							if (instanceIDs.contains(instanceID) == false) {
-								//myRunnable.sendMessage("3_" + ID + "_" + tileCoords + "_" + orientation);
-								sendGameObjectBytes(libMeshID,libMeshSubID,locationX,locationY,tilePosZ,orientation,scale,0,0,0);
-								instanceIDs.add(instanceID);
-							}
-						}
-					}
-
-			}*/
 		});
 	}
 
@@ -2356,7 +2268,6 @@ skills menu:__________
 			actorSpawnPacket.writeLong(tag);
 
 			sharedmem_rm.backBuffer.writePacket(actorSpawnPacket, "ActorDeSpawn");
-			//myRunnableSender.sendBytes(trimmedBufferBytes(actorSpawnPacket), "ActorDeSpawn");
 		});
 	}
 
@@ -2391,7 +2302,6 @@ skills menu:__________
 			actorSpawnPacket.writeLong(tag);
 
 			sharedmem_rm.backBuffer.writePacket(actorSpawnPacket, "ActorDeSpawn");
-			//myRunnableSender.sendBytes(trimmedBufferBytes(actorSpawnPacket), "ActorDeSpawn");
 		});
 	}
 
@@ -2471,7 +2381,6 @@ skills menu:__________
 			actorSpawnPacket.writeShort(offsetY);
 
 			sharedmem_rm.backBuffer.writePacket(actorSpawnPacket, "ActorSpawn");
-			//myRunnableSender.sendBytes(trimmedBufferBytes(actorSpawnPacket), "ActorSpawn");
 		});
 
 /*		counter1 = counter1+1;
@@ -2565,95 +2474,10 @@ skills menu:__________
 		moveMentSequenceFrames.put(actor, sequenceId);
 	}
 
-	@Subscribe
+/*	@Subscribe
 	private void onAnimationChanged(AnimationChanged event) {
-		//int actorId = event.getActor().getRSInteracting();
-/*		clientThread.invokeLater(() ->
-		{
-			clientThread.invokeLater(() ->
-			{
-				Buffer actorAnimChangePacket = new Buffer(new byte[20]);
 
-				int newAnimationID = -1;
-				int actorID = -1;
-				int actorType = -1;
-
-				int animation = event.getActor().getAnimation();
-
-				if ((event.getActor() instanceof NPC))
-				{
-					final NPC npc = (NPC) event.getActor();
-
-					//set spot, pose or normal sequence depending on which is not -1;
-					if (npc.getAnimation()!= -1) {
-						newAnimationID = npc.getAnimation();
-					}else {
-						if (npc.getPoseAnimation() != -1) {
-							if(npc.getPoseAnimation() !=  getLastFrameMovementSequence(npc)) {
-								newAnimationID = npc.getPoseAnimation();
-								setLastFrameMovementSequence(npc, npc.getPoseAnimation());
-							} else {
-								return;
-							}
-						}else
-						if (npc.getGraphic() != -1) {
-							newAnimationID = npc.getGraphic();
-						} else {
-							return;
-						}
-					}
-					setLastFrameMovementSequence(npc, newAnimationID);
-
-					//System.out.println("animationchange to: " + newAnimationID);
-
-					actorID = npc.getIndex();
-					actorType = 1;
-
-					actorAnimChangePacket.writeShort(newAnimationID);//write sequenceDef id;
-					actorAnimChangePacket.writeShort(actorID);//write actor id;
-					actorAnimChangePacket.writeByte(actorType); //write actor type. 1 = npc;
-					//Util.sleep(1);
-					myRunnableSender.sendBytes(trimmedBufferBytes(actorAnimChangePacket), "ActorAnimationChange");
-				} else {
-					if ((event.getActor() instanceof Player))
-					{
-						final Player player = (Player) event.getActor();
-
-						//set spot, pose or normal sequence depending on which is not -1;
-						if (player.getAnimation()!= -1) {
-							newAnimationID = player.getAnimation();
-						}else {
-							if (player.getPoseAnimation() != -1) {
-								if(player.getPoseAnimation() !=  getLastFrameMovementSequence(player)) {
-									newAnimationID = player.getPoseAnimation();
-									setLastFrameMovementSequence(player, player.getPoseAnimation());
-								} else {
-									return;
-								}
-							}else
-							if (player.getGraphic() != -1) {
-								newAnimationID = player.getGraphic();
-							} else {
-								return;
-							}
-						}
-						setLastFrameMovementSequence(player, newAnimationID);
-
-						//System.out.println("animationchange to: " + newAnimationID);
-
-						actorID = player.getPlayerId();
-						actorType = 2;
-
-						actorAnimChangePacket.writeShort(newAnimationID);//write sequenceDef id;
-						actorAnimChangePacket.writeShort(actorID);//write actor id;
-						actorAnimChangePacket.writeByte(actorType); //write actor type. 1 = npc;
-
-						myRunnableSender.sendBytes(trimmedBufferBytes(actorAnimChangePacket), "ActorAnimationChange");
-					}
-				}
-			});
-		});*/
-	}
+	}*/
 
 	@Subscribe
 	private void onItemSpawned(ItemSpawned event)
@@ -2685,7 +2509,6 @@ skills menu:__________
 			actorSpawnPacket.writeShort(itemQuantity);
 
 			sharedmem_rm.backBuffer.writePacket(actorSpawnPacket, "ActorSpawn");
-			//myRunnableSender.sendBytes(trimmedBufferBytes(actorSpawnPacket), "ActorSpawn");
 		});
 	}
 	@Subscribe
@@ -2711,7 +2534,6 @@ skills menu:__________
 
 			sharedmem_rm.backBuffer.writePacket(actorSpawnPacket, "ActorDeSpawn");
 		});
-		//myRunnableSender.sendBytes(trimmedBufferBytes(actorSpawnPacket), "ActorDeSpawn");
 	}
 
 	@Subscribe
@@ -2736,28 +2558,16 @@ skills menu:__________
 		}
 
 		if (!config.spawnNPCs()) { return; }
-		//clientThread.invokeAtTickEnd(() -> {
-			//clientThread.invokeLater(() -> {
-				//clientThread.invokeLater(() -> {
-					//clientThread.invokeLater(() -> {
-						//clientThread.invokeLater(() -> {
-							//clientThread.invokeLater(() -> {
-								Buffer actorSpawnPacket = new Buffer(new byte[100]);
 
-								int instanceId = event.getNpc().getIndex();
-								int definitionId = event.getNpc().getId();
-								actorSpawnPacket.writeByte(1); //write npc data type
-								actorSpawnPacket.writeShort(instanceId);
-								actorSpawnPacket.writeShort(definitionId);
-								//System.out.println("NPC Spawn kashjkasd");
-								sharedmem_rm.backBuffer.writePacket(actorSpawnPacket, "ActorSpawn");
-								//myRunnableSender.sendBytes(trimmedBufferBytes(actorSpawnPacket), "ActorSpawn");
-							//});
-						//});
-					//});
-				//});
-			//});
-		//});
+		Buffer actorSpawnPacket = new Buffer(new byte[100]);
+
+		int instanceId = event.getNpc().getIndex();
+		int definitionId = event.getNpc().getId();
+		actorSpawnPacket.writeByte(1); //write npc data type
+		actorSpawnPacket.writeShort(instanceId);
+		actorSpawnPacket.writeShort(definitionId);
+		//System.out.println("NPC Spawn kashjkasd");
+		sharedmem_rm.backBuffer.writePacket(actorSpawnPacket, "ActorSpawn");
 	}
 
 	@Subscribe
@@ -2780,29 +2590,6 @@ skills menu:__________
 
 		NpcSpawned spawnEvent = new NpcSpawned(event.getNpc());
 		onNpcSpawned(spawnEvent);
-
-		//clientThread.invokeLater(() -> {
-			//clientThread.invokeLater(() -> {
-				//clientThread.invokeLater(() -> {
-					//clientThread.invokeLater(() -> {
-						//clientThread.invokeLater(() -> {
-							//clientThread.invokeLater(() -> {
-/*								Buffer actorSpawnPacket = new Buffer(new byte[100]);
-
-								int instanceId = event.getNpc().getIndex();
-								int definitionId = event.getNpc().getId();
-								actorSpawnPacket.writeByte(1); //write npc data type
-								actorSpawnPacket.writeShort(instanceId);
-								actorSpawnPacket.writeShort(definitionId);
-								System.out.println("NPC Change kashjkasd");
-								sharedmem_rm.backBuffer.writePacket(actorSpawnPacket, "ActorSpawn");*/
-								//myRunnableSender.sendBytes(trimmedBufferBytes(actorSpawnPacket), "ActorSpawn");
-							//});
-						//});
-					//});
-				//});
-			//});
-		//});
 	}
 
 	@Subscribe
@@ -2821,7 +2608,6 @@ skills menu:__________
 			//write bogus packet so len is more than 1
 
 			sharedmem_rm.backBuffer.writePacket(actorSpawnPacket, "ActorDeSpawn");
-			//myRunnableSender.sendBytes(trimmedBufferBytes(actorSpawnPacket), "ActorDeSpawn");
 		//});
 	}
 
@@ -2859,7 +2645,6 @@ skills menu:__________
 
 		//System.out.println("player change id: "+InstanceId);
 		sharedmem_rm.backBuffer.writePacket(actorSpawnPacket, "ActorSpawn");
-		//myRunnableSender.sendBytes(trimmedBufferBytes(actorSpawnPacket), "ActorSpawn");
 	}
 
 /*	@Subscribe
@@ -2895,7 +2680,6 @@ skills menu:__________
 		actorSpawnPacket.writeInt(-1); //npcTransformID //temp
 
 		System.out.println("player compositionChange. id: "+InstanceId);
-		myRunnableSender.sendBytes(trimmedBufferBytes(actorSpawnPacket), "ActorSpawn");
 	}*/
 
 
@@ -2954,7 +2738,6 @@ skills menu:__________
 
 		System.out.println("player spawn. id: "+InstanceId);
 		sharedmem_rm.backBuffer.writePacket(actorSpawnPacket, "ActorSpawn");
-		//myRunnableSender.sendBytes(trimmedBufferBytes(actorSpawnPacket), "ActorSpawn");
 	}
 
 	@Subscribe
@@ -2966,7 +2749,6 @@ skills menu:__________
 		actorSpawnPacket.writeShort(instanceId);
 
 		sharedmem_rm.backBuffer.writePacket(actorSpawnPacket, "ActorDeSpawn");
-		//myRunnableSender.sendBytes(trimmedBufferBytes(actorSpawnPacket), "ActorDeSpawn");
 	}
 
 	@Subscribe
@@ -2981,7 +2763,6 @@ skills menu:__________
 		Buffer buffer = new Buffer(new byte[4]);
 		buffer.writeByte(clientPlane);
 		sharedmem_rm.backBuffer.writePacket(buffer, "PlaneChanged");
-		//myRunnableSender.sendBytes(buffer.array, "PlaneChanged");
 	}
 
 
@@ -3008,8 +2789,18 @@ skills menu:__________
 	volatile int rsUiPosX = 0;
 	volatile int rsUiPosY = 0;
 
+	float getDpiScalingFactor() {
+		final GraphicsConfiguration graphicsConfiguration = clientUI.getGraphicsConfiguration();
+		final AffineTransform t = graphicsConfiguration.getDefaultTransform();
+		return (float)t.getScaleX();
+
+/*		int dpi = Toolkit.getDefaultToolkit().getScreenResolution();
+		double scalingFactor = dpi / 96.0; // 96 DPI is the standard
+		return (float) scalingFactor;*/
+	}
+
 	private void UpdateUiPosOffsets() { //sets the pos offsets, using swing thread, to avoid crash.
-		float dpiScalingFactor = Toolkit.getDefaultToolkit().getScreenResolution() / 96.0f; // 96 DPI is the standard
+		float dpiScalingFactor = getDpiScalingFactor(); // 96 DPI is the standard
 
 		rsUiPosOffsetX =  Math.round(dpiScalingFactor*(client.getCanvas().getParent().getLocationOnScreen().x-client.getCanvas().getLocationOnScreen().x)*-1);
 		rsUiPosOffsetY =  Math.round(dpiScalingFactor*(client.getCanvas().getParent().getLocationOnScreen().y-client.getCanvas().getLocationOnScreen().y)*-1);
@@ -3019,8 +2810,13 @@ skills menu:__________
 		//rsUiPosOffsetY*=dpiScalingFactor;
 	}
 
-
+/*	int View3dSizeX_prev;
+	int View3dSizeY_prev;
+	int View3dOffsetX_prev;
+	int View3dOffsetY_prev;*/
 	private void UpdateSharedMemoryUiPixels() {
+		//if(client.getGameCycle() %200 != 0) {return;}
+		sharedmem_rm.myKernel32.ResetEvent(sharedmem_rm.EventViewportPixelsReady);
 		log_Timed_Verbose("_UpdateSharedMemoryUiPixels_0");
 		if(client.getDrawCallbacks() == null) {return;}
 		if(sharedmem_rm == null) {return;}
@@ -3035,7 +2831,7 @@ skills menu:__________
 		sharedmem_rm.setInt(30000000, bufferWidth);
 		sharedmem_rm.setInt(30000005, bufferHeight);
 
-		float dpiScalingFactor = Toolkit.getDefaultToolkit().getScreenResolution() / 96.0f; // 96 DPI is the standard
+		float dpiScalingFactor = getDpiScalingFactor(); // 96 DPI is the standard
 
 		float ratioX = 1;
 		float ratioY = 1;
@@ -3049,20 +2845,23 @@ skills menu:__________
 		sharedmem_rm.setInt(30000010, rsUiPosOffsetX);
 		sharedmem_rm.setInt(30000015, rsUiPosOffsetY);
 
+
+
+
 		//3d viewport size
 		float View3dSizeX = client.getViewportWidth();
-		boolean onLoginScreen = client.getGameState() == GameState.LOGIN_SCREEN || client.getGameState() == GameState.LOGGING_IN || client.getGameState() == GameState.LOGIN_SCREEN_AUTHENTICATOR;
+		boolean onLoginScreen = client.getGameState() == GameState.STARTING || client.getGameState() == GameState.LOGIN_SCREEN || client.getGameState() == GameState.LOGGING_IN || client.getGameState() == GameState.LOGIN_SCREEN_AUTHENTICATOR;
 		View3dSizeX*=dpiScalingFactor;
 		View3dSizeX*=ratioX;
 		if(onLoginScreen) { //when we first arrive on login screen, viewport is 0 width because it is uninitialized. In such cases, I am using the canvas dimensions instead.
-			View3dSizeX = client.getCanvas().getParent().getWidth();
+			View3dSizeX = client.getCanvas().getParent().getWidth()*dpiScalingFactor;
 		}
 
 		float View3dSizeY = client.getViewportHeight();
 		View3dSizeY*=dpiScalingFactor;
 		View3dSizeY*=ratioY;
 		if(onLoginScreen) { //when we first arrive on login screen, viewport is 0 width because it is uninitialized. In such cases, I am using the canvas dimensions instead.
-			View3dSizeY = client.getCanvas().getParent().getHeight();
+			View3dSizeY = client.getCanvas().getParent().getHeight()*dpiScalingFactor;
 		}
 
 		sharedmem_rm.setInt(30000020,  Math.round(View3dSizeX));
@@ -3088,6 +2887,26 @@ skills menu:__________
 		sharedmem_rm.setInt(30000030, Math.round(View3dOffsetX));
 		sharedmem_rm.setInt(30000035, Math.round(View3dOffsetY));
 
+/*		if(View3dSizeX_prev != View3dSizeX || View3dSizeY_prev != View3dSizeY || View3dOffsetX_prev != View3dOffsetX || View3dOffsetY_prev != View3dOffsetY) {
+			View3dSizeX_prev = Math.round(View3dSizeX);
+			View3dSizeY_prev = Math.round(View3dSizeY);
+
+			View3dOffsetX_prev = Math.round(View3dOffsetX);
+			View3dOffsetY_prev = Math.round(View3dOffsetY);
+
+			Buffer packet = new Buffer(new byte[18]);
+			packet.writeInt(View3dSizeX_prev);
+			packet.writeInt(View3dSizeY_prev);
+			System.out.println("viewSizeX = "+View3dSizeX_prev);
+			System.out.println("viewSizeY = "+View3dSizeY_prev);
+
+			packet.writeInt(View3dOffsetX_prev);
+			packet.writeInt(View3dOffsetY_prev);
+			System.out.println("View3dOffsetX = "+View3dOffsetX_prev);
+			System.out.println("viewOffsetY = "+View3dOffsetY_prev);
+			sharedmem_rm.backBuffer.writePacket(packet, "WindowUpdate");
+		}*/
+
 		//Size of ui. Can differ from buffer size because of stretchmode.
 		float canvasSizeX = client.getCanvasWidth();
 		canvasSizeX*=dpiScalingFactor;
@@ -3098,7 +2917,9 @@ skills menu:__________
 		sharedmem_rm.setInt(30000040, Math.round(canvasSizeX));
 		sharedmem_rm.setInt(30000045, Math.round(canvasSizeY));
 
-		sharedmem_rm.SharedMemoryData.write(30000050, bufferProvider.getPixels(),0, bufferProvider.getHeight()*bufferProvider.getWidth());
+		//sharedmem_rm.SharedMemoryData.write(30000060, bufferProvider.getPixels(),0, bufferProvider.getHeight()*bufferProvider.getWidth());
+		sharedmem_rm.SharedMemoryData.write(30000060, bufferProvider.getPixels(),0, bufferProvider.getHeight()*bufferProvider.getWidth());
+		sharedmem_rm.myKernel32.SetEvent(sharedmem_rm.EventViewportPixelsReady);
 		log_Timed_Verbose("_UpdateSharedMemoryUiPixels_1");
 	}
 
@@ -3228,7 +3049,8 @@ skills menu:__________
 		if(client.getGameState() == GameState.LOGIN_SCREEN || curGamestate == GameState.LOGIN_SCREEN_AUTHENTICATOR) {
 			if (client.getGameCycle()%20 == 0) {
 				//constantly resize canvas in order to force it to repaint, so as to keep transparency
-				SwingUtilities.invokeLater(() -> {client.resizeCanvas();});
+				//SwingUtilities.invokeLater(() -> {});
+				client.resizeCanvas();
 			}
 		}
 

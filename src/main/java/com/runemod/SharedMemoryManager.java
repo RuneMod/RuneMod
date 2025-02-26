@@ -7,9 +7,7 @@ import com.sun.jna.ptr.IntByReference;
 import com.sun.jna.win32.W32APIOptions;
 import lombok.SneakyThrows;
 
-import javax.swing.*;
 import java.awt.*;
-import java.awt.image.BufferedImage;
 import java.lang.management.ManagementFactory;
 
 import static com.sun.jna.platform.win32.WinBase.INFINITE;
@@ -18,16 +16,22 @@ import static com.sun.jna.platform.win32.WinNT.PAGE_READWRITE;
 
 public class SharedMemoryManager
 {
-	private final MyKernel32 myKernel32;
-	private WinNT.HANDLE SharedMemoryMutex;
+	public final MyKernel32 myKernel32;
+	//private WinNT.HANDLE SharedMemoryMutex;
 
 	public WinNT.HANDLE RuneliteMutex;
 	public WinNT.HANDLE UnrealMutex;
+	public WinNT.HANDLE BallMutex;
+
+	public WinNT.HANDLE EventRlDataReady;
+	public WinNT.HANDLE EventUeDataReady;
+
+	public WinNT.HANDLE EventViewportPixelsReady;
 
 	public Pointer SharedMemoryData;
-	public Pointer SharedMemoryData_ViewPort;
+	//public Pointer SharedMemoryData_ViewPort;
 	private WinNT.HANDLE SharedMemoryHandle;
-	private WinNT.HANDLE SharedMemoryHandle_ViewPort;
+	//private WinNT.HANDLE SharedMemoryHandle_ViewPort;
 	String SharedMemoryName = "";
 	static byte TerminatingPacketOpCode = 1;
 	Buffer backBuffer; //used to write packets while shared memory is unavailable
@@ -103,7 +107,7 @@ public class SharedMemoryManager
 		//SharedMemoryData.setInt(0, sharedMemorySize); //first 4 bytes contain sharedMemoryDataSize
 	}
 
-	public void createSharedMemory_ViewPort(String sharedMemoryName, int sharedMemorySize)
+/*	public void createSharedMemory_ViewPort(String sharedMemoryName, int sharedMemorySize)
 	{
 		System.out.println("Created Shared Memory: "+sharedMemoryName + "Size: " + (float)sharedMemorySize/1000000.0 + "MB");
 		//SharedMemoryName = sharedMemoryName;
@@ -124,122 +128,25 @@ public class SharedMemoryManager
 
 		if (SharedMemoryData_ViewPort == null) return;
 		//SharedMemoryData.setInt(0, sharedMemorySize); //first 4 bytes contain sharedMemoryDataSize
+	}*/
+
+	public boolean CreateNamedEvents() {
+		EventRlDataReady = Kernel32.INSTANCE.CreateEvent(null, true, false, "Global\\RlDataReadyEvent");
+		EventUeDataReady = Kernel32.INSTANCE.CreateEvent(null, true, false, "Global\\UeDataReadyEvent");
+		EventViewportPixelsReady = Kernel32.INSTANCE.CreateEvent(null, true, false, "Global\\ViewportPixelsReadyEvent");
+
+		return true;
 	}
-
-	public boolean CreateMutexes() {
-		RuneliteMutex = myKernel32.CreateMutex(null,
-				true,
-				"RuneliteMutexRM");
-		if (RuneliteMutex == null) {
-			throw new Win32Exception(myKernel32.GetLastError());
-			//return false;
-		} else {
-			System.out.println("Created RuneliteMutex");
-			myKernel32.ReleaseMutex(RuneliteMutex); //release the mutex
-		}
-
-		UnrealMutex = myKernel32.CreateMutex(null,
-				true,
-				"UnrealMutexRM");
-		if (UnrealMutex == null) {
-			throw new Win32Exception(myKernel32.GetLastError());
-			//return false;
-		} else {
-			System.out.println("Created UnrealMutex");
-			myKernel32.ReleaseMutex(UnrealMutex); //release the mutex
-		}
-
-
-
-		//System.out.println("creating mutex");
-		SharedMemoryMutex = myKernel32.CreateMutex(null,
-				true,
-				SharedMemoryName+"MUTEX");
-		if (SharedMemoryMutex == null) {
-			throw new Win32Exception(myKernel32.GetLastError());
-			//return false;
-		} else {
-			//System.out.println("Created Mutex");
-			UnlockMutex(); //release the mutex
-			return true;
-		}
-	}
-
-	boolean AwaitUnrealMutex_Locked(long timeOutMs) {
-		long awaitStart = System.nanoTime();
-		while(true) {
-			int val = myKernel32.WaitForSingleObject(UnrealMutex,0); //if aquired lock
-			boolean aquiredLock = val == 0;
-			if(aquiredLock == false) { //if failed, means is already locked;
-				RuneModPlugin.log_Timed_Verbose("AwaitUnrealMutex_Locked val = " + val);
-				return true;
-				//break;
-			} else {
-				myKernel32.ReleaseMutex(UnrealMutex);
-				waitNanos(40000);
-				if (System.nanoTime()-awaitStart > timeOutMs*1000000 || RuneModPlugin.isShutDown) { //if waited more than timeout, or runemod plugin has shutdown, abort  waiting
-					return false;
-				}
-			}
-		}
-	}
-
-	void AwaitUnrealMutex_UnLocked() {
-			int val = myKernel32.WaitForSingleObject(UnrealMutex, INFINITE);
-			RuneModPlugin.log_Timed_Verbose("AwaitUnrealMutex_UnLocked val = " + val);
-			boolean val_b = myKernel32.ReleaseMutex(UnrealMutex);
-			RuneModPlugin.log_Timed_Verbose("AwaitUnrealMutex_UnLocked val_b = " + val);
-	}
-
-	void LockRuneliteMutex() {
-		int val = myKernel32.WaitForSingleObject(RuneliteMutex, INFINITE); //if aquired lock
-		RuneModPlugin.log_Timed_Verbose("LockRuneliteMutex val = " + val);
-	}
-
-	void UnLockRuneliteMutex() {
-		boolean val_b = myKernel32.ReleaseMutex(RuneliteMutex);
-		RuneModPlugin.log_Timed_Verbose("UnLockRuneliteMutex val_b = " + val_b);
-	}
-
-	public Boolean LockMutex()
-	{
-		if (SharedMemoryMutex!=null)
-		{
-			int result = myKernel32.WaitForSingleObject(SharedMemoryMutex,10);
-
-			if (result >= 10)
-			{
-				//System.out.println("Lock mutex timeout");
-				return false;
-			} else {
-				//System.out.println("Acquired MutexLock");
-				return true;
-			}
-		} else {
-			//System.out.println("Mutex Isnt Valid");
-			return false;
-		}
-	}
-
-	public void UnlockMutex()
-	{
-		if (SharedMemoryMutex!=null)
-		{
-			myKernel32.ReleaseMutex(SharedMemoryMutex);
-			//System.out.println("Released MutexLock");
-		}
-	}
-
 
 	public void CloseSharedMemory()
 	{
 		setByte(SharedMemoryDataSize -1, (byte)0); //last byte defines DataType; 2 = unrealdata. 1 = rsdata. on close, set this to 0 so unreal can run without crash
-		if (SharedMemoryMutex != null)
+/*		if (SharedMemoryMutex != null)
 		{
-			UnlockMutex();
+			//UnlockMutex();
 			myKernel32.CloseHandle(SharedMemoryMutex);
 			SharedMemoryMutex = null;
-		}
+		}*/
 
 		if (UnrealMutex != null)
 		{
@@ -267,17 +174,17 @@ public class SharedMemoryManager
 			SharedMemoryHandle = null;
 		}
 
-		if (SharedMemoryHandle_ViewPort != null)
+/*		if (SharedMemoryHandle_ViewPort != null)
 		{
 			myKernel32.CloseHandle(SharedMemoryHandle_ViewPort);
 			SharedMemoryHandle_ViewPort = null;
-		}
+		}*/
 
-		if (SharedMemoryData_ViewPort != null)
+/*		if (SharedMemoryData_ViewPort != null)
 		{
 			myKernel32.UnmapViewOfFile(SharedMemoryData_ViewPort);
 			SharedMemoryData_ViewPort = null;
-		}
+		}*/
 	}
 
 	public void transferBackBufferToSharedMem() {
@@ -330,11 +237,6 @@ public class SharedMemoryManager
 		}
 	}
 
-	public boolean runeModWindowsExist() {
-		WinDef.HWND RuneModWin = User32.INSTANCE.FindWindow(null, "RuneModWin");
-		return User32.INSTANCE.IsWindow(RuneModWin);
-	}
-
 	public WinDef.HWND findRuneModWindow() {
 		WinDef.HWND handle = User32.INSTANCE.FindWindow(null,"RuneModWin");
 		if(User32.INSTANCE.IsWindow(handle)) {
@@ -346,7 +248,7 @@ public class SharedMemoryManager
 		}
 	}
 
-	private static WinDef.HWND findWindowByProcessId(int processId) {
+/*	private static WinDef.HWND findWindowByProcessId(int processId) {
 		User32 user32 = User32.INSTANCE;
 		WinDef.HWND hwnd = user32.GetForegroundWindow();
 		user32.EnumWindows((hWnd, arg) -> {
@@ -361,9 +263,9 @@ public class SharedMemoryManager
 			return true; // Continue enumeration
 		}, null);
 		return hwnd;
-	}
+	}*/
 
-	public WinDef.HWND getSelfHWND() {
+/*	public WinDef.HWND getSelfHWND() {
 		String processName = ManagementFactory.getRuntimeMXBean().getName();
 		String pid = processName.split("@")[0]; // Extract PID
 		int targetProcessId = Integer.parseInt(pid); // Replace with your target process ID
@@ -381,15 +283,15 @@ public class SharedMemoryManager
 		int exStyle = User32.INSTANCE.GetWindowLong(hwnd, WinUser.GWL_EXSTYLE);
 		User32.INSTANCE.SetWindowLong(hwnd, WinUser.GWL_EXSTYLE, exStyle | WinUser.WS_EX_LAYERED | WinUser.WS_EX_TRANSPARENT);
 		//User32.INSTANCE.SetLayeredWindowAttributes(hwnd, 0, (byte)255, WinUser.LWA_ALPHA);
-	}
+	}*/
 
 	public WinDef.HWND RuneModHandle = null;
 
-	public boolean isChilded = false;
+	public boolean RmWinIsChilded = false;
 	public boolean ChildRuneModWinToRl() {
 		if(!runeModPlugin.config.attachRmWindowToRL()) {return false;}
 
-		if(isChilded) {return true;}
+		if(RmWinIsChilded) {return true;}
 
 		if(RuneModHandle == null) { RuneModHandle = findRuneModWindow(); }
 		if (RuneModHandle == null) { return false; }
@@ -400,26 +302,26 @@ public class SharedMemoryManager
 		WinDef.HWND mainFrameComponentHandle = new WinDef.HWND(Native.getComponentPointer(runeModPlugin.client.getCanvas().getParent()));
 
 		User32.INSTANCE.SetParent(RuneModHandle, mainFrameComponentHandle);
-		isChilded = true;
+		RmWinIsChilded = true;
+
 		RuneModPlugin.toggleRuneModLoadingScreen(false);
 
 		WinDef.HWND rmControls = User32.INSTANCE.FindWindow(null,"RuneModControls");
 
 		//User32.INSTANCE.SetWindowLongPtr(rmControls, User32.GWL_HWNDPARENT, RuneModHandle.getPointer());
 		//bring rm controls to front. if we dotn tdo this, rm controls dont appear at front until we reactivate rl win
-		User32.INSTANCE.SetWindowPos(rmControls, User32.INSTANCE.GetWindow(mainFrameComponentHandle, new WinDef.DWORD(User32.GW_HWNDPREV)), 0, 0, 0, 0,  User32.SWP_NOMOVE | User32.SWP_NOSIZE | User32.SWP_FRAMECHANGED);
+		User32.INSTANCE.SetWindowPos(rmControls, User32.INSTANCE.GetWindow(mainFrameComponentHandle, new WinDef.DWORD(User32.GW_HWNDPREV)), 0, 0, 0, 0, User32.SWP_NOACTIVATE | User32.SWP_NOMOVE | User32.SWP_NOSIZE | User32.SWP_FRAMECHANGED);
 
 		return true;
 	}
 
 	public void UnChildRuneModWinFromRl() {
-
 		System.out.println("UnChildingRuneModWindowToRL");
 		if(!RuneModPlugin.unrealIsReady) {return;}
 		System.out.println("UnChildingRuneModWindowToRL .");
 		if(runeModPlugin.config.attachRmWindowToRL()) {return;}
 		System.out.println("UnChildingRuneModWindowToRL ..");
-		if(!isChilded) {return;}
+		if(!RmWinIsChilded) {return;}
 		System.out.println("UnChildingRuneModWindowToRL ...");
 		if(RuneModHandle == null) { RuneModHandle = findRuneModWindow(); }
 		if (RuneModHandle == null) { return;}
@@ -427,7 +329,7 @@ public class SharedMemoryManager
 		System.out.println("UnChildingRuneModWindowToRL ....");
 
 		User32.INSTANCE.SetParent(RuneModHandle, null);
-		isChilded = false;
+		RmWinIsChilded = false;
 	}
 
 	void checkIsRsData() {
@@ -440,7 +342,7 @@ public class SharedMemoryManager
 	boolean checkIsUnrealData() {
 		byte dataType = SharedMemoryData.getByte(SharedMemoryDataSize-1); //last byte defines DataType; 2 = unrealdata. 1 = rsdata
 		if(dataType!=2) {
-			System.out.println("is not unreal data. dataType is " + dataType);
+			//System.out.println("is not unreal data. dataType is " + dataType);
 			return false;
 		}
 		return true;
@@ -457,7 +359,7 @@ public class SharedMemoryManager
 		int canvasSizeX = parent.getWidth();
 		int canvasSizeY = parent.getHeight();
 
-		float dpiScalingFactor = Toolkit.getDefaultToolkit().getScreenResolution() / 96.0f; // 96 DPI is the standard
+		float dpiScalingFactor = runeModPlugin.getDpiScalingFactor(); // 96 DPI is the standard
 
 		// Adjust position and size based on DPI scaling
 		//canvasPosX = Math.round(canvasPosX * dpiScalingFactor);
@@ -473,8 +375,8 @@ public class SharedMemoryManager
 
 		//JFrame window = (JFrame) SwingUtilities.getWindowAncestor(runeModPlugin.client.getCanvas());
 		//WinDef.HWND RLHandle = User32.INSTANCE.FindWindow("SunAwtFrame",window.getTitle());
-
-		User32.INSTANCE.SetWindowPos(RuneModHandle, null, canvasPosX, canvasPosY, canvasSizeX, canvasSizeY, 0);
+		User32.INSTANCE.SetWindowPos(RuneModHandle, null, canvasPosX, canvasPosY, canvasSizeX, canvasSizeY, User32.SWP_NOACTIVATE);
+		User32.INSTANCE.SetWindowPos(RuneModHandle, null, canvasPosX, canvasPosY, canvasSizeX, canvasSizeY, User32.SWP_NOACTIVATE);
 	}
 
 	public int gameCycle_Unreal = -1;
@@ -575,7 +477,7 @@ public class SharedMemoryManager
 
 	public void passRsDataToUnreal() { //writes dataLength metadata, and releases lock
 		writeTerminatingPacket();
-		UnlockMutex();
+		//UnlockMutex();
 		//System.out.println("Finished Rs Data, unreal may now do its thing, will await unreal data.");
 	}
 

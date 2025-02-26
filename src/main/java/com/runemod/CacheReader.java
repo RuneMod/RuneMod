@@ -28,7 +28,9 @@ public class CacheReader {
 
     public CacheReader() {
         try {
-            store = new Store(new File(RUNELITE_DIR + "\\jagexcache\\oldschool\\LIVE"));
+            String cachePath = RUNELITE_DIR + "\\jagexcache\\oldschool\\LIVE";
+            store = new Store(new File(cachePath));
+            System.out.println("cachePath: " + cachePath);
             store.load();
             System.out.println("cache contains" + store.getIndexes().size() + "indexs");
         } catch (IOException e) {
@@ -56,19 +58,35 @@ public class CacheReader {
         return index.toIndexData().getArchives().length;
     }
 
+    public void printRevs() {
+        List<Index> indexes = store.getIndexes();
+        int[] hashes = new int[indexes.size()];
+        for(Index index : indexes) {
+            hashes[index.getId()] = index.getCrc();
+            //System.out.println("index "+index.getId() + " crc32 hash is "+index.getCrc());
+            System.out.println("index "+index.getId() + " Rev is "+index.getRevision());
+
+/*            for(Archive archive : index.getArchives()) {
+                System.out.println("archive "+archive.getArchiveId() + " Rev is "+archive.getRevision());
+            }*/
+        }
+    }
+
     public int[] provideRsCacheHashes() {
             List<Index> indexes = store.getIndexes();
             int[] hashes = new int[indexes.size()];
             for(Index index : indexes) {
-                hashes[index.getId()] = index.getCrc();
-                System.out.println("index "+index.getId() + " crc32 hash is "+index.getCrc());
+                //hashes[index.getId()] = index.getCrc();
+                //System.out.println("index "+index.getId() + " crc32 hash is "+index.getCrc());
+                hashes[index.getId()] = index.getRevision(); //moved to rev system instead of crc.
+                System.out.println("index "+index.getId() + " rev is "+index.getCrc());
             }
 
             Buffer mainBuffer = new Buffer(new byte[(hashes.length*4)+12]);
             mainBuffer.writeInt_Array(hashes, hashes.length);
             RuneModPlugin.sharedmem_rm.backBuffer.writePacket(mainBuffer, "RsCacheHashesProvided");
 
-            System.out.println("RsCacheHashes have been provided To Unreal");
+            System.out.println("RsCacheHashes/Revs have been provided To Unreal");
             return hashes;
     }
 
