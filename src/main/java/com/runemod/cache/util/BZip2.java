@@ -38,11 +38,11 @@ public class BZip2
 	private static final Logger logger = LoggerFactory.getLogger(BZip2.class);
 
 	private static final byte[] BZIP_HEADER = new byte[]
-	{
-		'B', 'Z', // magic
-		'h',      // 'h' for Bzip2 ('H'uffman coding)
-		'1'       // block size
-	};
+		{
+			'B', 'Z', // magic
+			'h',      // 'h' for Bzip2 ('H'uffman coding)
+			'1'       // block size
+		};
 
 	public static byte[] compress(byte[] bytes) throws IOException
 	{

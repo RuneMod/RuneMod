@@ -40,7 +40,7 @@ public class Index
 {
 	@Getter
 	private final int id;
-
+	private final List<Archive> archives = new ArrayList<>();
 	@Setter
 	@Getter
 	private int protocol = 6;
@@ -59,8 +59,6 @@ public class Index
 	@Setter
 	@Getter
 	private int compression; // compression method of this index's data in 255
-
-	private final List<Archive> archives = new ArrayList<>();
 
 	public Index(int id)
 	{

@@ -42,412 +42,27 @@ import static com.sun.jna.platform.win32.WinNT.PAGE_READWRITE;
 @Slf4j
 public class SharedMemoryManager
 {
+	static byte TerminatingPacketOpCode = 1;
 	public final MyKernel32 myKernel32;
-
 	public WinNT.HANDLE EventRlDataReady;
 	public WinNT.HANDLE EventUeDataReady;
-
 	public WinNT.HANDLE EventViewportPixelsReady;
-
 	public Pointer SharedMemoryData;
-	private WinNT.HANDLE SharedMemoryHandle;
-
+	public WinDef.HWND RuneModHandle = null;
+	public boolean RmWinIsChilded = false;
+	public int gameCycle_Unreal = -1;
 	String SharedMemoryName = "";
-	static byte TerminatingPacketOpCode = 1;
 	Buffer backBuffer; //used to write packets while shared memory is unavailable
-	private RuneModPlugin runeModPlugin;
-
 	int SharedMemoryDataSize = 0;
 	int Offset;
-
-	public interface MyKernel32 extends Kernel32
-	{
-		MyKernel32 INSTANCE = (MyKernel32) Native.loadLibrary("kernel32", MyKernel32.class, W32APIOptions.DEFAULT_OPTIONS);
-	}
+	volatile boolean curRmWindowVisibility = true;
+	private WinNT.HANDLE SharedMemoryHandle;
+	private final RuneModPlugin runeModPlugin;
 
 	public SharedMemoryManager(RuneModPlugin runeModPlugin_)
 	{
 		runeModPlugin = runeModPlugin_;
 		myKernel32 = MyKernel32.INSTANCE;
-	}
-
-	public void setInt(int offset, int anInt)
-	{
-		SharedMemoryData.setByte(0 + offset, (byte) (anInt >> 24));
-		SharedMemoryData.setByte(1 + offset, (byte) (anInt >> 16));
-		SharedMemoryData.setByte(2 + offset, (byte) (anInt >> 8));
-		SharedMemoryData.setByte(3 + offset, (byte) (anInt));
-	}
-
-	public void setMedium(int offset, int anInt)
-	{
-		SharedMemoryData.setByte(0 + offset, (byte) (anInt >> 16));
-		SharedMemoryData.setByte(1 + offset, (byte) (anInt >> 8));
-		SharedMemoryData.setByte(2 + offset, (byte) (anInt));
-	}
-
-	public int getMedium(int offset)
-	{
-		return ((SharedMemoryData.getByte(offset + 0) & 255) << 16) + (SharedMemoryData.getByte(offset + 2) & 255) + ((SharedMemoryData.getByte(offset + 1) & 255) << 8);
-	}
-
-	public void setByte(int offset, byte anInt)
-	{
-		SharedMemoryData.setByte(0 + offset, anInt);
-	}
-
-	public void createSharedMemory(String sharedMemoryName, int sharedMemorySize)
-	{
-		log.debug("Creating Shared Memory: " + sharedMemoryName + "Size: " + (float) sharedMemorySize / 1000000.0 + "MB");
-
-		SharedMemoryHandle = myKernel32.CreateFileMapping(INVALID_HANDLE_VALUE,
-			null, PAGE_READWRITE,
-			0,
-			sharedMemorySize,
-			sharedMemoryName);
-
-		if (SharedMemoryHandle == null)
-		{
-			return;
-		}
-
-		SharedMemoryData = myKernel32.MapViewOfFile(SharedMemoryHandle,
-			0x001f,
-			0, 0,
-			sharedMemorySize);
-
-		if (SharedMemoryData == null)
-		{
-			return;
-		}
-
-		SharedMemoryName = sharedMemoryName;
-		SharedMemoryDataSize = sharedMemorySize;
-
-		backBuffer = new Buffer(new byte[10000000]); //10mb backbuffer.
-		log.debug("Created backbuffer with Size: " + (float) 10000000 / 1000000.0 + "MB");
-	}
-
-	public boolean CreateNamedEvents()
-	{
-		EventRlDataReady = Kernel32.INSTANCE.CreateEvent(null, true, false, "Global\\RlDataReadyEvent");
-		EventUeDataReady = Kernel32.INSTANCE.CreateEvent(null, true, false, "Global\\UeDataReadyEvent");
-		EventViewportPixelsReady = Kernel32.INSTANCE.CreateEvent(null, true, false, "Global\\ViewportPixelsReadyEvent");
-
-		return true;
-	}
-
-	public void CloseSharedMemory()
-	{
-		setByte(SharedMemoryDataSize - 1, (byte) 0); //last byte defines DataType; 2 = unrealdata. 1 = rsdata. setting it to 0 because it is now neither, since it is closed.
-
-		if (SharedMemoryData != null)
-		{
-			myKernel32.UnmapViewOfFile(SharedMemoryData);
-			SharedMemoryData = null;
-		}
-
-		if (SharedMemoryHandle != null)
-		{
-			myKernel32.CloseHandle(SharedMemoryHandle);
-			SharedMemoryHandle = null;
-		}
-	}
-
-	public void transferBackBufferToSharedMem()
-	{
-		int backBufferLength = backBuffer.offset;
-		SharedMemoryData.write(0, backBuffer.array, 0, backBufferLength);
-		Offset += backBufferLength;
-		clearBackBuffer();
-	}
-
-	public void clearBackBuffer()
-	{
-		backBuffer.reset();
-	}
-
-	volatile boolean curRmWindowVisibility = true;
-
-	public void setRuneModVisibility(boolean visibility)
-	{
-		if (!RuneModPlugin.unrealIsReady)
-		{
-			return;
-		}
-		if (curRmWindowVisibility == visibility)
-		{
-			return;
-		}
-
-		log.debug("SettingRmWindowVisibility to " + visibility);
-		curRmWindowVisibility = visibility;
-		if (visibility)
-		{
-			User32.INSTANCE.ShowWindow(RuneModHandle, WinUser.SW_SHOWNOACTIVATE);
-		}
-		else
-		{
-			User32.INSTANCE.ShowWindow(RuneModHandle, WinUser.SW_HIDE);
-		}
-	}
-
-	public WinDef.HWND findRuneModWindow()
-	{
-		WinDef.HWND handle = User32.INSTANCE.FindWindow(null, "RuneModWin");
-		if (User32.INSTANCE.IsWindow(handle))
-		{
-			log.debug("found runemod window");
-			return handle;
-		}
-		else
-		{
-			log.debug("runemod window not yet found");
-			return null;
-		}
-	}
-
-	public WinDef.HWND RuneModHandle = null;
-
-	public boolean RmWinIsChilded = false;
-
-	public boolean ChildRuneModWinToRl()
-	{
-		if (!runeModPlugin.config.attachRmWindowToRL())
-		{
-			return false;
-		}
-
-		if (RmWinIsChilded)
-		{
-			return true;
-		}
-
-		if (RuneModHandle == null)
-		{
-			RuneModHandle = findRuneModWindow();
-		}
-		if (RuneModHandle == null)
-		{
-			return false;
-		}
-
-		log.debug("ChildingRuneModWindowToRL ...");
-
-		WinDef.HWND mainFrameComponentHandle = new WinDef.HWND(Native.getComponentPointer(runeModPlugin.client.getCanvas().getParent()));
-		User32.INSTANCE.SetParent(RuneModHandle, mainFrameComponentHandle);
-		RmWinIsChilded = true;
-
-		RuneModPlugin.toggleRuneModLoadingScreen(false);
-
-		WinDef.HWND rmControls = User32.INSTANCE.FindWindow(null, "RuneModControls");
-
-		//bring rm controls to front. if we dont tdo this, rm controls dont appear at front until we reactivate rl win
-		User32.INSTANCE.SetWindowPos(rmControls, User32.INSTANCE.GetWindow(mainFrameComponentHandle, new WinDef.DWORD(User32.GW_HWNDPREV)), 0, 0, 0, 0, User32.SWP_NOACTIVATE | User32.SWP_NOMOVE | User32.SWP_NOSIZE | User32.SWP_FRAMECHANGED);
-
-		return true;
-	}
-
-	public void UnChildRuneModWinFromRl()
-	{
-		log.debug("UnChildingRuneModWindowToRL");
-		if (!RuneModPlugin.unrealIsReady)
-		{
-			return;
-		}
-		log.debug("UnChildingRuneModWindowToRL .");
-		if (runeModPlugin.config.attachRmWindowToRL())
-		{
-			return;
-		}
-		log.debug("UnChildingRuneModWindowToRL ..");
-		if (!RmWinIsChilded)
-		{
-			return;
-		}
-		log.debug("UnChildingRuneModWindowToRL ...");
-		if (RuneModHandle == null)
-		{
-			RuneModHandle = findRuneModWindow();
-		}
-		if (RuneModHandle == null)
-		{
-			return;
-		}
-
-		log.debug("UnChildingRuneModWindowToRL ....");
-
-		User32.INSTANCE.SetParent(RuneModHandle, null);
-		RmWinIsChilded = false;
-	}
-
-	void checkIsRsData()
-	{
-		byte dataType = SharedMemoryData.getByte(SharedMemoryDataSize - 1); //last byte defines DataType; 2 = unrealdata. 1 = rsdata
-		if (dataType != 1)
-		{
-			log.debug("is not unreal data. dataType is " + dataType);
-		}
-	}
-
-	boolean checkIsUnrealData()
-	{
-		byte dataType = SharedMemoryData.getByte(SharedMemoryDataSize - 1); //last byte defines DataType; 2 = unrealdata. 1 = rsdata
-		if (dataType != 2)
-		{
-			//log.debug("is not unreal data. dataType is " + dataType);
-			return false;
-		}
-		return true;
-	}
-
-	public void updateRmWindowTransform()
-	{
-		if (!RuneModPlugin.unrealIsReady)
-		{
-			return;
-		}
-		if (!runeModPlugin.config.attachRmWindowToRL())
-		{
-			return;
-		}
-		if (!runeModPlugin.client.getCanvas().isShowing())
-		{
-			return;
-		}
-
-		Container parent = runeModPlugin.client.getCanvas().getParent();
-		int canvasPosX = parent.getLocationOnScreen().x;
-		int canvasPosY = parent.getLocationOnScreen().y;
-		int canvasSizeX = parent.getWidth();
-		int canvasSizeY = parent.getHeight();
-
-		float dpiScalingFactor = runeModPlugin.getDpiScalingFactor(); // 96 DPI is the standard
-
-		canvasSizeX = Math.round(canvasSizeX * dpiScalingFactor);
-		canvasSizeY = Math.round(canvasSizeY * dpiScalingFactor);
-
-		//since we have childed unreal window to rl, pos is always 0 (location is now relative.
-		canvasPosX = 0;
-		canvasPosY = 0;
-
-		log.debug("Updating RuneMod windows. PosX: " + canvasPosX + " posY: " + canvasPosY + " sizeX: " + canvasSizeX + " sizeY: " + canvasSizeY);
-
-		User32.INSTANCE.SetWindowPos(RuneModHandle, null, canvasPosX, canvasPosY, canvasSizeX, canvasSizeY, User32.SWP_NOACTIVATE);
-		User32.INSTANCE.SetWindowPos(RuneModHandle, null, canvasPosX, canvasPosY, canvasSizeX, canvasSizeY, User32.SWP_NOACTIVATE);
-	}
-
-	public int gameCycle_Unreal = -1;
-
-	public void handleUnrealData()
-	{
-		Offset = 0;
-		if (!checkIsUnrealData())
-		{
-			log.debug("isNotUnrealData");
-			return;
-		} //check, just incase something has gone wrong. if its not unreal data, we dont want to read it.
-
-		while (true)
-		{
-			byte PacketOpCode = SharedMemoryData.getByte(Offset); //read packet opcode
-			//log.debug("read packetOpCode: " + PacketOpCode);
-			Offset += 1;
-
-			//log.debug("handling unrealData WithOpCode: " + PacketOpCode);
-
-			if (PacketOpCode == TerminatingPacketOpCode)
-			{ //indicates end of data
-				//log.debug("terminating Packet Reached. UnrealData Handled.");
-				return;
-			}
-
-			int packetLength = getMedium(Offset); //read packetLength
-			Offset += 3;
-			byte[] packetContent = SharedMemoryData.getByteArray(Offset, packetLength); //read packetContent
-
-			Buffer packet = new Buffer(packetContent);
-			switch (PacketOpCode)
-			{
-				case 0: //WindowEvent
-					//log.debug("recieved WindowEvent packet");
-					break;
-				case 1: //terminatorPacket
-					//log.debug("recieved terminatorPacket");
-					return;
-				case 2: //perFramePacket
-					//log.debug("recieved unrealPerFramePacket");
-					gameCycle_Unreal = packet.readInt();
-					//log.debug("UnrealsTick: " + gameCycle_Unreal);
-					break;
-				case 3: //StatusReport
-					String string = packet.readStringCp1252NullTerminated();
-					RuneModPlugin.runeMod_loadingScreen.SetStatus_DetailText(string, true);
-					break;
-				case 4: //RequestRsCacheData
-					//log.debug("recieved RsCacheData request");
-					log.debug("rm says it is awaiting RsCacheData, sending it next tick.");
-					runeModPlugin.clientThread.invokeAtTickEnd(() -> //invoke at end of tick, because we cannot communicate with unreal at this point in the communiucation process. (tecnically we can, but only if we dont overflow the backbuffer, which we will do when sending cache)
-					{
-						runeModPlugin.provideRsCacheData();
-					});
-					break;
-				case 5: //RequestRsCacheHashes
-					log.debug("rm says it is awaiting rscacheHashes, sending them next tick.");
-					runeModPlugin.clientThread.invokeAtTickEnd(() -> //invoke at end of tick, because we cannot communicate with unreal at this point in the communiucation process. (tecnically we can, but only if we dont overflow the backbuffer, which we will do when sending cache)
-					{
-						runeModPlugin.runeModAwaitingRsCacheHashes = true;
-					});
-					break;
-				case 6: //RequestSceneReload
-					log.debug("recieved unreal RequestSceneReload");
-					runeModPlugin.clientThread.invokeAtTickEnd(() ->
-					{
-						runeModPlugin.reloadUnrealScene();
-					});
-					break;
-				case 7: //unused?
-					break;
-				default:
-					log.debug("unhandled unrealDataType at: " + " Offset: " + Offset + " PacketLen: " + packetLength);
-					break;
-			}
-
-			Offset += packetLength;
-			//log.debug("read PacketContent of length: "+packetContent.length);
-		}
-	}
-
-	public void startNewRsData()
-	{
-		Offset = 0;
-		setByte(SharedMemoryDataSize - 1, (byte) 1); //last byte defines DataType; 2 = unrealdata. 1 = rsdata
-		//log.debug("Started new rsData");
-	}
-
-	void writeTerminatingPacket()
-	{
-		SharedMemoryData.setByte(Offset, TerminatingPacketOpCode);
-		Offset += 1;
-	}
-
-	public void passRsDataToUnreal()
-	{ //writes dataLength metadata, and releases lock
-		writeTerminatingPacket();
-		//UnlockMutex();
-		//log.debug("Finished Rs Data, unreal may now do its thing, will await unreal data.");
-	}
-
-	public boolean isUnrealData()
-	{
-		if (SharedMemoryData.getByte(SharedMemoryDataSize - 1) == (byte) 2)
-		{
-			return true;
-		}
-		else
-		{
-			return false;
-		}
 	}
 
 	@SneakyThrows
@@ -567,5 +182,370 @@ public class SharedMemoryManager
 		}
 
 		return dataTypeByte;
+	}
+
+	public void setInt(int offset, int anInt)
+	{
+		SharedMemoryData.setByte(0 + offset, (byte) (anInt >> 24));
+		SharedMemoryData.setByte(1 + offset, (byte) (anInt >> 16));
+		SharedMemoryData.setByte(2 + offset, (byte) (anInt >> 8));
+		SharedMemoryData.setByte(3 + offset, (byte) (anInt));
+	}
+
+	public void setMedium(int offset, int anInt)
+	{
+		SharedMemoryData.setByte(0 + offset, (byte) (anInt >> 16));
+		SharedMemoryData.setByte(1 + offset, (byte) (anInt >> 8));
+		SharedMemoryData.setByte(2 + offset, (byte) (anInt));
+	}
+
+	public int getMedium(int offset)
+	{
+		return ((SharedMemoryData.getByte(offset + 0) & 255) << 16) + (SharedMemoryData.getByte(offset + 2) & 255) + ((SharedMemoryData.getByte(offset + 1) & 255) << 8);
+	}
+
+	public void setByte(int offset, byte anInt)
+	{
+		SharedMemoryData.setByte(0 + offset, anInt);
+	}
+
+	public void createSharedMemory(String sharedMemoryName, int sharedMemorySize)
+	{
+		log.debug("Creating Shared Memory: " + sharedMemoryName + "Size: " + (float) sharedMemorySize / 1000000.0 + "MB");
+
+		SharedMemoryHandle = myKernel32.CreateFileMapping(INVALID_HANDLE_VALUE,
+			null, PAGE_READWRITE,
+			0,
+			sharedMemorySize,
+			sharedMemoryName);
+
+		if (SharedMemoryHandle == null)
+		{
+			return;
+		}
+
+		SharedMemoryData = myKernel32.MapViewOfFile(SharedMemoryHandle,
+			0x001f,
+			0, 0,
+			sharedMemorySize);
+
+		if (SharedMemoryData == null)
+		{
+			return;
+		}
+
+		SharedMemoryName = sharedMemoryName;
+		SharedMemoryDataSize = sharedMemorySize;
+
+		backBuffer = new Buffer(new byte[10000000]); //10mb backbuffer.
+		log.debug("Created backbuffer with Size: " + (float) 10000000 / 1000000.0 + "MB");
+	}
+
+	public boolean CreateNamedEvents()
+	{
+		EventRlDataReady = Kernel32.INSTANCE.CreateEvent(null, true, false, "Global\\RlDataReadyEvent");
+		EventUeDataReady = Kernel32.INSTANCE.CreateEvent(null, true, false, "Global\\UeDataReadyEvent");
+		EventViewportPixelsReady = Kernel32.INSTANCE.CreateEvent(null, true, false, "Global\\ViewportPixelsReadyEvent");
+
+		return true;
+	}
+
+	public void CloseSharedMemory()
+	{
+		setByte(SharedMemoryDataSize - 1, (byte) 0); //last byte defines DataType; 2 = unrealdata. 1 = rsdata. setting it to 0 because it is now neither, since it is closed.
+
+		if (SharedMemoryData != null)
+		{
+			myKernel32.UnmapViewOfFile(SharedMemoryData);
+			SharedMemoryData = null;
+		}
+
+		if (SharedMemoryHandle != null)
+		{
+			myKernel32.CloseHandle(SharedMemoryHandle);
+			SharedMemoryHandle = null;
+		}
+	}
+
+	public void transferBackBufferToSharedMem()
+	{
+		int backBufferLength = backBuffer.offset;
+		SharedMemoryData.write(0, backBuffer.array, 0, backBufferLength);
+		Offset += backBufferLength;
+		clearBackBuffer();
+	}
+
+	public void clearBackBuffer()
+	{
+		backBuffer.reset();
+	}
+
+	public void setRuneModVisibility(boolean visibility)
+	{
+		if (!RuneModPlugin.unrealIsReady)
+		{
+			return;
+		}
+		if (curRmWindowVisibility == visibility)
+		{
+			return;
+		}
+
+		log.debug("SettingRmWindowVisibility to " + visibility);
+		curRmWindowVisibility = visibility;
+		if (visibility)
+		{
+			User32.INSTANCE.ShowWindow(RuneModHandle, WinUser.SW_SHOWNOACTIVATE);
+		}
+		else
+		{
+			User32.INSTANCE.ShowWindow(RuneModHandle, WinUser.SW_HIDE);
+		}
+	}
+
+	public WinDef.HWND findRuneModWindow()
+	{
+		WinDef.HWND handle = User32.INSTANCE.FindWindow(null, "RuneModWin");
+		if (User32.INSTANCE.IsWindow(handle))
+		{
+			log.debug("found runemod window");
+			return handle;
+		}
+		else
+		{
+			log.debug("runemod window not yet found");
+			return null;
+		}
+	}
+
+	public boolean ChildRuneModWinToRl()
+	{
+		if (!runeModPlugin.config.attachRmWindowToRL())
+		{
+			return false;
+		}
+
+		if (RmWinIsChilded)
+		{
+			return true;
+		}
+
+		if (RuneModHandle == null)
+		{
+			RuneModHandle = findRuneModWindow();
+		}
+		if (RuneModHandle == null)
+		{
+			return false;
+		}
+
+		log.debug("ChildingRuneModWindowToRL ...");
+
+		WinDef.HWND mainFrameComponentHandle = new WinDef.HWND(Native.getComponentPointer(runeModPlugin.client.getCanvas().getParent()));
+		User32.INSTANCE.SetParent(RuneModHandle, mainFrameComponentHandle);
+		RmWinIsChilded = true;
+
+		RuneModPlugin.toggleRuneModLoadingScreen(false);
+
+		WinDef.HWND rmControls = User32.INSTANCE.FindWindow(null, "RuneModControls");
+
+		//bring rm controls to front. if we dont tdo this, rm controls dont appear at front until we reactivate rl win
+		User32.INSTANCE.SetWindowPos(rmControls, User32.INSTANCE.GetWindow(mainFrameComponentHandle, new WinDef.DWORD(User32.GW_HWNDPREV)), 0, 0, 0, 0, User32.SWP_NOACTIVATE | User32.SWP_NOMOVE | User32.SWP_NOSIZE | User32.SWP_FRAMECHANGED);
+
+		return true;
+	}
+
+	public void UnChildRuneModWinFromRl()
+	{
+		log.debug("UnChildingRuneModWindowToRL");
+		if (!RuneModPlugin.unrealIsReady)
+		{
+			return;
+		}
+		log.debug("UnChildingRuneModWindowToRL .");
+		if (runeModPlugin.config.attachRmWindowToRL())
+		{
+			return;
+		}
+		log.debug("UnChildingRuneModWindowToRL ..");
+		if (!RmWinIsChilded)
+		{
+			return;
+		}
+		log.debug("UnChildingRuneModWindowToRL ...");
+		if (RuneModHandle == null)
+		{
+			RuneModHandle = findRuneModWindow();
+		}
+		if (RuneModHandle == null)
+		{
+			return;
+		}
+
+		log.debug("UnChildingRuneModWindowToRL ....");
+
+		User32.INSTANCE.SetParent(RuneModHandle, null);
+		RmWinIsChilded = false;
+	}
+
+	void checkIsRsData()
+	{
+		byte dataType = SharedMemoryData.getByte(SharedMemoryDataSize - 1); //last byte defines DataType; 2 = unrealdata. 1 = rsdata
+		if (dataType != 1)
+		{
+			log.debug("is not unreal data. dataType is " + dataType);
+		}
+	}
+
+	boolean checkIsUnrealData()
+	{
+		byte dataType = SharedMemoryData.getByte(SharedMemoryDataSize - 1); //last byte defines DataType; 2 = unrealdata. 1 = rsdata
+		//log.debug("is not unreal data. dataType is " + dataType);
+		return dataType == 2;
+	}
+
+	public void updateRmWindowTransform()
+	{
+		if (!RuneModPlugin.unrealIsReady)
+		{
+			return;
+		}
+		if (!runeModPlugin.config.attachRmWindowToRL())
+		{
+			return;
+		}
+		if (!runeModPlugin.client.getCanvas().isShowing())
+		{
+			return;
+		}
+
+		Container parent = runeModPlugin.client.getCanvas().getParent();
+		int canvasPosX = parent.getLocationOnScreen().x;
+		int canvasPosY = parent.getLocationOnScreen().y;
+		int canvasSizeX = parent.getWidth();
+		int canvasSizeY = parent.getHeight();
+
+		float dpiScalingFactor = runeModPlugin.getDpiScalingFactor(); // 96 DPI is the standard
+
+		canvasSizeX = Math.round(canvasSizeX * dpiScalingFactor);
+		canvasSizeY = Math.round(canvasSizeY * dpiScalingFactor);
+
+		//since we have childed unreal window to rl, pos is always 0 (location is now relative.
+		canvasPosX = 0;
+		canvasPosY = 0;
+
+		log.debug("Updating RuneMod windows. PosX: " + canvasPosX + " posY: " + canvasPosY + " sizeX: " + canvasSizeX + " sizeY: " + canvasSizeY);
+
+		User32.INSTANCE.SetWindowPos(RuneModHandle, null, canvasPosX, canvasPosY, canvasSizeX, canvasSizeY, User32.SWP_NOACTIVATE);
+		User32.INSTANCE.SetWindowPos(RuneModHandle, null, canvasPosX, canvasPosY, canvasSizeX, canvasSizeY, User32.SWP_NOACTIVATE);
+	}
+
+	public void handleUnrealData()
+	{
+		Offset = 0;
+		if (!checkIsUnrealData())
+		{
+			log.debug("isNotUnrealData");
+			return;
+		} //check, just incase something has gone wrong. if its not unreal data, we dont want to read it.
+
+		while (true)
+		{
+			byte PacketOpCode = SharedMemoryData.getByte(Offset); //read packet opcode
+			//log.debug("read packetOpCode: " + PacketOpCode);
+			Offset += 1;
+
+			//log.debug("handling unrealData WithOpCode: " + PacketOpCode);
+
+			if (PacketOpCode == TerminatingPacketOpCode)
+			{ //indicates end of data
+				//log.debug("terminating Packet Reached. UnrealData Handled.");
+				return;
+			}
+
+			int packetLength = getMedium(Offset); //read packetLength
+			Offset += 3;
+			byte[] packetContent = SharedMemoryData.getByteArray(Offset, packetLength); //read packetContent
+
+			Buffer packet = new Buffer(packetContent);
+			switch (PacketOpCode)
+			{
+				case 0: //WindowEvent
+					//log.debug("recieved WindowEvent packet");
+					break;
+				case 1: //terminatorPacket
+					//log.debug("recieved terminatorPacket");
+					return;
+				case 2: //perFramePacket
+					//log.debug("recieved unrealPerFramePacket");
+					gameCycle_Unreal = packet.readInt();
+					//log.debug("UnrealsTick: " + gameCycle_Unreal);
+					break;
+				case 3: //StatusReport
+					String string = packet.readStringCp1252NullTerminated();
+					RuneModPlugin.runeMod_loadingScreen.SetStatus_DetailText(string, true);
+					break;
+				case 4: //RequestRsCacheData
+					//log.debug("recieved RsCacheData request");
+					log.debug("rm says it is awaiting RsCacheData, sending it next tick.");
+					runeModPlugin.clientThread.invokeAtTickEnd(() -> //invoke at end of tick, because we cannot communicate with unreal at this point in the communiucation process. (tecnically we can, but only if we dont overflow the backbuffer, which we will do when sending cache)
+					{
+						runeModPlugin.provideRsCacheData();
+					});
+					break;
+				case 5: //RequestRsCacheHashes
+					log.debug("rm says it is awaiting rscacheHashes, sending them next tick.");
+					runeModPlugin.clientThread.invokeAtTickEnd(() -> //invoke at end of tick, because we cannot communicate with unreal at this point in the communiucation process. (tecnically we can, but only if we dont overflow the backbuffer, which we will do when sending cache)
+					{
+						runeModPlugin.runeModAwaitingRsCacheHashes = true;
+					});
+					break;
+				case 6: //RequestSceneReload
+					log.debug("recieved unreal RequestSceneReload");
+					runeModPlugin.clientThread.invokeAtTickEnd(() ->
+					{
+						runeModPlugin.reloadUnrealScene();
+					});
+					break;
+				case 7: //unused?
+					break;
+				default:
+					log.debug("unhandled unrealDataType at: " + " Offset: " + Offset + " PacketLen: " + packetLength);
+					break;
+			}
+
+			Offset += packetLength;
+			//log.debug("read PacketContent of length: "+packetContent.length);
+		}
+	}
+
+	public void startNewRsData()
+	{
+		Offset = 0;
+		setByte(SharedMemoryDataSize - 1, (byte) 1); //last byte defines DataType; 2 = unrealdata. 1 = rsdata
+		//log.debug("Started new rsData");
+	}
+
+	void writeTerminatingPacket()
+	{
+		SharedMemoryData.setByte(Offset, TerminatingPacketOpCode);
+		Offset += 1;
+	}
+
+	public void passRsDataToUnreal()
+	{ //writes dataLength metadata, and releases lock
+		writeTerminatingPacket();
+		//UnlockMutex();
+		//log.debug("Finished Rs Data, unreal may now do its thing, will await unreal data.");
+	}
+
+	public boolean isUnrealData()
+	{
+		return SharedMemoryData.getByte(SharedMemoryDataSize - 1) == (byte) 2;
+	}
+
+	public interface MyKernel32 extends Kernel32
+	{
+		MyKernel32 INSTANCE = Native.loadLibrary("kernel32", MyKernel32.class, W32APIOptions.DEFAULT_OPTIONS);
 	}
 }

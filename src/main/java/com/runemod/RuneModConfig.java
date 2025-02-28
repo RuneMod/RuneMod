@@ -32,6 +32,28 @@ import net.runelite.client.config.ConfigSection;
 @ConfigGroup("RuneMod")
 public interface RuneModConfig extends Config
 {
+	@ConfigSection(
+		name = "Settings",
+		description = "Settings",
+		position = 1,
+		closedByDefault = true
+	)
+	String settings = "settings";
+	@ConfigSection(
+		name = "Developer",
+		description = "Developer",
+		position = 3,
+		closedByDefault = true
+	)
+	String Developer = "Developer";
+	@ConfigSection(
+		name = "Developer_Debug",
+		description = "Developer_Debug",
+		position = 10,
+		closedByDefault = true
+	)
+	String Developer_Debug = "Developer_Debug";
+
 	@ConfigItem(
 		keyName = "BetaTesterKey",
 		name = "Enter Your Beta Key.",
@@ -43,14 +65,6 @@ public interface RuneModConfig extends Config
 	{
 		return "";
 	}
-
-	@ConfigSection(
-		name = "Settings",
-		description = "Settings",
-		position = 1,
-		closedByDefault = true
-	)
-	String settings = "settings";
 
 	@ConfigItem(
 		keyName = "MaxFps",
@@ -64,14 +78,6 @@ public interface RuneModConfig extends Config
 	{
 		return 50;
 	}
-
-	@ConfigSection(
-		name = "Developer",
-		description = "Developer",
-		position = 3,
-		closedByDefault = true
-	)
-	String Developer = "Developer";
 
 	@ConfigItem(
 		keyName = "RuneModVisibility",
@@ -104,7 +110,10 @@ public interface RuneModConfig extends Config
 		position = 5,
 		section = Developer
 	)
-	default boolean DebugLogging() { return true; }
+	default boolean DebugLogging()
+	{
+		return true;
+	}
 
 	@ConfigItem(
 		keyName = "Heavy",
@@ -113,7 +122,10 @@ public interface RuneModConfig extends Config
 		position = 6,
 		section = Developer
 	)
-	default boolean HeavyLogging() { return false; }
+	default boolean HeavyLogging()
+	{
+		return false;
+	}
 
 	@ConfigItem(
 		keyName = "startRuneModOnStart",
@@ -122,7 +134,10 @@ public interface RuneModConfig extends Config
 		position = 7,
 		section = Developer
 	)
-	default boolean StartRuneModOnStart() { return true; }
+	default boolean StartRuneModOnStart()
+	{
+		return true;
+	}
 
 	@ConfigItem(
 		keyName = "UseAltRuneModLocation",
@@ -147,14 +162,6 @@ public interface RuneModConfig extends Config
 	{
 		return "";
 	}
-
-	@ConfigSection(
-		name = "Developer_Debug",
-		description = "Developer_Debug",
-		position = 10,
-		closedByDefault = true
-	)
-	String Developer_Debug = "Developer_Debug";
 
 	@ConfigItem(
 		keyName = "useTwoRenderers",

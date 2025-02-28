@@ -121,9 +121,9 @@ public class Region
 		for (Location loc : locs.getLocations())
 		{
 			Location newLoc = new Location(loc.getId(), loc.getType(), loc.getOrientation(),
-					new Position(getBaseX() + loc.getPosition().getX(),
-							getBaseY() + loc.getPosition().getY(),
-							loc.getPosition().getZ()));
+				new Position(getBaseX() + loc.getPosition().getX(),
+					getBaseY() + loc.getPosition().getY(),
+					loc.getPosition().getZ()));
 			locations.add(newLoc);
 		}
 	}

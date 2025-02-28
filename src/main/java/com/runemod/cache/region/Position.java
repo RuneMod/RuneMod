@@ -39,12 +39,6 @@ public class Position
 	}
 
 	@Override
-	public String toString()
-	{
-		return "Position{" + "x=" + x + ", y=" + y + ", z=" + z + '}';
-	}
-
-	@Override
 	public int hashCode()
 	{
 		int hash = 7;
@@ -78,11 +72,13 @@ public class Position
 		{
 			return false;
 		}
-		if (this.z != other.z)
-		{
-			return false;
-		}
-		return true;
+		return this.z == other.z;
+	}
+
+	@Override
+	public String toString()
+	{
+		return "Position{" + "x=" + x + ", y=" + y + ", z=" + z + '}';
 	}
 
 	public int getX()

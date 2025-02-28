@@ -7,11 +7,10 @@ import static com.runemod.SharedMemoryManager.rsDataTypeToOpCode;
 @Slf4j
 public class Buffer
 {
+	public static final char[] cp1252AsciiExtension = new char[]{'€', '\u0000', '‚', 'ƒ', '„', '…', '†', '‡', 'ˆ', '‰', 'Š', '‹', 'Œ', '\u0000', 'Ž', '\u0000', '\u0000', '‘', '’', '“', '”', '•', '–', '—', '˜', '™', 'š', '›', 'œ', '\u0000', 'ž', 'Ÿ'};
+	public static String formattedOperatingSystemName;
 	static int[] crc32Table;
 	static long[] crc64Table;
-	public static String formattedOperatingSystemName;
-	public byte[] array;
-	public int offset;
 
 	static
 	{
@@ -41,7 +40,7 @@ public class Buffer
 
 		for (var2 = 0; var2 < 256; ++var2)
 		{
-			long var0 = (long) var2;
+			long var0 = var2;
 
 			for (int var3 = 0; var3 < 8; ++var3)
 			{
@@ -60,11 +59,42 @@ public class Buffer
 
 	}
 
+	public byte[] array;
+	public int offset;
+	boolean isOverFlowed = false;
 
 	public Buffer(byte[] var1)
 	{
 		this.array = var1;
 		this.offset = 0;
+	}
+
+	public static String decodeStringCp1252(byte[] var0, int var1, int var2)
+	{
+		char[] var3 = new char[var2];
+		int var4 = 0;
+
+		for (int var5 = 0; var5 < var2; ++var5)
+		{
+			int var6 = var0[var5 + var1] & 255;
+			if (var6 != 0)
+			{
+				if (var6 >= 128 && var6 < 160)
+				{
+					char var7 = cp1252AsciiExtension[var6 - 128];
+					if (var7 == 0)
+					{
+						var7 = '?';
+					}
+
+					var6 = var7;
+				}
+
+				var3[var4++] = (char) var6;
+			}
+		}
+
+		return new String(var3, 0, var4);
 	}
 
 	public void setOffset(int offset_)
@@ -212,8 +242,6 @@ public class Buffer
 		this.writeByte(var1 ? 1 : 0);
 	}
 
-	boolean isOverFlowed = false;
-
 	public void writePacket(Buffer packetContent, String dataType)
 	{
 		if ((offset + packetContent.offset) > (array.length - 100))
@@ -245,37 +273,6 @@ public class Buffer
 	public void reset()
 	{
 		offset = 0;
-	}
-
-
-	public static final char[] cp1252AsciiExtension = new char[]{'€', '\u0000', '‚', 'ƒ', '„', '…', '†', '‡', 'ˆ', '‰', 'Š', '‹', 'Œ', '\u0000', 'Ž', '\u0000', '\u0000', '‘', '’', '“', '”', '•', '–', '—', '˜', '™', 'š', '›', 'œ', '\u0000', 'ž', 'Ÿ'};
-
-	public static String decodeStringCp1252(byte[] var0, int var1, int var2)
-	{
-		char[] var3 = new char[var2];
-		int var4 = 0;
-
-		for (int var5 = 0; var5 < var2; ++var5)
-		{
-			int var6 = var0[var5 + var1] & 255;
-			if (var6 != 0)
-			{
-				if (var6 >= 128 && var6 < 160)
-				{
-					char var7 = cp1252AsciiExtension[var6 - 128];
-					if (var7 == 0)
-					{
-						var7 = '?';
-					}
-
-					var6 = var7;
-				}
-
-				var3[var4++] = (char) var6;
-			}
-		}
-
-		return new String(var3, 0, var4);
 	}
 
 	public String readStringCp1252NullTerminated()

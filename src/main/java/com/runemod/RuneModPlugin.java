@@ -104,9 +104,43 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	public static Client client_static;
 
 	public static RuneModConfig config_static;
+	public static boolean runemodLoadingScreenVisibility = false;
+	public static JPanel RuneModLoadingScreenPanel = new JPanel();
+	public static Container canvasAncestor;
+	public static LayoutManager ogLayout;
+	public static boolean unrealIsReady = false;
+	static RuneModPlugin runeModPlugin;
+	static boolean isShutDown = false;
+	private final HashMap<NPC, NpcOverrides_Copy> npcsWithOverrides_LastFrame = new HashMap<NPC, NpcOverrides_Copy>();
 
+	public int overlayColor_LastFrame = 0;
+	public ApplicationSettings appSettings;
+	int sharedMemPixelsUpdatedTick = -1; //used to prevent updating sharedMemory twice in the same tick.
+
+	int cacheLastUpdatedTick = Integer.MAX_VALUE; //when a cache file was last seen to be changed.
+	boolean rsCacheIsDownloading = true; //used to delay cache reading until cache is fully download.
+	HashMap<File, Long> lastSeenCacheFileSizes = new HashMap<File, Long>();
+
+	int ticksSincePluginLoad = 0;
+
+	boolean startedWhileLoggedIn;
+	boolean runeModAwaitingRsCacheHashes = false;
+	boolean alreadyCommunicatedUnreal = false; //whether we have communicated with unreal this frame.
+	int curGpuFlags = -1; //there is no client.setGpuFlags, so I use this to keep track of them myself.
+	Set<Renderable> visibleActors = new HashSet<Renderable>();
+	GameState curGamestate = GameState.STARTING;
+	GameState lastGameState = GameState.STARTING;
+	volatile int rsUiPosOffsetX = 0;
+	volatile int rsUiPosOffsetY = 0;
+	volatile int rsUiPosX = 0;
+	volatile int rsUiPosY = 0;
+	int baseX = 0;
+	int baseY = 0;
+	int lastCavansX = 0;
+	int lastCavansY = 0;
+	int lastCavansSizeX = 0;
+	int lastCavansSizeY = 0;
 	private int clientPlane = -1; //used to track when plane has changed
-
 	private Set<Integer> hashedEntitys_LastFrame = new HashSet<Integer>(); //used to track spawns/despawnes of entities.
 
 	@Inject
@@ -124,16 +158,14 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	@Inject
 	private ConfigManager configManager;
 
-	static RuneModPlugin runeModPlugin;
-
 	@Inject
 	private PluginManager pluginManager;
 
 	@Inject
 	private Hooks hooks;
 
-	@Inject private Gson gson;
-
+	@Inject
+	private Gson gson;
 
 	static public boolean runningFromIntelliJ()
 	{
@@ -141,7 +173,6 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		boolean isDebug = System.getProperty("launcher.version") == null;
 		return isDebug;
 	}
-
 
 	public static float getCurTimeSeconds()
 	{
@@ -157,16 +188,104 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		}
 	}
 
-	int sharedMemPixelsUpdatedTick = -1; //used to prevent updating sharedMemory twice in the same tick.
+	public static void toggleRuneModLoadingScreen(Boolean toggled)
+	{
+		if (runemodLoadingScreenVisibility == toggled)
+		{
+			return;
+		}
+		runemodLoadingScreenVisibility = toggled;
+		log.debug("toggling RmLoadingScreen to " + toggled);
+		SwingUtilities.invokeLater(() ->
+		{
+			if (toggled)
+			{
+				//JPanel window = (JPanel) SwingUtilities.getAncestorOfClass();
+				if (canvasAncestor == null)
+				{
+					return;
+				}
+				//RuneModLoadingScreenPanel.removeAll();
+				//RuneModLoadingScreen.setLayout(new FlowLayout(FlowLayout.CENTER, 0, 300));
 
-	int cacheLastUpdatedTick = Integer.MAX_VALUE; //when a cache file was last seen to be changed.
-	boolean rsCacheIsDownloading = true; //used to delay cache reading until cache is fully download.
-	HashMap<File, Long> lastSeenCacheFileSizes = new HashMap<File, Long>();
+				ogLayout = canvasAncestor.getLayout();
 
-	int ticksSincePluginLoad = 0;
+				//canvasAncestor.setLayout(new BorderLayout(0, 0));
 
-	boolean startedWhileLoggedIn;
-	boolean runeModAwaitingRsCacheHashes = false;
+				RuneModLoadingScreenPanel.setBackground(Color.black);
+				RuneModLoadingScreenPanel.add(runeMod_loadingScreen.labelPanel);
+				RuneModLoadingScreenPanel.setSize(canvasAncestor.getSize());
+				canvasAncestor.add(RuneModLoadingScreenPanel, BorderLayout.CENTER, 0);
+				canvasAncestor.revalidate();
+				canvasAncestor.repaint();
+			}
+			else
+			{
+				if (canvasAncestor == null)
+				{
+					return;
+				}
+				canvasAncestor.remove(RuneModLoadingScreenPanel);
+				canvasAncestor.setLayout(ogLayout);
+				canvasAncestor.revalidate();
+				canvasAncestor.repaint();
+			}
+		});
+	}
+
+	public static float signedToUnsigned(byte signedByte)
+	{
+		return signedByte & 0xFF; // Masking with 0xFF to get the unsigned value
+	}
+
+	// Convert unsigned byte back to signed byte
+	public static byte unsignedToSigned(int unsignedByte)
+	{
+		if (unsignedByte < 0 || unsignedByte > 255)
+		{
+			throw new IllegalArgumentException("Value must be between 0 and 255");
+		}
+		return (byte) unsignedByte; // Casting to byte
+	}
+
+	public static byte multiplyByteAsIfUnsigned(byte value, float multiplier)
+	{
+		float multipliedVal = signedToUnsigned(value) * multiplier;
+		return unsignedToSigned(Math.round(multipliedVal));
+	}
+
+	private static WorldPoint rotate(WorldPoint point, int rotation)
+	{
+		int chunkX = point.getX() & ~(CHUNK_SIZE - 1);
+		int chunkY = point.getY() & ~(CHUNK_SIZE - 1);
+		int x = point.getX() & (CHUNK_SIZE - 1);
+		int y = point.getY() & (CHUNK_SIZE - 1);
+		switch (rotation)
+		{
+			case 1:
+				return new WorldPoint(chunkX + y, chunkY + (CHUNK_SIZE - 1 - x), point.getPlane());
+			case 2:
+				return new WorldPoint(chunkX + (CHUNK_SIZE - 1 - x), chunkY + (CHUNK_SIZE - 1 - y), point.getPlane());
+			case 3:
+				return new WorldPoint(chunkX + (CHUNK_SIZE - 1 - y), chunkY + x, point.getPlane());
+		}
+		return point;
+	}
+
+	private static Color rs2hsbToColor(int hsb)
+	{
+		int decode_hue = (hsb >> 10) & 0x3f;
+		int decode_saturation = (hsb >> 7) & 0x07;
+		int decode_brightness = (hsb & 0x7f);
+		return Color.getHSBColor((float) decode_hue / 63, (float) decode_saturation / 7, (float) decode_brightness / 127);
+	}
+
+	private static void BGRToCol(int BGR)
+	{
+		int r = (BGR >> 16) & 0xFF / 255;
+		int g = (BGR >> 8) & 0xFF / 255;
+		int b = BGR & 0xFF / 255;
+	}
 
 	@SneakyThrows
 	@Subscribe
@@ -343,8 +462,6 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		sharedmem_rm.setRuneModVisibility(config.RuneModVisibility() == true);
 	}
 
-	boolean alreadyCommunicatedUnreal = false; //whether we have communicated with unreal this frame.
-
 	void communicateWithUnreal(String funcLocation)
 	{
 		if (ticksSincePluginLoad < 3)
@@ -413,8 +530,6 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		log_Timed_Heavy("2");
 	}
 
-	int curGpuFlags = -1; //there is no client.setGpuFlags, so I use this to keep track of them myself.
-
 	void setGpuFlags(int flags)
 	{
 		if (curGpuFlags != flags)
@@ -426,28 +541,6 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			log.info("GPU Flags have been changed to " + flags);
 		}
 	}
-
-	@SneakyThrows
-	@Override
-	public void drawScene(double cameraX, double cameraY, double cameraZ, double cameraPitch, double cameraYaw, int plane)
-	{
-		log_Timed_Heavy("drawScene");
-		if (curGpuFlags <= 0)
-		{
-			log_Timed_Heavy("storedGpuFlags <= 0");
-			return;
-		}
-		if (!client.isGpu())
-		{
-			log_Timed_Heavy("!client.isGpu()");
-			return;
-		}
-		communicateWithUnreal("drawScene");
-
-		visibleActors.clear();
-	}
-
-	Set<Renderable> visibleActors = new HashSet<Renderable>();
 
 	@Override
 	public void draw(Projection projection, Scene scene, Renderable renderable, int orientation, int x, int y, int z, long hash)
@@ -515,22 +608,6 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	{
 	}
 
-	void overlayColourChanged()
-	{
-		Buffer packet = new Buffer(new byte[8]);
-
-		packet.writeInt(overlayColor_LastFrame);
-
-		//extra blank data, for future use
-		packet.writeInt(0);
-
-		sharedmem_rm.backBuffer.writePacket(packet, "OverlayColorChanged");
-
-		log.debug("overlayColourChanged");
-	}
-
-	public int overlayColor_LastFrame = 0;
-
 	@SneakyThrows
 	@Override
 	public void draw(int overlayColor)
@@ -548,10 +625,33 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 	@SneakyThrows
 	@Override
+	public void drawScene(double cameraX, double cameraY, double cameraZ, double cameraPitch, double cameraYaw, int plane)
+	{
+		log_Timed_Heavy("drawScene");
+		if (curGpuFlags <= 0)
+		{
+			log_Timed_Heavy("storedGpuFlags <= 0");
+			return;
+		}
+		if (!client.isGpu())
+		{
+			log_Timed_Heavy("!client.isGpu()");
+			return;
+		}
+		communicateWithUnreal("drawScene");
+
+		visibleActors.clear();
+	}
+
+	@SneakyThrows
+	@Override
 	public void postDrawScene()
 	{
 		log_Timed_Heavy("postDrawScene");
 	}
+	//if npc in curfram has overrides, and it didnt in last frame, overridesChanged.
+	//if npcsWithOverrides in last frame is missing from npcsWithOverrides in currentFrame, overridesChanged.
+	//if npc With Overrides is present in last and current frame, check if the overrides from each frame are equal. if they are not, , overridesChanged.
 
 	@Override
 	public void animate(Texture texture, int diff)
@@ -571,24 +671,18 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		log.debug("SwapScene");
 	}
 
-	static boolean isShutDown = false;
-
-	@Override
-	protected void shutDown() throws Exception
+	void overlayColourChanged()
 	{
-		log.info("RuneMod is stopping");
-		isShutDown = true;
-		clientThread.invoke(() -> {
-			if (runeModLauncher != null)
-			{
-				if (runeModLauncher.runemodApp != null)
-				{
-					runeModLauncher.runemodApp.destroyForcibly();
-				}
-			}
+		Buffer packet = new Buffer(new byte[8]);
 
-			setDefaults();
-		});
+		packet.writeInt(overlayColor_LastFrame);
+
+		//extra blank data, for future use
+		packet.writeInt(0);
+
+		sharedmem_rm.backBuffer.writePacket(packet, "OverlayColorChanged");
+
+		log.debug("overlayColourChanged");
 	}
 
 	void setDefaults()
@@ -644,62 +738,6 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			log.info("Changed DrawCallbacks");
 		}
 	}
-
-	public static boolean runemodLoadingScreenVisibility = false;
-
-	public static JPanel RuneModLoadingScreenPanel = new JPanel();
-
-	public static Container canvasAncestor;
-	public static LayoutManager ogLayout;
-
-	public static boolean unrealIsReady = false;
-
-	public static void toggleRuneModLoadingScreen(Boolean toggled)
-	{
-		if (runemodLoadingScreenVisibility == toggled)
-		{
-			return;
-		}
-		runemodLoadingScreenVisibility = toggled;
-		log.debug("toggling RmLoadingScreen to " + toggled);
-		SwingUtilities.invokeLater(() ->
-		{
-			if (toggled)
-			{
-				//JPanel window = (JPanel) SwingUtilities.getAncestorOfClass();
-				if (canvasAncestor == null)
-				{
-					return;
-				}
-				//RuneModLoadingScreenPanel.removeAll();
-				//RuneModLoadingScreen.setLayout(new FlowLayout(FlowLayout.CENTER, 0, 300));
-
-				ogLayout = canvasAncestor.getLayout();
-
-				//canvasAncestor.setLayout(new BorderLayout(0, 0));
-
-				RuneModLoadingScreenPanel.setBackground(Color.black);
-				RuneModLoadingScreenPanel.add(runeMod_loadingScreen.labelPanel);
-				RuneModLoadingScreenPanel.setSize(canvasAncestor.getSize());
-				canvasAncestor.add(RuneModLoadingScreenPanel, BorderLayout.CENTER, 0);
-				canvasAncestor.revalidate();
-				canvasAncestor.repaint();
-			}
-			else
-			{
-				if (canvasAncestor == null)
-				{
-					return;
-				}
-				canvasAncestor.remove(RuneModLoadingScreenPanel);
-				canvasAncestor.setLayout(ogLayout);
-				canvasAncestor.revalidate();
-				canvasAncestor.repaint();
-			}
-		});
-	}
-
-	public ApplicationSettings appSettings;
 
 	@SneakyThrows
 	void startUp_Custom()
@@ -844,25 +882,22 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		ticksSincePluginLoad = -1;
 	}
 
-	public static float signedToUnsigned(byte signedByte)
+	@Override
+	protected void shutDown() throws Exception
 	{
-		return signedByte & 0xFF; // Masking with 0xFF to get the unsigned value
-	}
+		log.info("RuneMod is stopping");
+		isShutDown = true;
+		clientThread.invoke(() -> {
+			if (runeModLauncher != null)
+			{
+				if (runeModLauncher.runemodApp != null)
+				{
+					runeModLauncher.runemodApp.destroyForcibly();
+				}
+			}
 
-	// Convert unsigned byte back to signed byte
-	public static byte unsignedToSigned(int unsignedByte)
-	{
-		if (unsignedByte < 0 || unsignedByte > 255)
-		{
-			throw new IllegalArgumentException("Value must be between 0 and 255");
-		}
-		return (byte) unsignedByte; // Casting to byte
-	}
-
-	public static byte multiplyByteAsIfUnsigned(byte value, float multiplier)
-	{
-		float multipliedVal = signedToUnsigned(value) * multiplier;
-		return unsignedToSigned(Math.round(multipliedVal));
+			setDefaults();
+		});
 	}
 
 	public void sendTextures()
@@ -1016,50 +1051,6 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		});
 	}
 
-	//not currently used, is part of wip code to handle npcOverrides.
-	class NpcOverrides_Copy
-	{
-		int[] modelIds;
-
-		short[] colorToReplaceWith;
-
-		short[] textureToReplaceWith;
-
-		boolean useLocalPlayer;
-
-		public NpcOverrides_Copy(NpcOverrides overrides)
-		{
-			this.modelIds = overrides.getModelIds();
-			this.colorToReplaceWith = overrides.getColorToReplaceWith();
-			this.textureToReplaceWith = overrides.getTextureToReplaceWith();
-			this.useLocalPlayer = overrides.useLocalPlayer();
-		}
-
-		public boolean isIdenticalTo(NpcOverrides_Copy other)
-		{
-			boolean isEqual = Arrays.equals(other.modelIds, modelIds);
-			if (!Arrays.equals(other.colorToReplaceWith, colorToReplaceWith))
-			{
-				isEqual = false;
-			}
-			if (!Arrays.equals(other.textureToReplaceWith, textureToReplaceWith))
-			{
-				isEqual = false;
-			}
-			if (!other.useLocalPlayer == useLocalPlayer)
-			{
-				isEqual = false;
-			}
-			return isEqual;
-		}
-	}
-
-	private final HashMap<NPC, NpcOverrides_Copy> npcsWithOverrides_LastFrame = new HashMap<NPC, NpcOverrides_Copy>();
-	//if npc in curfram has overrides, and it didnt in last frame, overridesChanged.
-	//if npcsWithOverrides in last frame is missing from npcsWithOverrides in currentFrame, overridesChanged.
-	//if npc With Overrides is present in last and current frame, check if the overrides from each frame are equal. if they are not, , overridesChanged.
-
-
 	private void argbIntToColorChannels(int col)
 	{
 		int a = (col >> 24) & 0xFF;
@@ -1067,7 +1058,6 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		int g = (col >> 8) & 0xFF;
 		int b = col & 0xFF;
 	}
-
 
 	private void forEachTile(Consumer<Tile> consumer)
 	{
@@ -1274,8 +1264,10 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		});
 	}
 
-	GameState curGamestate = GameState.STARTING;
-	GameState lastGameState = GameState.STARTING;
+/*	@Subscribe
+	private void onAnimationChanged(AnimationChanged event) {
+
+	}*/
 
 	@SneakyThrows
 	@Subscribe
@@ -1857,11 +1849,6 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		});
 	}
 
-/*	@Subscribe
-	private void onAnimationChanged(AnimationChanged event) {
-
-	}*/
-
 	@Subscribe
 	private void onItemSpawned(ItemSpawned event)
 	{
@@ -2126,11 +2113,6 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		return bytes;
 	}
 
-	volatile int rsUiPosOffsetX = 0;
-	volatile int rsUiPosOffsetY = 0;
-	volatile int rsUiPosX = 0;
-	volatile int rsUiPosY = 0;
-
 	float getDpiScalingFactor()
 	{
 		final GraphicsConfiguration graphicsConfiguration = clientUI.getGraphicsConfiguration();
@@ -2249,27 +2231,6 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		sharedmem_rm.SharedMemoryData.write(30000060, bufferProvider.getPixels(), 0, bufferProvider.getHeight() * bufferProvider.getWidth());
 		sharedmem_rm.myKernel32.SetEvent(sharedmem_rm.EventViewportPixelsReady);
 		log_Timed_Heavy("_UpdateSharedMemoryUiPixels_1");
-	}
-
-	int baseX = 0;
-	int baseY = 0;
-
-	private static WorldPoint rotate(WorldPoint point, int rotation)
-	{
-		int chunkX = point.getX() & ~(CHUNK_SIZE - 1);
-		int chunkY = point.getY() & ~(CHUNK_SIZE - 1);
-		int x = point.getX() & (CHUNK_SIZE - 1);
-		int y = point.getY() & (CHUNK_SIZE - 1);
-		switch (rotation)
-		{
-			case 1:
-				return new WorldPoint(chunkX + y, chunkY + (CHUNK_SIZE - 1 - x), point.getPlane());
-			case 2:
-				return new WorldPoint(chunkX + (CHUNK_SIZE - 1 - x), chunkY + (CHUNK_SIZE - 1 - y), point.getPlane());
-			case 3:
-				return new WorldPoint(chunkX + (CHUNK_SIZE - 1 - y), chunkY + x, point.getPlane());
-		}
-		return point;
 	}
 
 	private void sendInstancedAreaState(Scene scene)
@@ -2744,11 +2705,6 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		sharedmem_rm.backBuffer.writePacket(actorSpawnPacket, "ActorDeSpawn");
 	}
 
-	int lastCavansX = 0;
-	int lastCavansY = 0;
-	int lastCavansSizeX = 0;
-	int lastCavansSizeY = 0;
-
 	boolean RmNeedsWindowUpdate()
 	{
 		if (client.getCanvas() == null)
@@ -2776,21 +2732,6 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		return false;
 	}
 
-	private static Color rs2hsbToColor(int hsb)
-	{
-		int decode_hue = (hsb >> 10) & 0x3f;
-		int decode_saturation = (hsb >> 7) & 0x07;
-		int decode_brightness = (hsb & 0x7f);
-		return Color.getHSBColor((float) decode_hue / 63, (float) decode_saturation / 7, (float) decode_brightness / 127);
-	}
-
-	private static void BGRToCol(int BGR)
-	{
-		int r = (BGR >> 16) & 0xFF / 255;
-		int g = (BGR >> 8) & 0xFF / 255;
-		int b = BGR & 0xFF / 255;
-	}
-
 	public ApplicationSettings loadAppSettings()
 	{
 		String jsonFileLocation = System.getProperty("user.home") + "\\.runemod\\AppSettings.json";
@@ -2804,6 +2745,44 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		{
 			e.printStackTrace();
 			return null;
+		}
+	}
+
+	//not currently used, is part of wip code to handle npcOverrides.
+	class NpcOverrides_Copy
+	{
+		int[] modelIds;
+
+		short[] colorToReplaceWith;
+
+		short[] textureToReplaceWith;
+
+		boolean useLocalPlayer;
+
+		public NpcOverrides_Copy(NpcOverrides overrides)
+		{
+			this.modelIds = overrides.getModelIds();
+			this.colorToReplaceWith = overrides.getColorToReplaceWith();
+			this.textureToReplaceWith = overrides.getTextureToReplaceWith();
+			this.useLocalPlayer = overrides.useLocalPlayer();
+		}
+
+		public boolean isIdenticalTo(NpcOverrides_Copy other)
+		{
+			boolean isEqual = Arrays.equals(other.modelIds, modelIds);
+			if (!Arrays.equals(other.colorToReplaceWith, colorToReplaceWith))
+			{
+				isEqual = false;
+			}
+			if (!Arrays.equals(other.textureToReplaceWith, textureToReplaceWith))
+			{
+				isEqual = false;
+			}
+			if (!other.useLocalPlayer == useLocalPlayer)
+			{
+				isEqual = false;
+			}
+			return isEqual;
 		}
 	}
 }

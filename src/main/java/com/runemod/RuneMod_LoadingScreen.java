@@ -43,24 +43,12 @@ import java.io.InputStream;
 public class RuneMod_LoadingScreen extends JPanel
 {
 
-	RuneModPlugin runeModPlugin = null;
 	public JLabel StatusHeading = new JLabel();
 	public JLabel StatusDetail = new JLabel();
-	JLabel iconHolder = new JLabel();
 	public JPanel labelPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
-
 	public JDialog frame;
-
-	public void close()
-	{
-		log.debug("Closing RuneMod loading screen");
-		if (frame != null)
-		{
-			frame.dispose();
-			frame.setVisible(false);
-			frame.setTitle("staleWindow");
-		}
-	}
+	RuneModPlugin runeModPlugin = null;
+	JLabel iconHolder = new JLabel();
 
 	RuneMod_LoadingScreen(Frame owner, RuneModPlugin plugin)
 	{
@@ -99,9 +87,23 @@ public class RuneMod_LoadingScreen extends JPanel
 		SetStatus_DetailText(".", false);
 	}
 
+	public void close()
+	{
+		log.debug("Closing RuneMod loading screen");
+		if (frame != null)
+		{
+			frame.dispose();
+			frame.setVisible(false);
+			frame.setTitle("staleWindow");
+		}
+	}
+
 	public void SetStatus_DetailText(String statusText, boolean print)
 	{
-		if (statusText.length() > 100) { return; }
+		if (statusText.length() > 100)
+		{
+			return;
+		}
 		StatusDetail.setText(statusText);
 
 		String statusText_caseless = statusText.toLowerCase();

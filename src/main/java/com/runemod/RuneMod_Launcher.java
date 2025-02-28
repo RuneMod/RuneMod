@@ -48,8 +48,8 @@ class RuneMod_Launcher
 {
 	public String rmAppLocation = System.getProperty("user.home") + "\\.runemod\\application\\";
 	public String AltRuneModLocation = "";
-	boolean AutoLaunch;
 	public Process runemodApp = null;
+	boolean AutoLaunch;
 
 	RuneMod_Launcher(String altRuneModLocation, boolean AutoLaunch_)
 	{
@@ -57,6 +57,46 @@ class RuneMod_Launcher
 		AutoLaunch = AutoLaunch_;
 	}
 
+	public static void deleteDirectory(File file)
+	{
+		if (file == null || !file.exists())
+		{
+			log.debug("The specified path does not exist.");
+			return;
+		}
+
+		if (file.isDirectory())
+		{
+			for (File subfile : file.listFiles())
+			{
+				deleteDirectory(subfile);
+			}
+		}
+
+		if (file.delete())
+		{
+			log.debug("Deleted: " + file.getAbsolutePath());
+		}
+		else
+		{
+			log.debug("Failed to delete: " + file.getAbsolutePath());
+		}
+	}
+
+	public static File newFile(File destinationDir, ZipEntry zipEntry) throws IOException
+	{
+		File destFile = new File(destinationDir, zipEntry.getName());
+
+		String destDirPath = destinationDir.getCanonicalPath();
+		String destFilePath = destFile.getCanonicalPath();
+
+		if (!destFilePath.startsWith(destDirPath + File.separator))
+		{
+			throw new IOException("Entry is outside of the target dir: " + zipEntry.getName());
+		}
+
+		return destFile;
+	}
 
 	public int getLatestAppVersion()
 	{
@@ -110,32 +150,6 @@ class RuneMod_Launcher
 	{
 		String version_string = "" + version;
 		Files.write(Paths.get(rmAppLocation + "\\version.txt"), version_string.getBytes());
-	}
-
-	public static void deleteDirectory(File file)
-	{
-		if (file == null || !file.exists())
-		{
-			log.debug("The specified path does not exist.");
-			return;
-		}
-
-		if (file.isDirectory())
-		{
-			for (File subfile : file.listFiles())
-			{
-				deleteDirectory(subfile);
-			}
-		}
-
-		if (file.delete())
-		{
-			log.debug("Deleted: " + file.getAbsolutePath());
-		}
-		else
-		{
-			log.debug("Failed to delete: " + file.getAbsolutePath());
-		}
 	}
 
 	@SneakyThrows
@@ -237,21 +251,6 @@ class RuneMod_Launcher
 			RuneModPlugin.runeMod_loadingScreen.SetStatus_DetailText("RuneMod Download failed", true);
 			e.printStackTrace();
 		}
-	}
-
-	public static File newFile(File destinationDir, ZipEntry zipEntry) throws IOException
-	{
-		File destFile = new File(destinationDir, zipEntry.getName());
-
-		String destDirPath = destinationDir.getCanonicalPath();
-		String destFilePath = destFile.getCanonicalPath();
-
-		if (!destFilePath.startsWith(destDirPath + File.separator))
-		{
-			throw new IOException("Entry is outside of the target dir: " + zipEntry.getName());
-		}
-
-		return destFile;
 	}
 
 	public void UnzipFile(String fileZip, String destPath) throws IOException

@@ -76,6 +76,18 @@ public class CacheReader
         cacheExporter.SpotAnimationDefinition_get(800);
     }*/
 
+	private static byte[] trimmedBufferBytes(Buffer buffer)
+	{
+		return Arrays.copyOfRange(buffer.array, 0, buffer.offset);
+	}
+
+	static int convertTileCoordinatesToContentId(int z, int x, int y)
+	{
+		int regionId = ((x >> 6) << 8) | (y >> 6);
+		int tileIdRelativeToRegion = (z << 12) | ((x & 0x3F) << 6) | (y & 0x3F);
+		return (regionId * 16384) + tileIdRelativeToRegion;
+	}
+
 	@SneakyThrows
 	public int GetFileCount(IndexType IndexId, int ArchiveId)
 	{
@@ -88,7 +100,7 @@ public class CacheReader
 	public int GetArchiveCount(IndexType IndexId)
 	{
 		Index index = store.getIndex(IndexId);
-		return ((Index) index).toIndexData().getArchives().length;
+		return index.toIndexData().getArchives().length;
 	}
 
 	public void printRevs()
@@ -154,7 +166,6 @@ public class CacheReader
 		}
 	}
 
-
 	@SneakyThrows
 	public ArchiveFiles GetArchiveFiles(IndexType IndexId, int ArchiveId)
 	{
@@ -165,7 +176,6 @@ public class CacheReader
 		ArchiveFiles archiveFiles = archive.getFiles(archiveData);
 		return archiveFiles;
 	}
-
 
 	@SneakyThrows
 	public List<FSFile> getCacheFiles(IndexType IndexId, int ArchiveId)
@@ -400,10 +410,9 @@ public class CacheReader
 		log.debug("Sent " + counter + " Models");
 	}
 
-
 	long MakeAssetId_ue4(long userId_in, long contentId_in)
 	{
-		long AssetId = ((long) userId_in << 32) | contentId_in;
+		long AssetId = (userId_in << 32) | contentId_in;
 		return AssetId;
 	}
 
@@ -421,19 +430,6 @@ public class CacheReader
 
 		return ContentId;
 	}
-
-	private static byte[] trimmedBufferBytes(Buffer buffer)
-	{
-		return Arrays.copyOfRange(buffer.array, 0, buffer.offset);
-	}
-
-	static int convertTileCoordinatesToContentId(int z, int x, int y)
-	{
-		int regionId = ((x >> 6) << 8) | (y >> 6);
-		int tileIdRelativeToRegion = (z << 12) | ((x & 0x3F) << 6) | (y & 0x3F);
-		return (regionId * 16384) + tileIdRelativeToRegion;
-	}
-
 
 	public void sendTiles()
 	{
@@ -484,7 +480,6 @@ public class CacheReader
 		{
 
 			int regionX = regionId >> 8;
-			;
 			int regionY = regionId & 0xFF;
 
 
