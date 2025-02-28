@@ -25,13 +25,13 @@ public class keyGen
 	{
 		for (String key : keys)
 		{
-			//System.out.println(hashKey(key));
+			//print(hashKey(key));
 		}
 	}
 
 	public static void main(String[] args)
 	{
-		//System.out.println("hashed keys: ");
+		//print("hashed keys: ");
 		createKeyHashes(keys);
 	}
 }

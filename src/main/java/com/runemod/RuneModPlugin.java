@@ -62,7 +62,6 @@ import java.awt.Container;
 import java.awt.geom.AffineTransform;
 import java.io.File;
 import java.io.IOException;
-import java.lang.reflect.Field;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -2012,27 +2011,6 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		actorSpawnPacket.writeInt(player.getPlayerComposition().getTransformedNpcId()); //npcTransformID
 
 		sharedmem_rm.backBuffer.writePacket(actorSpawnPacket, "ActorSpawn");
-	}
-
-	private Field getField(Object instance, String method)
-	{
-		Class<?> clazz = instance.getClass();
-
-		while (clazz != null && clazz.getSuperclass() != clazz)
-		{
-			try
-			{
-				Field field = clazz.getDeclaredField(method);
-				field.setAccessible(true);
-				return field;
-			}
-			catch (NoSuchFieldException ex)
-			{
-			}
-
-			clazz = clazz.getSuperclass();
-		}
-		throw new RuntimeException("Method '" + method + "' not found in class '" + instance.getClass() + "'");
 	}
 
 	@Subscribe
