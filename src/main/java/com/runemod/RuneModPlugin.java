@@ -78,7 +78,6 @@ import static net.runelite.api.Constants.CHUNK_SIZE;
 import static net.runelite.client.RuneLite.RUNELITE_DIR;
 
 import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
 
 import java.io.BufferedReader;
 import java.io.FileReader;
@@ -132,6 +131,8 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 	@Inject
 	private Hooks hooks;
+
+	@Inject private Gson gson;
 
 
 	static public boolean runningFromIntelliJ()
@@ -2794,7 +2795,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	{
 		String jsonFileLocation = System.getProperty("user.home") + "\\.runemod\\AppSettings.json";
 
-		Gson gson = new GsonBuilder().create();
+		//Gson gson = new GsonBuilder().create();
 		try (BufferedReader reader = new BufferedReader(new FileReader(jsonFileLocation)))
 		{
 			return gson.fromJson(reader, ApplicationSettings.class);
