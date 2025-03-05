@@ -28,6 +28,9 @@ package com.runemod.cache.util;
 import org.apache.commons.compress.compressors.bzip2.BZip2CompressorOutputStream;
 import org.apache.commons.compress.utils.IOUtils;*/
 
+import org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream;
+import org.apache.commons.compress.compressors.bzip2.BZip2CompressorOutputStream;
+import org.apache.commons.compress.utils.IOUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -46,15 +49,6 @@ public class BZip2
 		};
 
 	public static byte[] compress(byte[] bytes) throws IOException
-	{
-		return null;
-	}
-
-	public static byte[] decompress(byte[] bytes, int len) throws IOException
-	{
-		return null;
-	}
-/*	public static byte[] compress(byte[] bytes) throws IOException
 	{
 		InputStream is = new ByteArrayInputStream(bytes);
 		ByteArrayOutputStream bout = new ByteArrayOutputStream();
@@ -89,5 +83,5 @@ public class BZip2
 		}
 
 		return os.toByteArray();
-	}*/
+	}
 }

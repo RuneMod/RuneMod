@@ -50,7 +50,6 @@ import static net.runelite.client.RuneLite.RUNELITE_DIR;
 @Slf4j
 public class CacheReader
 {
-
 	public Store store;
 
 	public CacheReader()
@@ -121,6 +120,7 @@ public class CacheReader
 
 	public int[] provideRsCacheHashes()
 	{
+		log.debug("provideRsCacheHashes()");
 		List<Index> indexes = store.getIndexes();
 		int[] hashes = new int[indexes.size()];
 		for (Index index : indexes)
@@ -128,7 +128,7 @@ public class CacheReader
 			//hashes[index.getId()] = index.getCrc();
 			//log.debug("index "+index.getId() + " crc32 hash is "+index.getCrc());
 			hashes[index.getId()] = index.getRevision(); //moved to rev system instead of crc.
-			log.debug("index " + index.getId() + " rev is " + index.getCrc());
+			log.debug("index " + index.getId() + " rev is " + index.getRevision());
 		}
 
 		Buffer mainBuffer = new Buffer(new byte[(hashes.length * 4) + 12]);

@@ -101,7 +101,7 @@ class RuneMod_Launcher
 	public int getLatestAppVersion()
 	{
 		HttpClient client = HttpClient.newHttpClient();
-		HttpRequest request = HttpRequest.newBuilder().uri(URI.create("https://pub-64c85893ea904aedab24caeb10432ae1.r2.dev/application/version.txt")).build();
+		HttpRequest request = HttpRequest.newBuilder().uri(URI.create("https://runemodfiles.xyz/application/version.txt")).build();
 		HttpResponse<String> response = null;
 		try
 		{
@@ -192,16 +192,17 @@ class RuneMod_Launcher
 			Files.createDirectories(Paths.get(rmAppLocation));
 
 			String zipFilePath = rmAppLocation + "Windows.zip";
-			downloadZip("https://pub-64c85893ea904aedab24caeb10432ae1.r2.dev/application/windows.zip", zipFilePath);
-			UnzipFile(zipFilePath, rmAppLocation);
-			SetCurrentAppVersion(latestAppVersion);
-			try
-			{
-				Files.delete(Paths.get(zipFilePath));
-			}
-			catch (IOException e)
-			{
-				e.printStackTrace();
+			if(downloadZip("https://runemodfiles.xyz/application/windows.zip", zipFilePath)) {
+				UnzipFile(zipFilePath, rmAppLocation);
+				SetCurrentAppVersion(latestAppVersion);
+				try
+				{
+					Files.delete(Paths.get(zipFilePath));
+				}
+				catch (IOException e)
+				{
+					e.printStackTrace();
+				}
 			}
 		}
 
@@ -215,7 +216,7 @@ class RuneMod_Launcher
 		}
 	}
 
-	public void downloadZip(String URL, String filePath)
+	public boolean downloadZip(String URL, String filePath)
 	{
 		log.debug(rmAppLocation);
 		RuneModPlugin.runeMod_loadingScreen.SetStatus_DetailText("Starting RuneMod download...", true);
@@ -244,12 +245,14 @@ class RuneMod_Launcher
 
 			fis.close();
 			bis.close();
+			return true;
 
 		}
 		catch (IOException e)
 		{
 			RuneModPlugin.runeMod_loadingScreen.SetStatus_DetailText("RuneMod Download failed", true);
 			e.printStackTrace();
+			return false;
 		}
 	}
 

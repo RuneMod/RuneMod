@@ -33,6 +33,8 @@ import com.sun.jna.platform.win32.WinNT;
 import com.sun.jna.platform.win32.WinUser;
 import com.sun.jna.win32.W32APIOptions;
 import java.awt.Container;
+import javax.swing.JFrame;
+import javax.swing.SwingUtilities;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 
@@ -347,10 +349,14 @@ public class SharedMemoryManager
 
 		RuneModPlugin.toggleRuneModLoadingScreen(false);
 
-		WinDef.HWND rmControls = User32.INSTANCE.FindWindow(null, "RuneModControls");
+		//WinDef.HWND rmControls = User32.INSTANCE.FindWindow(null, "RuneModControls");
 
+		//JFrame window = (JFrame) SwingUtilities.getWindowAncestor(runeModPlugin.client.getCanvas());
+		//window.requestFocus();
 		//bring rm controls to front. if we dont tdo this, rm controls dont appear at front until we reactivate rl win
-		User32.INSTANCE.SetWindowPos(rmControls, User32.INSTANCE.GetWindow(mainFrameComponentHandle, new WinDef.DWORD(User32.GW_HWNDPREV)), 0, 0, 0, 0, User32.SWP_NOACTIVATE | User32.SWP_NOMOVE | User32.SWP_NOSIZE | User32.SWP_FRAMECHANGED);
+		//User32.INSTANCE.SetFocus(mainFrameComponentHandle);
+		//User32.INSTANCE.SetWindowPos(rmControls, RuneModHandle, 0, 0, 0, 0, User32);
+		//User32.INSTANCE.SetWindowPos(rmControls, RuneModHandle, 0, 0, 0, 0, User32.SWP_NOACTIVATE | User32.SWP_NOMOVE | User32.SWP_NOSIZE | User32.SWP_FRAMECHANGED);
 
 		return true;
 	}

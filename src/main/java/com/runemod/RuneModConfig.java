@@ -36,7 +36,7 @@ public interface RuneModConfig extends Config
 		name = "Settings",
 		description = "Settings",
 		position = 1,
-		closedByDefault = true
+		closedByDefault = false
 	)
 	String settings = "settings";
 	@ConfigSection(
@@ -54,7 +54,7 @@ public interface RuneModConfig extends Config
 	)
 	String Developer_Debug = "Developer_Debug";
 
-	@ConfigItem(
+/*	@ConfigItem(
 		keyName = "BetaTesterKey",
 		name = "Enter Your Beta Key.",
 		description = "RuneMod is not yet ready for public use. It is currently only useable by those with beta keys.",
@@ -64,7 +64,7 @@ public interface RuneModConfig extends Config
 	default String BetaTesterKey()
 	{
 		return "";
-	}
+	}*/
 
 	@ConfigItem(
 		keyName = "MaxFps",

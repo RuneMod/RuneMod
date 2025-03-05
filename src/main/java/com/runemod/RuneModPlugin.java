@@ -30,11 +30,19 @@ import java.awt.Color;
 import java.awt.Frame;
 import java.awt.GraphicsConfiguration;
 import java.awt.LayoutManager;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.awt.event.MouseListener;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import javax.sound.sampled.AudioSystem;
+import javax.sound.sampled.BooleanControl;
+import javax.sound.sampled.Line;
+import javax.sound.sampled.LineUnavailableException;
+import javax.sound.sampled.Mixer;
 import javax.swing.JFrame;
 import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
@@ -131,14 +139,14 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	GameState lastGameState = GameState.STARTING;
 	volatile int rsUiPosOffsetX = 0;
 	volatile int rsUiPosOffsetY = 0;
-	volatile int rsUiPosX = 0;
-	volatile int rsUiPosY = 0;
+	volatile int rsUiPosX = -1;
+	volatile int rsUiPosY = -1;
 	int baseX = 0;
 	int baseY = 0;
-	int lastCavansX = 0;
-	int lastCavansY = 0;
-	int lastCavansSizeX = 0;
-	int lastCavansSizeY = 0;
+	int lastCavansX = -1;
+	int lastCavansY = -1;
+	int lastCavansSizeX = -1;
+	int lastCavansSizeY = -1;
 	private int clientPlane = -1; //used to track when plane has changed
 	private Set<Integer> hashedEntitys_LastFrame = new HashSet<Integer>(); //used to track spawns/despawnes of entities.
 
@@ -165,13 +173,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 	@Inject
 	private Gson gson;
-
-	static public boolean runningFromIntelliJ()
-	{
-		//boolean isDebug = java.lang.management.ManagementFactory.getRuntimeMXBean().getInputArguments().toString().indexOf("jdwp") >= 0;
-		boolean isDebug = System.getProperty("launcher.version") == null;
-		return isDebug;
-	}
+	
 
 	public static float getCurTimeSeconds()
 	{
@@ -185,6 +187,30 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		{
 			log.debug("[" + getCurTimeSeconds() + "]	" + message);
 		}
+	}
+
+	MouseListener mouseListener = new MouseAdapter()
+	{
+		@Override
+		public void mousePressed(MouseEvent mouseEvent)
+		{
+			//resizes canvas in order to force it to repaint. This prevents the loss of transparency on the loginscreens background pixels, caused by going to the world select screen.
+			if (client.getGameState() == GameState.LOGIN_SCREEN || curGamestate == GameState.LOGIN_SCREEN_AUTHENTICATOR)
+			{
+				clientThread.invokeAtTickEnd(() ->
+				{
+					client.resizeCanvas();
+				});
+			}
+		}
+	};
+
+	public void registerMouseListener() {
+		client.getCanvas().addMouseListener(mouseListener);
+	}
+
+	public void unRegisterMouseListener() {
+		client.getCanvas().addMouseListener(mouseListener);
 	}
 
 	public static void toggleRuneModLoadingScreen(Boolean toggled)
@@ -286,10 +312,48 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		int b = BGR & 0xFF / 255;
 	}
 
+	public void muteLoginScreenMusic(boolean mute){ //bodged, coppied from reddit. used to mute loginscreen.
+		javax.sound.sampled.Mixer.Info[] mixers = AudioSystem.getMixerInfo();
+		//System.out.println("There are " + mixers.length + " mixer info objects");
+		for(int i=0;i<mixers.length;i++){
+			Mixer.Info mixerInfo = mixers[i];
+			//System.out.println("Mixer Name:"+mixerInfo.getName());
+			Mixer mixer = AudioSystem.getMixer(mixerInfo);
+			Line.Info[] lineinfos = ((Mixer) mixer).getTargetLineInfo();
+			for(Line.Info lineinfo : lineinfos){
+				//System.out.println("line:" + lineinfo);
+				try {
+					Line line = mixer.getLine(lineinfo);
+					if(line!=null) {
+						line.open();
+						if(line.isControlSupported(BooleanControl.Type.MUTE)) {
+							BooleanControl bc = (BooleanControl) line.getControl(BooleanControl.Type.MUTE);
+							if (bc != null) {
+								//System.out.println("mute val");
+								bc.setValue(mute); // true to mute the line, false to unmute
+								//System.out.println("mute rl: "+mute);
+							}
+						}
+					}
+				} catch (LineUnavailableException e) {
+					//e.printStackTrace();
+				}
+			}
+		}
+	}
+
 	@SneakyThrows
 	@Subscribe
 	private void onBeforeRender(BeforeRender event)
 	{
+		SwingUtilities.invokeLater(() ->
+		{
+			if (client.getGameState() == GameState.LOGIN_SCREEN || client.getGameState()== GameState.LOGIN_SCREEN_AUTHENTICATOR) {
+				muteLoginScreenMusic(!unrealIsReady);
+			}
+		});
+
+
 		log_Timed_Heavy("onBeforeRender");
 
 		alreadyCommunicatedUnreal = false;
@@ -741,6 +805,8 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	@SneakyThrows
 	void startUp_Custom()
 	{
+		registerMouseListener();
+
 		setDefaults();
 
 		runeModPlugin = this;
@@ -788,7 +854,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	public String getBetaKeys()
 	{
 		HttpClient client = HttpClient.newHttpClient();
-		HttpRequest request = HttpRequest.newBuilder().uri(URI.create("https://pub-64c85893ea904aedab24caeb10432ae1.r2.dev/beta_keys_hashed.txt")).build();
+		HttpRequest request = HttpRequest.newBuilder().uri(URI.create("https://runemodfiles.xyz/beta_keys_hashed.txt")).build();
 		HttpResponse<String> response = null;
 		try
 		{
@@ -816,7 +882,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		}
 	}
 
-	public boolean checkBetaKey()
+/*	public boolean checkBetaKey()
 	{
 		boolean isValidKey = false;
 
@@ -858,7 +924,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		}
 
 		return isValidKey;
-	}
+	}*/
 
 	@Override
 	protected void startUp() throws IOException
@@ -877,7 +943,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 		log.info("Starting RuneMod plugin");
 
-		checkBetaKey();
+		//checkBetaKey();
 		ticksSincePluginLoad = -1;
 	}
 
@@ -887,6 +953,8 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		log.info("RuneMod is stopping");
 		isShutDown = true;
 		clientThread.invoke(() -> {
+			unRegisterMouseListener();
+
 			if (runeModLauncher != null)
 			{
 				if (runeModLauncher.runemodApp != null)
@@ -2206,7 +2274,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		sharedmem_rm.setInt(30000040, Math.round(canvasSizeX));
 		sharedmem_rm.setInt(30000045, Math.round(canvasSizeY));
 
-		sharedmem_rm.SharedMemoryData.write(30000060, bufferProvider.getPixels(), 0, bufferProvider.getHeight() * bufferProvider.getWidth());
+		sharedmem_rm.SharedMemoryData.write(30000080, bufferProvider.getPixels(), 0, bufferProvider.getHeight() * bufferProvider.getWidth());
 		sharedmem_rm.myKernel32.SetEvent(sharedmem_rm.EventViewportPixelsReady);
 		log_Timed_Heavy("_UpdateSharedMemoryUiPixels_1");
 	}
@@ -2275,15 +2343,6 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 	private void WritePerFramePacket()
 	{
-		if (client.getGameState() == GameState.LOGIN_SCREEN || curGamestate == GameState.LOGIN_SCREEN_AUTHENTICATOR)
-		{
-			if (client.getGameCycle() % 20 == 0)
-			{
-				//bodge. constantly resizes canvas in order to force it to repaint. This prevents the loss of transparency on the loginscreens background pixels, caused by going to the world sel;ect screen.
-				client.resizeCanvas();
-			}
-		}
-
 		if (client.getGameState() == GameState.LOGIN_SCREEN || client.getGameState() == GameState.LOGGING_IN || curGamestate == GameState.LOGIN_SCREEN_AUTHENTICATOR)
 		{ //dont send perframe packet while on login screen because doing so would interfere with the animated login screen's camera.
 			return;
@@ -2687,6 +2746,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	{
 		if (client.getCanvas() == null)
 		{
+			log.debug("Null canvas, wont update rmWindow");
 			return false;
 		}
 		if (!client.getCanvas().isShowing())
@@ -2696,6 +2756,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		}
 		int curCavansX = rsUiPosX + client.getViewportXOffset();
 		int curCavansY = rsUiPosY + client.getViewportYOffset();
+		//canvas pos is now always 0, because we have childed runemod win to client.
 
 		int curCavansSizeX = client.getViewportWidth();
 		int curCavansSizeY = client.getViewportHeight();

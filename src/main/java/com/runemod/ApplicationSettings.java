@@ -34,4 +34,5 @@ public class ApplicationSettings
 	public boolean highPerformanceMode = false;
 	public int resolutionScaling = 100;
 	public boolean animateLoginScreen = true;
+	public boolean autoRecord = false;
 }

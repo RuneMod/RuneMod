@@ -26,6 +26,7 @@
 package com.runemod.cache.util;
 
 //import org.apache.commons.compress.utils.IOUtils;
+import org.apache.commons.compress.utils.IOUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -35,19 +36,7 @@ import java.util.zip.GZIPOutputStream;
 
 public class GZip
 {
-	private static final Logger logger = LoggerFactory.getLogger(GZip.class);
-
 	public static byte[] compress(byte[] bytes) throws IOException
-	{
-		return null;
-	}
-
-	public static byte[] decompress(byte[] bytes, int len) throws IOException
-	{
-		return null;
-	}
-
-/*	public static byte[] compress(byte[] bytes) throws IOException
 	{
 		InputStream is = new ByteArrayInputStream(bytes);
 		ByteArrayOutputStream bout = new ByteArrayOutputStream();
@@ -70,5 +59,5 @@ public class GZip
 		}
 
 		return os.toByteArray();
-	}*/
+	}
 }
