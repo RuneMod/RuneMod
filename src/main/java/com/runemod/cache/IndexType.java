@@ -47,7 +47,9 @@ public enum IndexType
 	WORLDMAP_GEOGRAPHY(18),
 	WORLDMAP(19),
 	WORLDMAP_GROUND(20),
-	DBTABLEINDEX(21);
+	DBTABLEINDEX(21),
+	SKELANIMFRAMES(22), //added myself. custom.
+	;
 
 	private final int id;
 

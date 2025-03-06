@@ -173,7 +173,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 	@Inject
 	private Gson gson;
-	
+
 
 	public static float getCurTimeSeconds()
 	{
@@ -1032,6 +1032,8 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		sendTextures();
 		myCacheReader.sendOverlayDefinitions();
 		myCacheReader.sendUnderlayDefinitions();
+		myCacheReader.sendSkeletalFrameSets();
+		//myCacheReader.sendFrames_Test();
 
 		Buffer mainBuffer = new Buffer(new byte[10]);
 		mainBuffer.writeInt(789728); //put this random number in packet content because im not sure it is ok to send empty packets.
@@ -1412,9 +1414,12 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		}
 		log.debug("ordsinal: " + event.getGameState().ordinal());
 
-		Buffer packet = new Buffer(new byte[10]);
-		packet.writeByte(event.getGameState().ordinal());
-		sharedmem_rm.backBuffer.writePacket(packet, "GameStateChanged");
+		if(unrealIsReady)
+		{
+			Buffer packet = new Buffer(new byte[10]);
+			packet.writeByte(event.getGameState().ordinal());
+			sharedmem_rm.backBuffer.writePacket(packet, "GameStateChanged");
+		}
 	}
 
 	@Subscribe

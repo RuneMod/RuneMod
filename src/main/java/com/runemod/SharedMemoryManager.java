@@ -121,7 +121,7 @@ public class SharedMemoryManager
 			case "RegionTiles":
 				dataTypeByte = 15;
 				break;
-			case "TileOverlayCols0123RGB":
+			case "SkeletalFrameSet": //"TileOverlayCols0123RGB":
 				dataTypeByte = 16;
 				break;
 			case "PerFramePacket":

@@ -220,6 +220,36 @@ public class CacheReader
 	}
 
 	@SneakyThrows
+	public void sendSkeletalFrameSets()
+	{
+		Storage storage = store.getStorage();
+		Index frameIndex = store.getIndex(IndexType.SKELANIMFRAMES);
+		int counter = 0;
+		for (Archive archive : frameIndex.getArchives())
+		{
+			byte[] archiveData = storage.loadArchive(archive);
+
+			ArchiveFiles archiveFiles = archive.getFiles(archiveData);
+			for (FSFile archiveFile : archiveFiles.getFiles())
+			{
+				byte[] bytes = archiveFile.getContents();
+				if (bytes != null && bytes.length > 0)
+				{
+					counter++;
+					int frameId_Packed = (archive.getArchiveId() << 16 | archiveFile.getFileId());
+					Buffer mainBuffer = new Buffer(new byte[0]);
+					mainBuffer = new Buffer(new byte[bytes.length + 12]);
+
+					mainBuffer.writeLong(frameId_Packed);
+					mainBuffer.writeByte_Array(bytes, bytes.length);
+					RuneModPlugin.sharedmem_rm.backBuffer.writePacket(mainBuffer, "SkeletalFrameSet");
+				}
+			}
+		}
+		log.debug("Sent " + counter + " SkeletalFrameSets");
+	}
+
+	@SneakyThrows
 	public void sendSkeletons()
 	{
 		int archiveCount = GetArchiveCount(IndexType.SKELETONS);
