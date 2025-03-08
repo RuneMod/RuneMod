@@ -44,6 +44,7 @@ import javax.sound.sampled.Line;
 import javax.sound.sampled.LineUnavailableException;
 import javax.sound.sampled.Mixer;
 import javax.swing.JFrame;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
 import lombok.SneakyThrows;
@@ -368,51 +369,20 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		{
 			startUp_Custom();
 
-			if (client.getGameState().ordinal() > GameState.LOGIN_SCREEN_AUTHENTICATOR.ordinal())
-			{
-				runeMod_loadingScreen.SetStatus_DetailText("To enable RuneMod, you must first logout", true);
-				startedWhileLoggedIn = true;
-
-				Thread.sleep(4000);
-
-				SwingUtilities.invokeLater(() ->
-				{
-					try
-					{
-						pluginManager.setPluginEnabled(this, false);
-						pluginManager.stopPlugin(this);
-					}
-					catch (PluginInstantiationException ex)
-					{
-						log.error("error stopping plugin", ex);
-					}
-
-					try
-					{
-						shutDown();
-					}
-					catch (Exception exception)
-					{
-						exception.printStackTrace();
-					}
-				});
-
+			if(startedWhileLoggedIn) {
+				return;
 			}
-			else
-			{
-				runeMod_loadingScreen.SetStatus_DetailText("Starting...", true);
-				startedWhileLoggedIn = false;
 
-				runeModLauncher.launch();
-			}
+			runeMod_loadingScreen.SetStatus_DetailText("Starting...", true);
+
+			runeModLauncher.launch();
 
 			myCacheReader.printRevs();
 		}
 
-		if (ticksSincePluginLoad <= 1)
-		{
-			return;
-		}
+		if (ticksSincePluginLoad <= 1) { return; }
+
+		if(startedWhileLoggedIn) { return; }
 
 
 		if (config.OrbitCamera())
@@ -750,6 +720,8 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 	void setDefaults()
 	{
+		startedWhileLoggedIn = false;
+
 		clientPlane = -1;
 
 		unrealIsReady = false;
@@ -805,6 +777,41 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	@SneakyThrows
 	void startUp_Custom()
 	{
+		if (client.getGameState().ordinal() > GameState.LOGIN_SCREEN_AUTHENTICATOR.ordinal())
+		{
+			startedWhileLoggedIn = true;
+
+			SwingUtilities.invokeLater(() ->
+			{
+				try
+				{
+					pluginManager.setPluginEnabled(this, false);
+					pluginManager.stopPlugin(this);
+				}
+				catch (PluginInstantiationException ex)
+				{
+					log.error("error stopping plugin", ex);
+				}
+
+				try
+				{
+					shutDown();
+				}
+				catch (Exception exception)
+				{
+					exception.printStackTrace();
+				}
+
+				int response = JOptionPane.showConfirmDialog(null,
+					"To enable RuneMod, you must first logout",
+					"RuneMod Error",
+					JOptionPane.DEFAULT_OPTION);
+			});
+			return;
+		}else {
+			startedWhileLoggedIn = false;
+		}
+
 		registerMouseListener();
 
 		setDefaults();
@@ -926,6 +933,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		return isValidKey;
 	}*/
 
+	@SneakyThrows
 	@Override
 	protected void startUp() throws IOException
 	{
@@ -1233,8 +1241,8 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			{
 				if (object != null)
 				{
-					if (object.getSceneMinLocation().equals(tile.getSceneLocation()))
-					{
+					//if (object.getSceneMinLocation().equals(tile.getSceneLocation()))
+					//{
 						if (object instanceof TileObject)
 						{
 							if (object.getRenderable() != null)
@@ -1254,7 +1262,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 								}
 							}
 						}
-					}
+					//}
 				}
 			}
 
@@ -1342,10 +1350,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	@Subscribe
 	private void onGameStateChanged(GameStateChanged event)
 	{
-		if (ticksSincePluginLoad <= 1)
-		{
-			return;
-		}
+		if (ticksSincePluginLoad <= 1) { return; }
 		lastGameState = curGamestate;
 		curGamestate = event.getGameState();
 		log.debug("gameStateChanged to: ");
@@ -1425,6 +1430,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	@Subscribe
 	private void onWallObjectDespawned(WallObjectDespawned event)
 	{
+		if (ticksSincePluginLoad <= 1) { return; }
 		clientThread.invokeAtTickEnd(() -> //invoking later because baslocation likely hasnt been sent to unreal yet
 		{
 			if (!config.spawnGameObjects())
@@ -1467,6 +1473,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	@Subscribe
 	private void onWallObjectSpawned(WallObjectSpawned event)
 	{
+		if (ticksSincePluginLoad <= 1) { return; }
 		clientThread.invokeAtTickEnd(() -> //invoking later because baslocation likely hasnt been sent to unreal yet
 		{
 			if (!config.spawnGameObjects())
@@ -1531,6 +1538,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	@Subscribe
 	private void onDecorativeObjectDespawned(DecorativeObjectDespawned event)
 	{
+		if (ticksSincePluginLoad <= 1) { return; }
 		clientThread.invokeAtTickEnd(() -> //invoking later because baslocation likely hasnt been sent to unreal yet
 		{
 			Tile tile;
@@ -1557,6 +1565,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	@Subscribe
 	private void onDecorativeObjectSpawned(DecorativeObjectSpawned event)
 	{
+		if (ticksSincePluginLoad <= 1) { return; }
 		if (!config.spawnGameObjects())
 		{
 			return;
@@ -1622,6 +1631,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	@Subscribe
 	private void onVarbitChanged(VarbitChanged event)
 	{
+		if (ticksSincePluginLoad <= 1) { return; }
 		//in VarbitChanged func in unreal, we read: varType. varId. varValue. custom0.
 		Buffer buffer = new Buffer(new byte[12]);
 
@@ -1738,6 +1748,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	@Subscribe
 	private void onGameObjectSpawned(GameObjectSpawned event)
 	{
+		if (ticksSincePluginLoad <= 1) { return; }
 		clientThread.invokeAtTickEnd(() -> //invoking later because baslocation likely hasnt been sent to unreal yet
 		{
 			if (!config.spawnGameObjects())
@@ -1760,7 +1771,12 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 			int plane = tile.getRenderLevel();
 			int tileX = event.getGameObject().getSceneMinLocation().getX();
+			int difX = event.getGameObject().getSceneMaxLocation().getX()-event.getGameObject().getSceneMinLocation().getX();
+			tileX+=difX/2;
+
 			int tileY = event.getGameObject().getSceneMinLocation().getY();
+			int difY = event.getGameObject().getSceneMaxLocation().getY()-event.getGameObject().getSceneMinLocation().getY();
+			tileY+=difY/2;
 
 			int height = event.getGameObject().getZ() * -1;
 
@@ -1782,7 +1798,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			actorSpawnPacket.writeLong(tag);
 			actorSpawnPacket.writeShort(cycleStart);
 			actorSpawnPacket.writeShort(frame);
-			LocalPoint min_localPoint = new LocalPoint((event.getGameObject().getSceneMinLocation().getX() * 128) + 64, (event.getGameObject().getSceneMinLocation().getY() * 128) + 64);
+			LocalPoint min_localPoint = new LocalPoint((tileX * 128)+64, (tileY*128)+64);
 			int offsetX = event.getGameObject().getX() - min_localPoint.getX(); //explanation: centreX-MinX = offsetX;
 			int offsetY = event.getGameObject().getY() - min_localPoint.getY(); //explanation: centreY-MinY = offsetY;
 			actorSpawnPacket.writeShort(offsetX);
@@ -1795,6 +1811,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	@Subscribe
 	private void onGroundObjectDespawned(GroundObjectDespawned event)
 	{
+		if (ticksSincePluginLoad <= 1) { return; }
 		clientThread.invokeAtTickEnd(() -> //invoking later because baslocation likely hasnt been sent to unreal yet
 		{
 			Tile tile = event.getTile();
@@ -1820,6 +1837,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	@Subscribe
 	private void onGameObjectDespawned(GameObjectDespawned event)
 	{
+		if (ticksSincePluginLoad <= 1) { return; }
 		clientThread.invokeAtTickEnd(() -> //invoking later because baslocation likely hasnt been sent to unreal yet
 		{
 			Tile tile = event.getTile();
@@ -1871,6 +1889,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	@Subscribe
 	private void onGroundObjectSpawned(GroundObjectSpawned event)
 	{ //GroundObject is aka a FloorDecoration
+		if (ticksSincePluginLoad <= 1) { return; }
 		if (!config.spawnGameObjects())
 		{
 			return;
@@ -1924,6 +1943,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	@Subscribe
 	private void onItemSpawned(ItemSpawned event)
 	{
+		if (ticksSincePluginLoad <= 1) { return; }
 		if (!config.spawnItems())
 		{
 			return;
@@ -1933,10 +1953,10 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			Buffer actorSpawnPacket = new Buffer(new byte[100]);
 
 			int tilePlane = event.getTile().getPlane();
-			if (event.getTile().getBridge() != null)
+/*			if (event.getTile().getBridge() != null)
 			{
 				tilePlane++;
-			}
+			}*/
 
 			int tileX = event.getTile().getSceneLocation().getX();
 			int tileY = event.getTile().getSceneLocation().getY();
@@ -1959,15 +1979,16 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	@Subscribe
 	private void onItemDespawned(ItemDespawned event)
 	{
+		if (ticksSincePluginLoad <= 1) { return; }
 		clientThread.invokeAtTickEnd(() ->
 		{
 			Buffer actorSpawnPacket = new Buffer(new byte[100]);
 
 			int tilePlane = event.getTile().getPlane();
-			if (event.getTile().getBridge() != null)
+/*			if (event.getTile().getBridge() != null)
 			{
 				tilePlane++;
-			}
+			}*/
 
 			int tileX = event.getTile().getSceneLocation().getX();
 			int tileY = event.getTile().getSceneLocation().getY();
@@ -1985,6 +2006,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	@Subscribe
 	private void onNpcSpawned(NpcSpawned event)
 	{
+		if (ticksSincePluginLoad <= 1) { return; }
 		if (event.getNpc() == null)
 		{
 			return;
@@ -2013,6 +2035,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	@Subscribe
 	private void onNpcChanged(NpcChanged event)
 	{
+		if (ticksSincePluginLoad <= 1) { return; }
 		if (event.getNpc() == null)
 		{
 			return;
@@ -2033,6 +2056,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	@Subscribe
 	private void onNpcDespawned(NpcDespawned event)
 	{
+		if (ticksSincePluginLoad <= 1) { return; }
 		if (event.getNpc() == null)
 		{
 			return;
@@ -2049,6 +2073,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	@Subscribe
 	private void onPlayerChanged(PlayerChanged event)
 	{
+		if (ticksSincePluginLoad <= 1) { return; }
 		if (!config.spawnPlayers())
 		{
 			return;
@@ -2089,6 +2114,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	@Subscribe
 	private void onPlayerSpawned(PlayerSpawned event)
 	{
+		if (ticksSincePluginLoad <= 1) { return; }
 		if (!config.spawnPlayers())
 		{
 			return;
@@ -2140,6 +2166,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	@Subscribe
 	private void onPlayerDespawned(PlayerDespawned event)
 	{
+		if (ticksSincePluginLoad <= 1) { return; }
 		Buffer actorSpawnPacket = new Buffer(new byte[100]);
 
 		int instanceId = event.getPlayer().getId();

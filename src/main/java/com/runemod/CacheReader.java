@@ -252,9 +252,8 @@ public class CacheReader
 	@SneakyThrows
 	public void sendSkeletons()
 	{
-		int archiveCount = GetArchiveCount(IndexType.SKELETONS);
 		int counter = 0;
-		for (int i = 0; i < archiveCount; i++)
+		for (int i : getArchiveIds(IndexType.SKELETONS))
 		{
 			byte[] bytes = GetCacheFileBytes(IndexType.SKELETONS, i, 0);
 			if (bytes != null && bytes.length > 0)
@@ -264,6 +263,8 @@ public class CacheReader
 				mainBuffer.writeLong(i);
 				mainBuffer.writeByte_Array(bytes, bytes.length);
 				RuneModPlugin.sharedmem_rm.backBuffer.writePacket(mainBuffer, "Skeleton");
+			} else {
+				log.debug("SkeletonId: "+i+" not found");
 			}
 		}
 		log.debug("Sent " + counter + " Skeletons");
@@ -421,11 +422,26 @@ public class CacheReader
 		log.debug("Sent " + counter + " UnderlayDefinitions");
 	}
 
+	public ArrayList<Integer> getArchiveIds(IndexType indexType) {
+		ArrayList<Integer> ids = new ArrayList<>();
+		Index index = store.getIndex(indexType);
+		for (Archive archive : index.getArchives())
+		{
+			if(archive!= null) {
+				ids.add(archive.getArchiveId());
+			}
+		}
+
+		return ids;
+	}
+
 	public void sendModels()
 	{
-		int archiveCount = GetArchiveCount(IndexType.MODELS);
+		//int archiveCount = GetArchiveCount(IndexType.MODELS);
+		//Index index = store.getIndex(IndexType.MODELS);
+
 		int counter = 0;
-		for (int i = 0; i < archiveCount; i++)
+		for (int i : getArchiveIds(IndexType.MODELS))
 		{
 			byte[] bytes = GetCacheFileBytes(IndexType.MODELS, i, 0);
 			if (bytes != null && bytes.length > 0)
@@ -435,6 +451,8 @@ public class CacheReader
 				mainBuffer.writeLong(i);
 				mainBuffer.writeByte_Array(bytes, bytes.length);
 				RuneModPlugin.sharedmem_rm.backBuffer.writePacket(mainBuffer, "ModelData");
+			} else {
+				log.debug("ModelId: "+i+" not found");
 			}
 		}
 		log.debug("Sent " + counter + " Models");
