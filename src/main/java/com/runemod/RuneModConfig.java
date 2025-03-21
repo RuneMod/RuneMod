@@ -294,4 +294,16 @@ public interface RuneModConfig extends Config
 	{
 		return true;
 	}
+
+	@ConfigItem(
+		keyName = "unmask_recording",
+		name = "unmask_recording",
+		description = "unmask_recording",
+		position = 100,
+		section = Developer_Debug
+	)
+	default boolean unmask_recording()
+	{
+		return false;
+	}
 }

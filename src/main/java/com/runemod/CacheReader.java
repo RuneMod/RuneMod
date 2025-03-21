@@ -52,11 +52,10 @@ public class CacheReader
 {
 	public Store store;
 
-	public CacheReader()
+	public CacheReader(String cachePath)
 	{
 		try
 		{
-			String cachePath = RUNELITE_DIR + "\\jagexcache\\oldschool\\LIVE";
 			store = new Store(new File(cachePath));
 			log.debug("cachePath: " + cachePath);
 			store.load();
@@ -118,11 +117,13 @@ public class CacheReader
 		}
 	}
 
+	public static final int cacheExporterVersion = 1; //I increment this this to force a reexport of rscache. useful for forcing update when the cache exporter is altered.
+
 	public int[] provideRsCacheHashes()
 	{
 		log.debug("provideRsCacheHashes()");
 		List<Index> indexes = store.getIndexes();
-		int[] hashes = new int[indexes.size()];
+		int[] hashes = new int[indexes.size()+1];
 		for (Index index : indexes)
 		{
 			//hashes[index.getId()] = index.getCrc();
@@ -130,6 +131,8 @@ public class CacheReader
 			hashes[index.getId()] = index.getRevision(); //moved to rev system instead of crc.
 			log.debug("index " + index.getId() + " rev is " + index.getRevision());
 		}
+
+		hashes[hashes.length-1] = cacheExporterVersion;
 
 		Buffer mainBuffer = new Buffer(new byte[(hashes.length * 4) + 12]);
 		mainBuffer.writeInt_Array(hashes, hashes.length);
@@ -580,11 +583,16 @@ public class CacheReader
 							mainBuffer.writeLong(tileId); //write cacheElment id
 
 							Buffer elementBuffer = new Buffer(new byte[20]);//create cacheElementBytes;
-							elementBuffer.writeShort((region.getTileHeight(z, x, y) / 8) * -1);
-							elementBuffer.writeShort(tile.overlayId);
+							//elementBuffer.writeShort((region.getTileHeight(z, x, y) / 8) * -1);
+							if(tile.height != nullTile.height) {
+								elementBuffer.writeShort(tile.height);
+							}else{
+								elementBuffer.writeShort(-1);
+							}
+							elementBuffer.writeShort(tile.overlayId&0x7FFF);
 							elementBuffer.writeByte(tile.overlayRotation);
 							elementBuffer.writeByte(tile.overlayPath);
-							elementBuffer.writeByte(tile.underlayId);
+							elementBuffer.writeByte(tile.underlayId&0x7FFF);
 							elementBuffer.writeByte(tile.settings);
 
 							mainBuffer.writeByte_Array(elementBuffer.array, elementBuffer.offset);

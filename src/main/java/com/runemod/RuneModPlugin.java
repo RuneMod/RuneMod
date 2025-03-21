@@ -33,6 +33,9 @@ import java.awt.LayoutManager;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
+import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -151,6 +154,13 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	private int clientPlane = -1; //used to track when plane has changed
 	private Set<Integer> hashedEntitys_LastFrame = new HashSet<Integer>(); //used to track spawns/despawnes of entities.
 
+	public static String cachePath = RUNELITE_DIR + "\\jagexcache\\oldschool\\LIVE";
+
+	boolean mappedMaskedAnims = false;
+	int[] knownMaskedAnimIds = {7592, 7593, 7949, 7950, 7951, 7952, 7957, 7960, 8059, 8123, 8124, 8125, 8126, 8127, 8234, 8235, 8236, 8237, 8238, 8241, 8242, 8243, 8244, 8245, 8248, 8249, 8250, 8251, 8252, 8255, 8256, 8257, 8258};
+	HashMap<Integer, Integer> ObbedAnim_deobedAnim_Map = new HashMap<>();
+	Field field_animation = null;
+
 	@Inject
 	public Client client;
 
@@ -173,8 +183,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	private Hooks hooks;
 
 	@Inject
-	private Gson gson;
-
+	public Gson gson;
 
 	public static float getCurTimeSeconds()
 	{
@@ -315,46 +324,104 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 	public void muteLoginScreenMusic(boolean mute){ //bodged, coppied from reddit. used to mute loginscreen.
 		javax.sound.sampled.Mixer.Info[] mixers = AudioSystem.getMixerInfo();
-		//System.out.println("There are " + mixers.length + " mixer info objects");
-		for(int i=0;i<mixers.length;i++){
+
+		for (int i = 0; i < mixers.length; i++) {
 			Mixer.Info mixerInfo = mixers[i];
-			//System.out.println("Mixer Name:"+mixerInfo.getName());
+			// System.out.println("Mixer Name:" + mixerInfo.getName());
 			Mixer mixer = AudioSystem.getMixer(mixerInfo);
-			Line.Info[] lineinfos = ((Mixer) mixer).getTargetLineInfo();
-			for(Line.Info lineinfo : lineinfos){
-				//System.out.println("line:" + lineinfo);
+			Line.Info[] lineinfos = mixer.getTargetLineInfo();
+			for (Line.Info lineinfo : lineinfos) {
+				// System.out.println("line:" + lineinfo);
+				Line line = null;
 				try {
-					Line line = mixer.getLine(lineinfo);
-					if(line!=null) {
+					line = mixer.getLine(lineinfo);
+					if (line != null) {
 						line.open();
-						if(line.isControlSupported(BooleanControl.Type.MUTE)) {
+						if (line.isControlSupported(BooleanControl.Type.MUTE)) {
 							BooleanControl bc = (BooleanControl) line.getControl(BooleanControl.Type.MUTE);
 							if (bc != null) {
-								//System.out.println("mute val");
-								bc.setValue(mute); // true to mute the line, false to unmute
-								//System.out.println("mute rl: "+mute);
+								System.out.println(line.getLineInfo().toString());
+								if (line.getLineInfo().toString().contains("SPEAKER target")) {
+									bc.setValue(mute); // true to mute the line, false to unmute
+									// Implement logic to manage audio settings or mute state
+								}
 							}
 						}
 					}
 				} catch (LineUnavailableException e) {
-					//e.printStackTrace();
+					// e.printStackTrace();
+				} finally {
+					if (line != null && line.isOpen()) {
+						line.close(); // Ensure the line is closed after use
+					}
 				}
 			}
 		}
 	}
 
-	@SneakyThrows
+	int getAnimation_Unmasked(NPC npc) {
+		try
+		{
+			if(field_animation == null) {
+				return npc.getAnimation();
+			}
+
+			int animationVal_Obbed = field_animation.getInt(npc); //obfuscated anim val
+			Integer deobbedVal = ObbedAnim_deobedAnim_Map.get(animationVal_Obbed);
+			if(deobbedVal != null) {
+				//System.out.println("unmasked anim "+deobbedVal);
+				return deobbedVal;
+			}else {
+				return npc.getAnimation();
+			}
+		}
+		catch (IllegalAccessException e)
+		{
+			e.printStackTrace();
+			return npc.getAnimation();
+		}
+	}
+
+	void mapObfuscatedAnimValues() {
+		if(!mappedMaskedAnims) {
+			if(client.getNpcs().size() > 0) { //Map obfuscated masked anim values, using the first npc we find
+				mappedMaskedAnims = true;
+				log.debug("mapping masked anims");
+				NPC npc = client.getNpcs().get(0);
+				try
+				{
+					field_animation = npc.getClass().getSuperclass().getDeclaredField("cc"); //"sequence" field
+					field_animation.setAccessible(true);
+					int ogAnim = npc.getAnimation();
+					for (int knownMaskedAnim : knownMaskedAnimIds) {
+						npc.setAnimation(knownMaskedAnim);
+						int animationVal_Obbed = 0; //obfuscated anim val
+						try
+						{
+							animationVal_Obbed = field_animation.getInt(npc);
+							ObbedAnim_deobedAnim_Map.put(animationVal_Obbed, knownMaskedAnim);
+							//System.out.println("anim "+knownMaskedAnim + " = "+animationVal_Obbed);
+						}
+						catch (IllegalAccessException e)
+						{
+							log.debug("error getting obbed anim values");
+							e.printStackTrace();
+						}
+					}
+					npc.setAnimation(ogAnim);
+				}
+				catch (NoSuchFieldException e)
+				{
+					log.debug("error when mapping Anim Values");
+					e.printStackTrace();
+				}
+			}
+		}
+	}
+
 	@Subscribe
 	private void onBeforeRender(BeforeRender event)
 	{
-		SwingUtilities.invokeLater(() ->
-		{
-			if (client.getGameState() == GameState.LOGIN_SCREEN || client.getGameState()== GameState.LOGIN_SCREEN_AUTHENTICATOR) {
-				muteLoginScreenMusic(!unrealIsReady);
-			}
-		});
-
-
 		log_Timed_Heavy("onBeforeRender");
 
 		alreadyCommunicatedUnreal = false;
@@ -363,7 +430,6 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		{
 			ticksSincePluginLoad++;
 		}
-
 
 		if (ticksSincePluginLoad == 1)
 		{
@@ -376,30 +442,30 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			runeMod_loadingScreen.SetStatus_DetailText("Starting...", true);
 
 			runeModLauncher.launch();
-
-			myCacheReader.printRevs();
 		}
 
 		if (ticksSincePluginLoad <= 1) { return; }
 
 		if(startedWhileLoggedIn) { return; }
 
-
 		if (config.OrbitCamera())
 		{
 			client.setCameraYawTarget(client.getCameraYaw() + 1);
 		}
 
-		if (startedWhileLoggedIn)
-		{
-			return;
-		}
+		mapObfuscatedAnimValues();
 
 		//check if rscache is currently being updated. if not, start runemod launcher.
 		if (rsCacheIsDownloading == true && client.getGameState().ordinal() >= GameState.STARTING.ordinal() && client.getGameCycle() % 20 == 0)
 		{
-			String directory = RUNELITE_DIR + "\\jagexcache\\oldschool\\LIVE";
-			File[] files = new File(directory).listFiles();
+			cachePath = RUNELITE_DIR + "\\jagexcache\\oldschool\\LIVE";
+
+			if(client.getWorldType().contains(WorldType.BETA_WORLD)) { //incomplete. would need a system to detec when we have changed to a beta world and donwloaded beta cache
+				log.debug("isBetaWorld");
+				cachePath = RUNELITE_DIR + "\\jagexcache\\oldschool-beta\\LIVE";
+			}
+
+			File[] files = new File(cachePath).listFiles();
 			for (File file : files)
 			{
 				if (file != null && file.isFile())
@@ -419,6 +485,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 				log.info("RSCache has finished downloading");
 				runeMod_loadingScreen.SetStatus_DetailText("Downloaded RS cache", true);
 				rsCacheIsDownloading = false;
+				myCacheReader = new CacheReader(cachePath);
 			}
 			else
 			{
@@ -777,6 +844,15 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	@SneakyThrows
 	void startUp_Custom()
 	{
+		SwingUtilities.invokeLater(() ->
+		{
+			SwingUtilities.invokeLater(() ->
+			{
+				muteLoginScreenMusic(!unrealIsReady);
+			});
+		});
+
+
 		if (client.getGameState().ordinal() > GameState.LOGIN_SCREEN_AUTHENTICATOR.ordinal())
 		{
 			startedWhileLoggedIn = true;
@@ -812,9 +888,9 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			startedWhileLoggedIn = false;
 		}
 
-		registerMouseListener();
-
 		setDefaults();
+
+		registerMouseListener();
 
 		runeModPlugin = this;
 
@@ -828,7 +904,6 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		runeMod_loadingScreen = new RuneMod_LoadingScreen(window, this);
 
 		runeModLauncher = new RuneMod_Launcher(config.UseAltRuneModLocation() ? config.AltRuneModLocation() : "", config.StartRuneModOnStart());
-		myCacheReader = new CacheReader();
 
 		isShutDown = false;
 
@@ -1357,6 +1432,14 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 		if (curGamestate == GameState.LOGIN_SCREEN)
 		{
+			SwingUtilities.invokeLater(() ->
+			{
+				SwingUtilities.invokeLater(() ->
+				{
+					muteLoginScreenMusic(!unrealIsReady); //unmutes login screen music when unreal is ready.
+				});
+			});
+
 			appSettings = loadAppSettings(); //load appSettings file
 
 			if (appSettings != null)
@@ -1425,6 +1508,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			packet.writeByte(event.getGameState().ordinal());
 			sharedmem_rm.backBuffer.writePacket(packet, "GameStateChanged");
 		}
+
 	}
 
 	@Subscribe
@@ -1438,23 +1522,11 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 				return;
 			}
 
-			Tile tile;
-			if (event.getTile().getBridge() != null)
-			{
-				tile = event.getTile().getBridge();
-			}
-			else
-			{
-				tile = event.getTile();
-			}
+			Tile tile = event.getTile();;
 
 			Buffer actorSpawnPacket = new Buffer(new byte[100]);
 
-			int tilePlane = tile.getPlane();
-			if (event.getTile().getBridge() != null)
-			{
-				tilePlane++;
-			}
+			int tilePlane = tile.getRenderLevel();
 
 			int tileX = tile.getSceneLocation().getX();
 			int tileY = tile.getSceneLocation().getY();
@@ -1466,9 +1538,10 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			actorSpawnPacket.writeLong(tag);
 
 			sharedmem_rm.backBuffer.writePacket(actorSpawnPacket, "ActorDeSpawn");
-			log.debug("wallobject despawned: " + event.getWallObject().getId());
 		});
 	}
+
+	Set<WallObject> wallObjects = new HashSet<WallObject>();
 
 	@Subscribe
 	private void onWallObjectSpawned(WallObjectSpawned event)
@@ -1480,9 +1553,10 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			{
 				return;
 			}
+
+
 			Tile tile;
 			tile = event.getTile();
-
 
 			Buffer actorSpawnPacket = new Buffer(new byte[100]);
 			int tileObjectModelType = getObjModelTypeFromFlags(event.getWallObject().getConfig());
@@ -1770,13 +1844,10 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			int objectDefinitionId = event.getGameObject().getId();//note when a gameobject spawns, the id relates to the untransformed/original objectdef.
 
 			int plane = tile.getRenderLevel();
-			int tileX = event.getGameObject().getSceneMinLocation().getX();
-			int difX = event.getGameObject().getSceneMaxLocation().getX()-event.getGameObject().getSceneMinLocation().getX();
-			tileX+=difX/2;
+			int tileX = tile.getSceneLocation().getX();
 
-			int tileY = event.getGameObject().getSceneMinLocation().getY();
-			int difY = event.getGameObject().getSceneMaxLocation().getY()-event.getGameObject().getSceneMinLocation().getY();
-			tileY+=difY/2;
+			int tileY = tile.getSceneLocation().getY();
+
 
 			int height = event.getGameObject().getZ() * -1;
 
@@ -1793,6 +1864,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			actorSpawnPacket.writeByte(tileX);
 			actorSpawnPacket.writeByte(tileY);
 			int tileMinPlane = tile.getPlane();
+
 			actorSpawnPacket.writeByte(tileMinPlane);
 			actorSpawnPacket.writeShort(height);
 			actorSpawnPacket.writeLong(tag);
@@ -1900,7 +1972,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 			Buffer actorSpawnPacket = new Buffer(new byte[100]);
 			int tileObjectModelType = getObjModelTypeFromFlags(event.getGroundObject().getConfig());
-			int var4 = (event.getGroundObject().getConfig() - tileObjectModelType) >> 6 & 3;
+			int var4 = (event.getGroundObject().getConfig()) >> 6 & 3;
 			int objectOrientationA = var4 * 512;
 			int objectOrientationB = -1;
 			int objectDefinitionId = event.getGroundObject().getId();
@@ -2003,14 +2075,17 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		});
 	}
 
+	@SneakyThrows
 	@Subscribe
 	private void onNpcSpawned(NpcSpawned event)
 	{
 		if (ticksSincePluginLoad <= 1) { return; }
+
 		if (event.getNpc() == null)
 		{
 			return;
 		}
+
 		boolean shouldDraw = hooks.draw(event.getNpc(), false);
 		if (!shouldDraw)
 		{
@@ -2120,8 +2195,8 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			return;
 		}
 
-		Player player = event.getPlayer();
 
+		Player player = event.getPlayer();
 
 		boolean shouldDraw = hooks.draw(player, false);
 		if (!shouldDraw && player != client.getLocalPlayer())
@@ -2356,6 +2431,135 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		});
 	}
 
+	private Field getField(Object instance, String method) {
+		Class<?> clazz = instance.getClass();
+
+		while (clazz != null && clazz.getSuperclass() != clazz) {
+			try {
+				Field field = clazz.getDeclaredField(method);
+				field.setAccessible(true);
+				return field;
+			} catch (NoSuchFieldException ex) {}
+
+			clazz = clazz.getSuperclass();
+		}
+		throw new RuntimeException("Method '" + method + "' not found in class '" + instance.getClass() + "'");
+	}
+
+	String[] allowedNames = {"sequence", "animation"};
+
+	boolean isAllowed(String name) {
+		return true;
+/*		if (name.length() <= 3) {return true;}
+		String name_lowerCase = name.toLowerCase();
+		for (String allowedName : allowedNames) {
+			if(name_lowerCase.contains(allowedName)) {
+				return true;
+			}
+		}
+		return false;*/
+	}
+
+	Class<?> allowedType = Integer.class;
+
+	public void printFields(Object instance) {
+		if (instance == null) {
+			System.out.println("Instance is null.");
+			return;
+		}
+
+		Class<?> clazz = instance.getClass();
+
+		while (clazz != null) {
+			Field[] fields = clazz.getDeclaredFields();
+			for (Field field : fields) {
+/*				if(!isAllowed(field.getName())) {
+					continue;
+				}*/
+				field.setAccessible(true);
+				try {
+					if(field.getType().getTypeName().contains("int")) {
+						System.out.print("obj field: ");
+						System.out.println(field.getName() + ": " + field.get(instance));
+					}
+				} catch (IllegalAccessException e) {
+					System.out.println(field.getName() + ": Access denied");
+				} catch (Exception e) {
+					System.out.println(field.getName() + ": Error occurred - " + e.getMessage());
+				}
+			}
+
+			Method[] methods = clazz.getDeclaredMethods();
+			for (Method method : methods) {
+/*				if(!isAllowed(method.getName())) {
+					continue;
+				}*/
+
+				if (method.getParameterCount() == 0) {
+					method.setAccessible(true);
+					try {
+						if(method.getReturnType().getTypeName().contains("int")) {
+							System.out.print("obj method: " + method.getName()+": ");
+							System.out.println(method.invoke(instance));
+						}
+					} catch (IllegalAccessException | InvocationTargetException e) {
+						System.out.println(method.getName() + ": Access denied or error occurred");
+					} catch (Exception e) {
+						System.out.println(method.getName() + ": Error occurred - " + e.getMessage());
+					}
+				}
+			}
+
+			Class<?>[] interfaces = clazz.getInterfaces();
+			System.out.println("NoInterfaces: " + interfaces.length);
+			for (Class<?> iface : interfaces) {
+/*				if(!isAllowed(iface.getName())) {
+					continue;
+				}*/
+				Field[] ifaceFields = iface.getDeclaredFields();
+				for (Field ifaceField : ifaceFields) {
+/*					if(!isAllowed(iface.getName())) {
+						continue;
+					}*/
+
+					ifaceField.setAccessible(true);
+					try {
+						if(ifaceField.getType().getTypeName().contains("int")) {
+							System.out.print("iface field: ");
+							System.out.println(ifaceField.getName() + ": " + ifaceField.get(instance));
+						}
+					} catch (IllegalAccessException e) {
+						System.out.println(ifaceField.getName() + ": Access denied");
+					} catch (Exception e) {
+						System.out.println(ifaceField.getName() + ": Error occurred - " + e.getMessage());
+					}
+				}
+
+				Method[] ifaceMethods = iface.getDeclaredMethods();
+				for (Method method : ifaceMethods) {
+					if (method.getParameterCount() == 0) {
+/*						if(!isAllowed(method.getName())) {
+							continue;
+						}*/
+						method.setAccessible(true);
+						try {
+							if(method.getReturnType().getTypeName().contains("int")) {
+								System.out.print("iface method: " + method.getName()+": ");
+								System.out.println(method.invoke(instance));
+							}
+						} catch (IllegalAccessException | InvocationTargetException e) {
+							System.out.println(method.getName() + ": Access denied or error occurred");
+						} catch (Exception e) {
+							System.out.println(method.getName() + ": Error occurred - " + e.getMessage());
+						}
+					}
+				}
+			}
+
+			clazz = clazz.getSuperclass();
+		}
+	}
+
 	private void sendBaseCoordinatePacket()
 	{ //send Base Coordinate if needed
 		sendInstancedAreaState(client.getTopLevelWorldView().getScene());
@@ -2373,6 +2577,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		sharedmem_rm.backBuffer.writePacket(packet, "BaseCoordinate");
 	}
 
+	@SneakyThrows
 	private void WritePerFramePacket()
 	{
 		if (client.getGameState() == GameState.LOGIN_SCREEN || client.getGameState() == GameState.LOGGING_IN || curGamestate == GameState.LOGIN_SCREEN_AUTHENTICATOR)
@@ -2380,9 +2585,9 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			return;
 		}
 
-		if (client.getTopLevelWorldView().getPlane() != clientPlane)
+		if (client.getLocalPlayer().getWorldLocation().getPlane()/*client.getTopLevelWorldView().getPlane()*/ != clientPlane)
 		{
-			clientPlane = client.getTopLevelWorldView().getPlane();
+			clientPlane = client.getLocalPlayer().getWorldLocation().getPlane()/*client.getTopLevelWorldView().getPlane()*/;
 			sendPlaneChanged();
 		}
 
@@ -2418,6 +2623,15 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		int npcCount = 0;
 		for (NPC npc : npcs)
 		{
+
+			//reflection testing
+/*			if(npc.getAnimation()!=-1) {
+				Field field_animationFrame = npc.getClass().getSuperclass().getDeclaredField("cq"); //"sequence" field
+				System.out.println("Modifier: "+field_animationFrame.getModifiers());
+				field_animationFrame.setAccessible(true);
+				System.out.println("value "+npc.getAnimationFrame()+" reads as: "+field_animationFrame.getInt(npc));
+			}*/
+
 			if (npc != null)
 			{
 				npcCount++;
@@ -2437,23 +2651,25 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 				{
 					continue;
 				}
+
+
 				int npcInstanceId = npc.getIndex();
 				int npcX = npc.getLocalLocation().getX();
 				int npcY = npc.getLocalLocation().getY();
-				int npcHeight = Perspective.getTileHeight(client, npc.getLocalLocation(), client.getTopLevelWorldView().getPlane()) * -1;
+				int npcHeight = Perspective.getTileHeight(client, npc.getLocalLocation(), client.getLocalPlayer().getWorldLocation().getPlane()/*client.getTopLevelWorldView().getPlane()*/) * -1;
 				int npcOrientation = npc.getCurrentOrientation();
 
-				int animation = (config.spawnAnimations() ? npc.getAnimation() : -1);
+				int actionAnimation = (config.spawnAnimations() ? getAnimation_Unmasked(npc) : -1);
 				int poseAnimation = (config.spawnAnimations() ? npc.getPoseAnimation() : -1);
 
-				int animFrame = npc.getAnimationFrame();
+				int actionAnimFrame = npc.getAnimationFrame();
 				int poseAnimFrame = npc.getPoseAnimationFrame();
 
 				boolean shouldDraw = visibleActors.contains(npc) && hooks.draw(npc, false);
 
 				if (!shouldDraw)
 				{
-					animFrame = -2; //-2 causes entity to be hidden in rm
+					actionAnimFrame = -2; //-2 causes entity to be hidden in rm
 					poseAnimFrame = -2;
 				}
 
@@ -2463,8 +2679,8 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 				perFramePacket.writeShort(npcHeight);
 				perFramePacket.writeShort(npcOrientation);
 
-				perFramePacket.writeInt(animation);
-				perFramePacket.writeShort(animFrame);
+				perFramePacket.writeInt(actionAnimation);
+				perFramePacket.writeShort(actionAnimFrame);
 
 				perFramePacket.writeInt(poseAnimation);
 				perFramePacket.writeShort(poseAnimFrame);
@@ -2540,7 +2756,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 				int playerInstanceId = player.getId();
 				int playerX = player.getLocalLocation().getX();
 				int playerY = player.getLocalLocation().getY();
-				int playerHeight = Perspective.getTileHeight(client, player.getLocalLocation(), client.getTopLevelWorldView().getPlane()) * -1;
+				int playerHeight = Perspective.getTileHeight(client, player.getLocalLocation(), client.getLocalPlayer().getWorldLocation().getPlane()/*client.getTopLevelWorldView().getPlane()*/) * -1;
 				int playerOrientation = player.getCurrentOrientation();
 
 				int animation = (config.spawnAnimations() ? player.getAnimation() : -1);
@@ -2696,7 +2912,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 				short localY_target = (short) projectile.getTarget().getY();
 				perFramePacket.writeShort(localY_target);
 				short Z_target = (short) (projectile.getEndHeight());
-				Z_target += (Perspective.getTileHeight(client, new LocalPoint(localX_target, localY_target), client.getTopLevelWorldView().getPlane()) * -1);
+				Z_target += (Perspective.getTileHeight(client, new LocalPoint(localX_target, localY_target), client.getLocalPlayer().getWorldLocation().getPlane()/*client.getTopLevelWorldView().getPlane()*/) * -1);
 				perFramePacket.writeShort(Z_target);
 
 				short spotAnimId = (short) projectile.getId();
@@ -2754,7 +2970,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			{
 				if (hashedEntitys_ThisFrame.contains(lastFrameHashedEntity) == false)
 				{ //if lats frames entity is not present this frame, means it has despawned.
-					log.debug("hashedEntityDespawned. Entity " + lastFrameHashedEntity);
+					//log.debug("hashedEntityDespawned. Entity " + lastFrameHashedEntity);
 					hashedEntityDespawned(lastFrameHashedEntity);
 				}
 			}
