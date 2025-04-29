@@ -167,11 +167,11 @@ class RuneMod_Launcher
 		log.debug("current version = " + currentAppVersion);
 
 		//if the local version is correct but somehow the user is missing the runemod exe file, we download the runemod app files regardless of the local version.
-		boolean runeModExeExists = Files.exists(Paths.get(rmAppLocation + "Windows\\RuneMod\\Binaries\\Win64\\" + "RuneMod-Win64-Shipping.exe"));
+		boolean runeModExeExists = Files.exists(Paths.get(rmAppLocation + "Windows\\RuneMod\\Binaries\\Win64\\RuneMod-Win64-Shipping.exe"));
 
 		if (!runeModExeExists)
 		{
-			RuneModPlugin.runeMod_loadingScreen.SetStatus_DetailText("Runemod.exe could not found, so downloading rm app files", true);
+			RuneModPlugin.runeMod_loadingScreen.SetStatus_DetailText("Runemod.exe could not be found, so downloading rm app files", true);
 		}
 		else
 		{
@@ -206,9 +206,9 @@ class RuneMod_Launcher
 			}
 		}
 
-		if (Files.exists(Paths.get(rmAppLocation + "Windows\\RuneMod\\Binaries\\Win64\\" + "RuneMod-Win64-Shipping.exe")))
+		if (Files.exists(Paths.get(rmAppLocation + "Windows\\RuneMod\\Binaries\\Win64\\RuneMod-Win64-Shipping.exe")))
 		{
-			LaunchApp(rmAppLocation + "Windows\\RuneMod\\Binaries\\Win64\\" + "RuneMod-Win64-Shipping.exe");
+			LaunchApp(rmAppLocation + "Windows\\RuneMod\\Binaries\\Win64\\RuneMod-Win64-Shipping.exe");
 		}
 		else
 		{

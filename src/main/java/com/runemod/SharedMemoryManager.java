@@ -33,6 +33,7 @@ import com.sun.jna.platform.win32.WinNT;
 import com.sun.jna.platform.win32.WinUser;
 import com.sun.jna.win32.W32APIOptions;
 import java.awt.Container;
+import java.awt.Window;
 import javax.swing.JFrame;
 import javax.swing.SwingUtilities;
 import lombok.SneakyThrows;
@@ -442,8 +443,22 @@ public class SharedMemoryManager
 
 		log.debug("Updating RuneMod windows. PosX: " + canvasPosX + " posY: " + canvasPosY + " sizeX: " + canvasSizeX + " sizeY: " + canvasSizeY);
 
-		User32.INSTANCE.SetWindowPos(RuneModHandle, null, canvasPosX, canvasPosY, canvasSizeX, canvasSizeY, User32.SWP_NOACTIVATE);
-		User32.INSTANCE.SetWindowPos(RuneModHandle, null, canvasPosX, canvasPosY, canvasSizeX, canvasSizeY, User32.SWP_NOACTIVATE);
+		//User32.INSTANCE.SetWindowPos(RuneModHandle, null, canvasPosX, canvasPosY, canvasSizeX, canvasSizeY, User32.SWP_NOACTIVATE);
+
+		// Resize the Unreal window
+		User32.INSTANCE.MoveWindow(
+			RuneModHandle,
+			0, 0,
+			canvasSizeX,
+			canvasSizeY,
+			true // repaint
+		);
+
+/*		User32.INSTANCE.SendMessage(RuneModHandle,0x0047, new WinDef.WPARAM(0), new WinDef.LPARAM(0));
+
+		User32.INSTANCE.UpdateWindow(RuneModHandle);
+		User32.INSTANCE.RedrawWindow(RuneModHandle, null, null, new WinDef.DWORD(WinUser.RDW_INVALIDATE | WinUser.RDW_UPDATENOW));*/
+
 	}
 
 	public void handleUnrealData()
@@ -550,8 +565,14 @@ public class SharedMemoryManager
 		return SharedMemoryData.getByte(SharedMemoryDataSize - 1) == (byte) 2;
 	}
 
+	public void SetTimeBeginPeriod() {
+		myKernel32.timeBeginPeriod(1);
+	}
+
 	public interface MyKernel32 extends Kernel32
 	{
 		MyKernel32 INSTANCE = Native.loadLibrary("kernel32", MyKernel32.class, W32APIOptions.DEFAULT_OPTIONS);
+		int timeBeginPeriod(int period);
+		int timeEndPeriod(int period);
 	}
 }

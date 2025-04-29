@@ -70,13 +70,26 @@ public interface RuneModConfig extends Config
 		keyName = "MaxFps",
 		name = "MaxFps",
 		description = "Note, increasing the fps beyond 50 may produce a less responsive experience",
-		position = 1,
+		position = 0,
 		section = settings
 	)
 
 	default int MaxFps()
 	{
 		return 50;
+	}
+
+	@ConfigItem(
+		keyName = "alternateSyncMode",
+		name = "Alternate Sync Mode",
+		description = "May feel more responsive on some hardware. Warning: will cause rs to show a false fps value",
+		position = 1,
+		section = settings
+	)
+
+	default boolean alternateSyncMode()
+	{
+		return false;
 	}
 
 	@ConfigItem(
@@ -296,14 +309,74 @@ public interface RuneModConfig extends Config
 	}
 
 	@ConfigItem(
-		keyName = "unmask_recording",
-		name = "unmask_recording",
-		description = "unmask_recording",
-		position = 100,
+		keyName = "enableUiPixelsUpdate",
+		name = "enableUiPixelsUpdate",
+		description = "enableUiPixelsUpdate",
+		position = 91,
 		section = Developer_Debug
 	)
-	default boolean unmask_recording()
+	default boolean enableUiPixelsUpdate()
+	{
+		return true;
+	}
+
+	@ConfigItem(
+		keyName = "disableUeCom",
+		name = "disableUeCom",
+		description = "disableUeCom",
+		position = 92,
+		section = Developer_Debug
+	)
+	default boolean disableUeCom()
 	{
 		return false;
+	}
+
+	@ConfigItem(
+		keyName = "disableFrustrumTileCulling",
+		name = "disableFrustrumTileCulling",
+		description = "disableFrustrumTileCulling",
+		position = 92,
+		section = Developer_Debug
+	)
+	default boolean disableFrustrumTileCulling()
+	{
+		return false;
+	}
+
+	@ConfigItem(
+		keyName = "nullifyDrawCallbacks",
+		name = "nullifyDrawCallbacks",
+		description = "nullifyDrawCallbacks",
+		position = 92,
+		section = Developer_Debug
+	)
+	default boolean nullifyDrawCallbacks()
+	{
+		return false;
+	}
+
+	@ConfigItem(
+		keyName = "enablePerFramePacket",
+		name = "enablePerFramePacket",
+		description = "enablePerFramePacket",
+		position = 92,
+		section = Developer_Debug
+	)
+	default boolean enablePerFramePacket()
+	{
+		return true;
+	}
+
+	@ConfigItem(
+		keyName = "increaseTimerResolution",
+		name = "increaseTimerResolution",
+		description = "increaseTimerResolution",
+		position = 93,
+		section = Developer_Debug
+	)
+	default boolean increaseTimerResolution()
+	{
+		return true;
 	}
 }

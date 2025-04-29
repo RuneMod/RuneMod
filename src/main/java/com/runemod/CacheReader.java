@@ -142,10 +142,14 @@ public class CacheReader
 		return hashes;
 	}
 
-	@SneakyThrows
+
 	public byte[] GetCacheFileBytes(IndexType IndexId, int ArchiveId, int FileId)
 	{
 		Index index = store.getIndex(IndexId);
+		if(index == null) {
+			log.debug("Failed To Find Index " + ArchiveId + " index Id:" + IndexId);
+			return null;
+		}
 		Archive archive = index.getArchive(ArchiveId);
 
 		if (archive == null)
@@ -155,8 +159,29 @@ public class CacheReader
 		}
 
 		Storage storage = store.getStorage();
-		byte[] archiveData = storage.loadArchive(archive);
-		ArchiveFiles archiveFiles = archive.getFiles(archiveData);
+		byte[] archiveData = new byte[0];
+		try
+		{
+			archiveData = storage.loadArchive(archive);
+		}
+		catch (IOException e)
+		{
+			e.printStackTrace();
+			return null;
+		}
+		if(archiveData == null) {return null;}
+		ArchiveFiles archiveFiles = null;
+		try
+		{
+			archiveFiles = archive.getFiles(archiveData);
+		}
+		catch (IOException e)
+		{
+			e.printStackTrace();
+			return null;
+		}
+
+		if(archiveFiles == null) {return null;}
 		FSFile actualFile = archiveFiles.findFile(FileId);
 		if (actualFile != null)
 		{
@@ -428,10 +453,12 @@ public class CacheReader
 	public ArrayList<Integer> getArchiveIds(IndexType indexType) {
 		ArrayList<Integer> ids = new ArrayList<>();
 		Index index = store.getIndex(indexType);
-		for (Archive archive : index.getArchives())
-		{
-			if(archive!= null) {
-				ids.add(archive.getArchiveId());
+		if(index!=null) {
+			for (Archive archive : index.getArchives())
+			{
+				if(archive!= null) {
+					ids.add(archive.getArchiveId());
+				}
 			}
 		}
 
@@ -554,8 +581,8 @@ public class CacheReader
 
 			MapLoader mapLoader = new MapLoader();
 			MapDefinition mapDef = mapLoader.load(regionX, regionY, bytes);
-			Region region = new Region(regionId);
-			region.loadTerrain(mapDef);
+			//Region region = new Region(regionId);
+			//region.loadTerrain(mapDef);
 
 			int swTileX = regionX * 64;
 			int swTileY = regionY * 64;
