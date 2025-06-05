@@ -31,6 +31,7 @@ import com.sun.jna.platform.win32.User32;
 import com.sun.jna.platform.win32.WinDef;
 import com.sun.jna.platform.win32.WinNT;
 import com.sun.jna.platform.win32.WinUser;
+import com.sun.jna.ptr.IntByReference;
 import com.sun.jna.win32.W32APIOptions;
 import java.awt.Container;
 import java.awt.Window;
@@ -58,7 +59,7 @@ public class SharedMemoryManager
 	Buffer backBuffer; //used to write packets while shared memory is unavailable
 	int SharedMemoryDataSize = 0;
 	int Offset;
-	volatile boolean curRmWindowVisibility = true;
+	boolean curRmWindowVisibility = false;
 	private WinNT.HANDLE SharedMemoryHandle;
 	private final RuneModPlugin runeModPlugin;
 
@@ -66,6 +67,30 @@ public class SharedMemoryManager
 	{
 		runeModPlugin = runeModPlugin_;
 		myKernel32 = MyKernel32.INSTANCE;
+	}
+
+	public static WinDef.HWND findWindowByPid(long targetPid) {
+		final WinDef.HWND[] found = new WinDef.HWND[1];
+
+		User32.INSTANCE.EnumWindows((hWnd, data) -> {
+			if (!User32.INSTANCE.IsWindowVisible(hWnd)) return true;
+
+			IntByReference pidRef = new IntByReference();
+			User32.INSTANCE.GetWindowThreadProcessId(hWnd, pidRef);
+
+			if ((long) pidRef.getValue() == targetPid) {
+				char[] title = new char[512];
+				User32.INSTANCE.GetWindowText(hWnd, title, 512);
+				String windowTitle = Native.toString(title);
+				System.out.println("Found window: " + windowTitle);
+				found[0] = hWnd;
+				return false; // stop
+			}
+
+			return true;
+		}, null);
+
+		return found[0];
 	}
 
 	@SneakyThrows
@@ -306,6 +331,11 @@ public class SharedMemoryManager
 		}
 	}
 
+	public boolean isRuneModHandleValid()
+	{
+		return User32.INSTANCE.IsWindow(RuneModHandle);
+	}
+
 	public WinDef.HWND findRuneModWindow()
 	{
 		WinDef.HWND handle = User32.INSTANCE.FindWindow(null, "RuneModWin");
@@ -443,16 +473,16 @@ public class SharedMemoryManager
 
 		log.debug("Updating RuneMod windows. PosX: " + canvasPosX + " posY: " + canvasPosY + " sizeX: " + canvasSizeX + " sizeY: " + canvasSizeY);
 
-		//User32.INSTANCE.SetWindowPos(RuneModHandle, null, canvasPosX, canvasPosY, canvasSizeX, canvasSizeY, User32.SWP_NOACTIVATE);
+		User32.INSTANCE.SetWindowPos(RuneModHandle, null, canvasPosX, canvasPosY, canvasSizeX, canvasSizeY, User32.SWP_NOACTIVATE);
 
 		// Resize the Unreal window
-		User32.INSTANCE.MoveWindow(
+/*		User32.INSTANCE.MoveWindow(
 			RuneModHandle,
 			0, 0,
 			canvasSizeX,
 			canvasSizeY,
 			true // repaint
-		);
+		);*/
 
 /*		User32.INSTANCE.SendMessage(RuneModHandle,0x0047, new WinDef.WPARAM(0), new WinDef.LPARAM(0));
 
@@ -469,7 +499,6 @@ public class SharedMemoryManager
 			log.debug("isNotUnrealData");
 			return;
 		} //check, just incase something has gone wrong. if its not unreal data, we dont want to read it.
-
 		while (true)
 		{
 			byte PacketOpCode = SharedMemoryData.getByte(Offset); //read packet opcode

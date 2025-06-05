@@ -38,13 +38,11 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 import javax.sound.sampled.AudioSystem;
 import javax.sound.sampled.BooleanControl;
 import javax.sound.sampled.Line;
@@ -76,7 +74,6 @@ import net.runelite.client.ui.ClientUI;
 import javax.inject.Inject;
 import java.awt.Container;
 import java.awt.geom.AffineTransform;
-import java.io.File;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -89,7 +86,6 @@ import ch.qos.logback.classic.Level;
 
 import java.util.function.Consumer;
 
-import static net.runelite.api.Constants.CHUNK_SIZE;
 import static net.runelite.client.RuneLite.RUNELITE_DIR;
 
 import com.google.gson.Gson;
@@ -136,10 +132,6 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	public ApplicationSettings appSettings;
 	int sharedMemPixelsUpdatedTick = -1; //used to prevent updating sharedMemory twice in the same tick.
 
-	int cacheLastUpdatedTick = Integer.MAX_VALUE; //when a cache file was last seen to be changed.
-	boolean rsCacheIsDownloading = true; //used to delay cache reading until cache is fully download.
-	HashMap<File, Long> lastSeenCacheFileSizes = new HashMap<File, Long>();
-
 	int ticksSincePluginLoad = 0;
 
 	boolean startedWhileLoggedIn;
@@ -147,6 +139,8 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	boolean alreadyCommunicatedUnreal = false; //whether we have communicated with unreal this frame.
 	int curGpuFlags = -1; //there is no client.setGpuFlags, so I use this to keep track of them myself.
 	Set<Renderable> visibleActors = new HashSet<Renderable>();
+	Set<WorldPoint> activeChunks = new HashSet<WorldPoint>();
+
 	GameState curGamestate = GameState.STARTING;
 	GameState lastGameState = GameState.STARTING;
 	volatile int rsUiPosOffsetX = 0;
@@ -257,7 +251,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 				//canvasAncestor.setLayout(new BorderLayout(0, 0));
 
 				RuneModLoadingScreenPanel.setBackground(Color.black);
-				RuneModLoadingScreenPanel.add(runeMod_loadingScreen.labelPanel);
+				RuneModLoadingScreenPanel.add(runeMod_loadingScreen);
 				RuneModLoadingScreenPanel.setSize(canvasAncestor.getSize());
 				canvasAncestor.add(RuneModLoadingScreenPanel, BorderLayout.CENTER, 0);
 				canvasAncestor.revalidate();
@@ -463,22 +457,201 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 	int loggedInForNoServerTicks = 0; //used to disallow certain dynamic spawns while logged in, which we do as a way to prevent objects such as stiles despawning when you hop them.
 
-	@Subscribe
-	private void onGameTick(GameTick event)
+
+	private static final int CHUNK_SIZE = Constants.CHUNK_SIZE; //8
+
+	public Tile getExtendedSceneTileFromWorldPoint(WorldPoint worldPoint)
 	{
-/*		if(client.getLocalPlayer()!=null) {
-			if(client.getLocalPlayer().getPlayerComposition()!=null) {
-				client.getLocalPlayer().getPlayerComposition().setTransformedNpcId(11916);
-				PlayerChanged playerChangedEvent = new PlayerChanged(client.getLocalPlayer());
-				onPlayerChanged(playerChangedEvent);
+		if (client == null || worldPoint == null)
+		{
+			return null;
+		}
+
+		int plane = worldPoint.getPlane();
+		if (plane < 0 || plane >= 4)
+		{
+			return null;
+		}
+
+		WorldPoint base = new WorldPoint(client.getBaseX(), client.getBaseY(), worldPoint.getPlane());
+		if (base == null)
+		{
+			return null;
+		}
+
+		// Convert world coordinates to extended scene coordinates
+		int sceneX_extended = worldPoint.getX() - base.getX() + EXTENDED_SCENE_OFFSET;
+		int sceneY_extended = worldPoint.getY() - base.getY() + EXTENDED_SCENE_OFFSET;
+
+
+		Tile[][][] tiles = client.getScene().getExtendedTiles();
+		int arrXLen = tiles[0].length;
+		int arrYLen = tiles[0][0].length;
+		if (sceneX_extended < 0 || sceneX_extended >= arrXLen || sceneY_extended < 0 || sceneY_extended >= arrYLen)
+		{
+			return null;
+		}
+
+		return tiles[plane][sceneX_extended][sceneY_extended];
+	}
+
+	public void simulateSpawnEventsForChunk(WorldPoint chunkBase)
+	{
+			System.out.println("spawning extended tiles for chunk:  " + chunkBase);
+
+			int baseX = chunkBase.getX();
+			int baseY = chunkBase.getY();
+
+			//for each tile in chunk
+			for (int dx = 0; dx < CHUNK_SIZE; dx++)
+			{
+				for (int dy = 0; dy < CHUNK_SIZE; dy++)
+				{
+					for (int plane = 0; plane < 4; plane++)
+					{
+						WorldPoint tileWorldPoint = new WorldPoint(baseX + dx, baseY + dy, plane);
+						Tile tile = getExtendedSceneTileFromWorldPoint(tileWorldPoint);
+						simulateTilObjectSpawns(tile);
+					}
+				}
 			}
-		}*/
-		if(client.getGameState() == GameState.LOGGED_IN) {
-			loggedInForNoServerTicks++;
+	}
+
+	int SUBREGION_SIZE = 16;
+	public void simulateSpawnEventsForSubRegion(WorldPoint subRegionBase)
+	{
+		System.out.println("spawning extended tile objects for chunk:  " + subRegionBase);
+
+		int baseX = subRegionBase.getX();
+		int baseY = subRegionBase.getY();
+
+		//for each tile in chunk
+		for (int dx = 0; dx < SUBREGION_SIZE; dx++)
+		{
+			for (int dy = 0; dy < SUBREGION_SIZE; dy++)
+			{
+				for (int plane = 0; plane < 4; plane++)
+				{
+					WorldPoint tileWorldPoint = new WorldPoint(baseX + dx, baseY + dy, plane);
+					Tile tile = getExtendedSceneTileFromWorldPoint(tileWorldPoint);
+					simulateTilObjectSpawns(tile);
+				}
+			}
 		}
 	}
 
-	int fps_avg;
+	void send_DespawnChunk_Packet(WorldPoint chunkBase) { //generally just used to despawn extended chunks.
+		System.out.println("despawning chunk at:  " + chunkBase);
+		if(!activeChunks.contains(chunkBase)) {return;}
+		activeChunks.remove(chunkBase);
+		Buffer actorSpawnPacket = new Buffer(new byte[20]);
+		actorSpawnPacket.writeByte(7); //write chunk data type
+
+		actorSpawnPacket.writeShort(chunkBase.getX());
+		actorSpawnPacket.writeShort(chunkBase.getY());
+		actorSpawnPacket.writeByte(0);
+
+		sharedmem_rm.backBuffer.writePacket(actorSpawnPacket, "ActorDeSpawn");
+	}
+
+	void send_SpawnChunk_Packet(WorldPoint chunkBase) { //generally just used to despawn extended chunks.
+		if(activeChunks.contains(chunkBase)) {return;}
+		System.out.println("spawning chunk at:  " + chunkBase);
+		activeChunks.add(chunkBase);
+		Buffer actorSpawnPacket = new Buffer(new byte[20]);
+		actorSpawnPacket.writeByte(7); //write chunk data type
+
+		actorSpawnPacket.writeShort(chunkBase.getX());
+		actorSpawnPacket.writeShort(chunkBase.getY());
+		actorSpawnPacket.writeByte(0);
+
+		sharedmem_rm.backBuffer.writePacket(actorSpawnPacket, "ActorSpawn");
+	}
+
+	@Subscribe
+	private void onGameTick(GameTick event)
+	{
+		//spawn stuff on extended tiles. does not yet handle despawn
+
+		if(client.getGameState() == GameState.LOGGED_IN) {
+			loggedInForNoServerTicks++;
+		} else {
+			loggedInForNoServerTicks = 0;
+		}
+	}
+
+	void processExtendedChunkSpawnTask() {
+		if(client.getLocalPlayer() == null) {return;}
+
+		//ArrayList<WorldPoint> spawnedChunks = new ArrayList();
+		WorldPoint playerLoc = client.getLocalPlayer().getWorldLocation();
+
+		for (int dx = -config.StreamChunkDistance(); dx <= config.StreamChunkDistance(); dx++)
+		{
+			for (int dy = -config.StreamChunkDistance(); dy <= config.StreamChunkDistance(); dy++)
+			{
+				int playerChunkX = playerLoc.getX() / CHUNK_SIZE;
+				int playerChunkY = playerLoc.getY() / CHUNK_SIZE;
+
+				int chunkX = playerChunkX+dx;
+				int chunkY = playerChunkY+dy;
+
+				WorldPoint chunkBase = new WorldPoint(chunkX*CHUNK_SIZE, chunkY*CHUNK_SIZE, 0);
+
+				if(chunkBase.getX()%16!=0 || chunkBase.getY()%16!=0) {continue;} //we only care about subregion, which are every 16 tiles, hwile chunks are every 8 tiles.
+
+				int chunkBaseX = chunkBase.getX();
+				int chunkBaseY = chunkBase.getY();
+
+				int sceneX = chunkBaseX-client.getBaseX();
+				int sceneY = chunkBaseY-client.getBaseY();
+
+				boolean isInMainScene = (sceneX >= 0-8 && sceneX < 104 && sceneY >= 0-8 && sceneY < 104);
+
+				if(!isInMainScene) {
+					//simulateSpawnEventsForChunk(chunkBase);
+					send_SpawnChunk_Packet(chunkBase);
+					return;
+					//spawnedChunks.add(chunkBase);
+					//if(spawnedChunks.size() >= 4) {
+						//activeExtendedChunks.addAll(spawnedChunks);
+					//}
+				}
+			}
+		}
+		//activeExtendedChunks.addAll(spawnedChunks);
+	}
+
+	void processExtendedChunkDespawnTask() { //find chunks that need to be despawned and despawns them.
+		if(activeChunks.isEmpty()) { return; }
+		WorldPoint playerLoc = client.getLocalPlayer().getWorldLocation();
+
+		WorldPoint[] activeChunksArr = activeChunks.toArray(WorldPoint[]::new);
+		for(WorldPoint chunkBase : activeChunksArr) {
+			if(chunkBase.getX()%16!=0 || chunkBase.getY()%16!=0) {continue;}
+
+			int sceneX = chunkBase.getX()-client.getBaseX();
+			int sceneY = chunkBase.getY()-client.getBaseY();
+			boolean isInMainScene = (sceneX >= 0-8 && sceneX < 104 && sceneY >= 0-8 && sceneY < 104);
+
+			int playerChunkX = playerLoc.getX() / CHUNK_SIZE;
+			int playerChunkY = playerLoc.getY() / CHUNK_SIZE;
+
+			int chunkX = chunkBase.getX() / CHUNK_SIZE;
+			int chunkY = chunkBase.getY() / CHUNK_SIZE;
+			boolean isInRange = Math.abs(playerChunkX-chunkX) <= config.StreamChunkDistance() && Math.abs(playerChunkY-chunkY) <= config.StreamChunkDistance();
+
+			if(!isInRange && !isInMainScene) {
+				send_DespawnChunk_Packet(chunkBase);
+				//DespawnedChunks.add(chunkBase);
+				return;
+			}
+		}
+
+		//activeChunks.removeAll(DespawnedChunks);
+	}
+
+	int ticksSinceLoadScene = 0;
 	@Subscribe
 	private void onBeforeRender(BeforeRender event)
 	{
@@ -491,10 +664,16 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 		alreadyCommunicatedUnreal = false;
 
-		if (client.getGameState().ordinal() >= GameState.STARTING.ordinal() && client.getTopLevelWorldView() != null)
+		if (client.getGameState().ordinal() >= GameState.STARTING.ordinal())
 		{
 			ticksSincePluginLoad++;
 		}
+
+		if(client.getTopLevelWorldView()!=null) {
+			client.getTopLevelWorldView().getScene().setDrawDistance(90);
+		}
+
+		ticksSinceLoadScene++;
 
 		if (ticksSincePluginLoad == 1)
 		{
@@ -520,37 +699,27 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 		mapObfuscatedAnimValues();
 
-		//check if rscache is currently being updated. if not, start runemod launcher.
-		if (rsCacheIsDownloading == true && client.getGameState().ordinal() >= GameState.STARTING.ordinal() && client.getGameCycle() % 20 == 0)
+		//check if rscache is currently being updated.
+		if (!CacheReader.cacheFullyLoaded && client.getGameState().ordinal() >= GameState.STARTING.ordinal() && client.getGameCycle() % 20 == 0)
 		{
-			cachePath = RUNELITE_DIR + "\\jagexcache\\oldschool\\LIVE";
 
-			if(client.getWorldType().contains(WorldType.BETA_WORLD)) { //incomplete. would need a system to detec when we have changed to a beta world and donwloaded beta cache
-				log.debug("isBetaWorld");
-				cachePath = RUNELITE_DIR + "\\jagexcache\\oldschool-beta\\LIVE";
-			}
+			if(myCacheReader == null) {
+				cachePath = RUNELITE_DIR + "\\jagexcache\\oldschool\\LIVE";
 
-			File[] files = new File(cachePath).listFiles();
-			for (File file : files)
-			{
-				if (file != null && file.isFile())
-				{
-					long lastSeenFileSize = lastSeenCacheFileSizes.getOrDefault(file, -1L);
-					if (file.length() != lastSeenFileSize)
-					{
-						lastSeenCacheFileSizes.put(file, file.length());
-						cacheLastUpdatedTick = client.getGameCycle();
-						rsCacheIsDownloading = true;
-					}
+				if(client.getWorldType().contains(WorldType.BETA_WORLD)) { //incomplete. would need a system to detec when we have changed to a beta world and donwloaded beta cache
+					log.debug("isBetaWorld");
+					cachePath = RUNELITE_DIR + "\\jagexcache\\oldschool-beta\\LIVE";
 				}
+
+				myCacheReader = new CacheReader(cachePath);
 			}
 
-			if (client.getGameCycle() - cacheLastUpdatedTick > 400)
+			myCacheReader.checkIfCacheFullyLoaded();
+
+			if (CacheReader.cacheFullyLoaded) //800 is needed for reliability, but thats 16 seconds of extra wait time, so not ideal.
 			{
 				log.info("RSCache has finished downloading");
 				runeMod_loadingScreen.SetStatus_DetailText("Downloaded RS cache", true);
-				rsCacheIsDownloading = false;
-				myCacheReader = new CacheReader(cachePath);
 			}
 			else
 			{
@@ -558,13 +727,15 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			}
 		}
 
-		if (runeModAwaitingRsCacheHashes && rsCacheIsDownloading == false)
-		{ //provide rscache hashes, if runemod is waiting for them
-			clientThread.invokeAtTickEnd(() -> {
-				myCacheReader.provideRsCacheHashes();
-			});
+		if(myCacheReader != null) {
+			if (myCacheReader.cacheFullyLoaded && runeModAwaitingRsCacheHashes)
+			{ //provide rscache hashes, if runemod is waiting for them
+				clientThread.invokeAtTickEnd(() -> {
+					myCacheReader.provideRsCacheHashes();
+				});
 
-			runeModAwaitingRsCacheHashes = false;
+				runeModAwaitingRsCacheHashes = false;
+			}
 		}
 
 		log_Timed_Heavy("_0");
@@ -597,6 +768,21 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 				}
 			});
 		}
+		clientThread.invokeAtTickEnd(() -> {
+			if (ticksSinceLoadScene > 300)
+			{
+				if (client.getGameCycle() % 30 == 0)
+				{
+					if(!client.getTopLevelWorldView().isInstance()){ //dont think extended tiles exist in instanced areas.
+						processExtendedChunkSpawnTask();
+					}
+				}
+				if ((client.getGameCycle() + 4) % 30 == 0) //staggers despawn so it happens a few frames after spawn task
+				{
+					processExtendedChunkDespawnTask();
+				}
+			}
+		});
 	}
 
 	void MaintainRuneModAttachment()
@@ -627,6 +813,38 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		sharedmem_rm.setRuneModVisibility(config.RuneModVisibility() == true);
 	}
 
+	void disableRuneModPlugin() {
+		SwingUtilities.invokeLater(() ->
+		{
+			try
+			{
+				pluginManager.setPluginEnabled(this, false);
+				pluginManager.stopPlugin(this);
+			}
+			catch (PluginInstantiationException ex)
+			{
+				log.error("error stopping plugin", ex);
+			}
+			try
+			{
+				shutDown();
+			}
+			catch (Exception exception)
+			{
+				exception.printStackTrace();
+			}
+		});
+	}
+	boolean hasLostRuneModWindow() {
+		if(sharedmem_rm.RuneModHandle != null && !sharedmem_rm.isRuneModHandleValid())
+		{
+			return true;
+		} else {
+			return false;
+		}
+	}
+
+	int noTimeOutsSinceLastUeCom = 0;
 	void communicateWithUnreal(String funcLocation)
 	{
 
@@ -660,11 +878,12 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 		log_Timed_Heavy("communicateWithUnreal::" + funcLocation);
 
-		if(client.getGameCycle() % 4 == 0) {
+
+		//if(client.getGameCycle() % 4 == 0) {
 			SwingUtilities.invokeLater(() -> {
 				MaintainRuneModAttachment();
 			});
-		}
+		//}
 
 		if (client.getGameState().ordinal() < GameState.LOGIN_SCREEN.ordinal())
 		{ //prevents communicating with unreal before client is loaded.
@@ -682,16 +901,53 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		//while (true) {
 
 		//wait for ue to signal ueData is ready
-		int timeOut = (config.alternateSyncMode()&&unrealIsReady) ? 1 : 100000000;
+		while (true) {
+			int timeOut = 0;
 
-		int val = sharedmem_rm.myKernel32.WaitForSingleObject(sharedmem_rm.EventUeDataReady, timeOut);
+			boolean useLockStep = false; //lockstep prevent runelite from coint
+			if(config.lockStep()) {
+				useLockStep = true;
+			}
+			if(ticksSinceLoadScene < 10) {
+				useLockStep = true;
+			}
+			if(!unrealIsReady) {
+				useLockStep = true;
+			}
 
-		if(val == 258) {
-			System.out.println("wait timeOut");
-			return;
+			if(useLockStep == true) {
+				timeOut = 10000;
+			}
+
+			int val = sharedmem_rm.myKernel32.WaitForSingleObject(sharedmem_rm.EventUeDataReady, timeOut);
+
+			//if wait timed out
+			if(val == 258) {
+				noTimeOutsSinceLastUeCom++;
+				System.out.println("wait timeOut, noTimeOuts: "+noTimeOutsSinceLastUeCom);
+
+				if(useLockStep) {
+					if(hasLostRuneModWindow()) {
+						disableRuneModPlugin();  //we do this so as not to lockup the client when rm crashes.
+						return;
+					} else {
+						continue; //continue waiting for runemod. the wait/loop could be infinite, aslong as the runemod window exists.
+					}
+				} else {
+					if(noTimeOutsSinceLastUeCom > 40) {
+						if(hasLostRuneModWindow()) {
+							disableRuneModPlugin(); //we do this so as not to lockup the client when rm crashes.
+						}
+					}
+					return;
+				}
+			}else {
+				noTimeOutsSinceLastUeCom = 0;
+				log_Timed_Heavy("1 awaitUeDataIsReady = " + val);
+				break;
+			}
 		}
 
-		log_Timed_Heavy("1 awaitUeDataIsReady = " + val);
 
 		//unsignal EventUeDataReady, as it has just been signalled (according to infinite wait on line above this).
 		sharedmem_rm.myKernel32.ResetEvent(sharedmem_rm.EventUeDataReady);
@@ -722,6 +978,12 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			log.info("GPU Flags have been changed to " + flags);
 		}
 	}
+
+	//HashMap<Long, DynamicObject> animatedDynamicObjects = new HashMap<Long, DynamicObject>(); //testing
+
+	Set<Tile> tilesWithAnimateGameObjects = new HashSet<>();
+
+
 
 	@Override
 	public void draw(Projection projection, Scene scene, Renderable renderable, int orientation, int x, int y, int z, long hash)
@@ -754,6 +1016,25 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		scene x = bits >> 0 & 127
 
 		Type 0 = player, 1 = npc, 2 = game object, 3 = item*/
+
+		if(renderable instanceof DynamicObject) {
+/*			long worldView = (long)hash >> 52 & 4095;
+			long id = hash >> 20 & 0xffffffff;
+			long wall = hash >> 19 & 1;
+			long type = hash >> 16 & 7;*/
+			long plane = (long)(hash >> 14 & 3);
+			long sceneY = (long)(hash >> 7 & 127);
+			long sceneX = (long)(hash >> 0 & 127);
+
+			if(plane < 4 && sceneY < 104 && sceneX < 104) {
+
+				Tile tile = client.getTopLevelWorldView().getScene().getTiles()[(int)plane][(int)sceneX][(int)sceneY];
+				tilesWithAnimateGameObjects.add(tile);
+				if(plane > 0) {
+					tilesWithAnimateGameObjects.add(client.getTopLevelWorldView().getScene().getTiles()[(int)plane-1][(int)sceneX][(int)sceneY]); //required where tile uses linkedbellow stuff
+				}
+			}
+		}
 
 		if (renderable instanceof Player)
 		{
@@ -813,7 +1094,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		if (overlayColor_LastFrame != overlayColor)
 		{
 			overlayColor_LastFrame = overlayColor;
-			overlayColourChanged();
+			//overlayColourChanged();
 		}
 
 		log_Timed_Heavy("draw");
@@ -841,6 +1122,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		communicateWithUnreal("drawScene");
 
 		visibleActors.clear();
+		tilesWithAnimateGameObjects.clear();
 	}
 
 	@SneakyThrows
@@ -848,6 +1130,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	public void postDrawScene()
 	{
 		if(config.nullifyDrawCallbacks()) {return;}
+
 		log_Timed_Heavy("postDrawScene");
 	}
 	//if npc in curfram has overrides, and it didnt in last frame, overridesChanged.
@@ -862,20 +1145,49 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	@Override
 	public void loadScene(Scene scene)
 	{
-		if(config.nullifyDrawCallbacks()) {return;}
-		sendBaseCoordinatePacket(scene);
-		log.debug("LoadScene");
+		//clientThread.invoke(() -> {
+			log.debug("LoadScene");
+
+			ticksSinceLoadScene = 0;
+
+			if(scene.isInstance()) {
+				//if the scene is instanced we have to destroy all old terrains, because the ones around the scene edges will have some blank tiles which were not included in the instance-map when those terrains were last generated.
+				System.out.println("despawning all terrains because is instanced area");
+				WorldPoint[] activeChunksArr = activeChunks.toArray(WorldPoint[]::new);
+				for(WorldPoint chunkBase : activeChunksArr) {
+					send_DespawnChunk_Packet(chunkBase);
+				}
+			}
+
+			if(config.nullifyDrawCallbacks()) {return;}
+			sendBaseCoordinatePacket(scene); //sends basecoordinate and instance map
+
+			for (int x = 0-1; x < (Constants.SCENE_SIZE/Constants.CHUNK_SIZE)+1; ++x)
+			{
+				for (int y = 0-1; y < (Constants.SCENE_SIZE/Constants.CHUNK_SIZE)+1; ++y)
+				{
+					int chunkBaseX = (x*Constants.CHUNK_SIZE)+scene.getBaseX();
+					int chunkBaseY = (y*Constants.CHUNK_SIZE)+scene.getBaseY();
+					WorldPoint chunkBase = new WorldPoint(chunkBaseX, chunkBaseY, 0);
+
+					if(chunkBase.getX()%16!=0 || chunkBase.getY()%16!=0) {continue;}
+
+					send_SpawnChunk_Packet(chunkBase);
+				}
+			}
+			//}
+		//});
 	}
 
-	static final int SCENE_OFFSET = (Constants.EXTENDED_SCENE_SIZE - Constants.SCENE_SIZE) / 2; // offset for sxy -> msxy
+	static final int EXTENDED_SCENE_OFFSET = (Constants.EXTENDED_SCENE_SIZE - Constants.SCENE_SIZE) / 2; // offset for sxy -> msxy
 	private static final int GROUND_MIN_Y = 350; // how far below the ground models extend
 	@Override
 	public boolean tileInFrustum(Scene scene, int pitchSin, int pitchCos, int yawSin, int yawCos, int cameraX, int cameraY, int cameraZ, int plane, int msx, int msy)
 	{
 		if(config.disableFrustrumTileCulling()) { return true; }
 		int[][][] tileHeights = scene.getTileHeights();
-		int x = ((msx - SCENE_OFFSET) << Perspective.LOCAL_COORD_BITS) + 64 - cameraX;
-		int z = ((msy - SCENE_OFFSET) << Perspective.LOCAL_COORD_BITS) + 64 - cameraZ;
+		int x = ((msx - EXTENDED_SCENE_OFFSET) << Perspective.LOCAL_COORD_BITS) + 64 - cameraX;
+		int z = ((msy - EXTENDED_SCENE_OFFSET) << Perspective.LOCAL_COORD_BITS) + 64 - cameraZ;
 		int y = Math.max(
 			Math.max(tileHeights[plane][msx][msy], tileHeights[plane][msx][msy + 1]),
 			Math.max(tileHeights[plane][msx + 1][msy], tileHeights[plane][msx + 1][msy + 1])
@@ -915,6 +1227,16 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		//return false;
 	}
 
+	public static Point toExtendedSceneCoordinate(int sceneX, int sceneY)
+	{
+		return new Point(sceneX + EXTENDED_SCENE_OFFSET, sceneY + EXTENDED_SCENE_OFFSET);
+	}
+
+	public static Point toNonExtendedSceneCoordinate(int extendedSceneX, int extendedSceneY)
+	{
+		return new Point(extendedSceneX - EXTENDED_SCENE_OFFSET, extendedSceneY - EXTENDED_SCENE_OFFSET);
+	}
+
 	@Override
 	public void swapScene(Scene scene)
 	{
@@ -938,6 +1260,17 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 	void setDefaults()
 	{
+		System.out.println("setting defaults");
+
+		activeChunks.clear();
+
+		client.setLoginScreen(null);
+		client.setShouldRenderLoginScreenFire(true);
+
+		CacheReader.cacheFullyLoaded= false;
+
+		runeModAwaitingRsCacheHashes = true;
+
 		initedDisallowedDynamicSpawns = false;
 
 		startedWhileLoggedIn = false;
@@ -976,8 +1309,6 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		lastCavansSizeY = 0;
 
 		curGpuFlags = -1;
-
-		rsCacheIsDownloading = true;
 	}
 
 	void setDrawCallbacks(DrawCallbacks drawCallbacks)
@@ -1011,32 +1342,15 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		{
 			startedWhileLoggedIn = true;
 
+			disableRuneModPlugin();
 			SwingUtilities.invokeLater(() ->
 			{
-				try
-				{
-					pluginManager.setPluginEnabled(this, false);
-					pluginManager.stopPlugin(this);
-				}
-				catch (PluginInstantiationException ex)
-				{
-					log.error("error stopping plugin", ex);
-				}
-
-				try
-				{
-					shutDown();
-				}
-				catch (Exception exception)
-				{
-					exception.printStackTrace();
-				}
-
 				int response = JOptionPane.showConfirmDialog(null,
 					"To enable RuneMod, you must first logout",
 					"RuneMod Error",
 					JOptionPane.DEFAULT_OPTION);
 			});
+
 			return;
 		}else {
 			startedWhileLoggedIn = false;
@@ -1077,8 +1391,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		}
 
 		//int GpuFlags = DrawCallbacks.GPU | (computeMode == ComputeMode.NONE ? 0 : DrawCallbacks.HILLSKEW);
-		client.getTopLevelWorldView().getScene().setDrawDistance(90);
-		client.setExpandedMapLoading(1);
+		client.setExpandedMapLoading(2);
 
 		client.setUnlockedFps(config.MaxFps() > 10);
 		client.setUnlockedFpsTarget(config.MaxFps());
@@ -1090,7 +1403,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	public String getBetaKeys()
 	{
 		HttpClient client = HttpClient.newHttpClient();
-		HttpRequest request = HttpRequest.newBuilder().uri(URI.create("https://runemodfiles.xyz/beta_keys_hashed.txt")).build();
+		HttpRequest request = HttpRequest.newBuilder().uri(URI.create("https://files.runemod.net/beta_keys_hashed.txt")).build();
 		HttpResponse<String> response = null;
 		try
 		{
@@ -1191,7 +1504,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	{
 		log.info("RuneMod is stopping");
 		isShutDown = true;
-		shutdownExecutor();
+		//shutdownExecutor();
 		clientThread.invoke(() -> {
 			unRegisterMouseListener();
 
@@ -1398,14 +1711,220 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		}
 	}
 
+	private void forEachExtendedTile(Consumer<Tile> consumer)
+	{
+		final Scene scene = client.getScene();
+		final Tile[][][] tiles = scene.getExtendedTiles();
+
+		for (int z = 0; z < Constants.MAX_Z; ++z)
+		{
+			for (int x = 0; x < Constants.EXTENDED_SCENE_SIZE; ++x)
+			{
+				for (int y = 0; y < Constants.EXTENDED_SCENE_SIZE; ++y)
+				{
+					Tile tile = tiles[z][x][y];
+
+					if (tile == null)
+					{
+						continue;
+					}
+
+					consumer.accept(tile);
+
+					if (tile.getBridge() != null)
+					{
+						consumer.accept(tile.getBridge());
+					}
+				}
+			}
+		}
+	}
+
 	public void reloadUnrealScene()
 	{
 		simulateGameEvents();
 	}
 
+	void simulateTilObjectSpawns(Tile tile) {
+			if(tile == null) {return;}
+			WallObject wallObject = tile.getWallObject();
+			if (wallObject != null)
+			{
+				final WallObjectSpawned objectSpawned = new WallObjectSpawned();
+				objectSpawned.setTile(tile);
+				objectSpawned.setWallObject(wallObject);
+				onWallObjectSpawned(objectSpawned);
+			}
+
+			DecorativeObject decorativeObject = tile.getDecorativeObject();
+			if (decorativeObject != null)
+			{
+				final DecorativeObjectSpawned objectSpawned = new DecorativeObjectSpawned();
+				objectSpawned.setTile(tile);
+				objectSpawned.setDecorativeObject(decorativeObject);
+				onDecorativeObjectSpawned(objectSpawned);
+			}
+
+			GroundObject groundObject = tile.getGroundObject();
+			if (groundObject != null)
+			{
+				final GroundObjectSpawned objectSpawned = new GroundObjectSpawned();
+				objectSpawned.setTile(tile);
+				objectSpawned.setGroundObject(groundObject);
+				onGroundObjectSpawned(objectSpawned);
+			}
+
+			for (GameObject object : tile.getGameObjects())
+			{
+				if (object != null)
+				{
+					//if (object.getSceneMinLocation().equals(tile.getSceneLocation()))
+					//{
+					if (object instanceof TileObject)
+					{
+						if (object.getRenderable() != null)
+						{
+							if (object.getRenderable() instanceof DynamicObject || object.getRenderable() instanceof Model || object.getRenderable() instanceof ModelData)
+							{
+								final GameObjectSpawned objectSpawned = new GameObjectSpawned();
+								objectSpawned.setTile(tile);
+								objectSpawned.setGameObject(object);
+								onGameObjectSpawned(objectSpawned);
+							}
+							else
+							{
+/*									if(object.getRenderable() instanceof Actor) {
+										log.debug("unhandled renderableClass: Actor");
+									}*/
+							}
+						}
+					}
+					//}
+				}
+			}
+
+			ItemLayer itemLayer = tile.getItemLayer();
+			if (itemLayer != null)
+			{
+				Node current = itemLayer.getTop();
+				while (current instanceof TileItem)
+				{
+					final TileItem item = (TileItem) current;
+
+					current = current.getNext();
+
+					final ItemSpawned itemSpawned = new ItemSpawned(tile, item);
+					onItemSpawned(itemSpawned);
+				}
+			}
+	}
+
+	void simulateTilObjectDespawns(Tile tile) {
+		if(tile == null) {return;}
+		WallObject wallObject = tile.getWallObject();
+		if (wallObject != null)
+		{
+			final WallObjectDespawned objectSpawned = new WallObjectDespawned();
+			objectSpawned.setTile(tile);
+			objectSpawned.setWallObject(wallObject);
+			onWallObjectDespawned(objectSpawned);
+		}
+
+		DecorativeObject decorativeObject = tile.getDecorativeObject();
+		if (decorativeObject != null)
+		{
+			final DecorativeObjectDespawned objectSpawned = new DecorativeObjectDespawned();
+			objectSpawned.setTile(tile);
+			objectSpawned.setDecorativeObject(decorativeObject);
+			onDecorativeObjectDespawned(objectSpawned);
+		}
+
+		GroundObject groundObject = tile.getGroundObject();
+		if (groundObject != null)
+		{
+			final GroundObjectDespawned objectSpawned = new GroundObjectDespawned();
+			objectSpawned.setTile(tile);
+			objectSpawned.setGroundObject(groundObject);
+			onGroundObjectDespawned(objectSpawned);
+		}
+
+		for (GameObject object : tile.getGameObjects())
+		{
+			if (object != null)
+			{
+				//if (object.getSceneMinLocation().equals(tile.getSceneLocation()))
+				//{
+				if (object instanceof TileObject)
+				{
+					if (object.getRenderable() != null)
+					{
+						if (object.getRenderable() instanceof DynamicObject || object.getRenderable() instanceof Model || object.getRenderable() instanceof ModelData)
+						{
+							final GameObjectDespawned objectSpawned = new GameObjectDespawned();
+							objectSpawned.setTile(tile);
+							objectSpawned.setGameObject(object);
+							onGameObjectDespawned(objectSpawned);
+						}
+						else
+						{
+/*									if(object.getRenderable() instanceof Actor) {
+										log.debug("unhandled renderableClass: Actor");
+									}*/
+						}
+					}
+				}
+				//}
+			}
+		}
+
+		ItemLayer itemLayer = tile.getItemLayer();
+		if (itemLayer != null)
+		{
+			Node current = itemLayer.getTop();
+			while (current instanceof TileItem)
+			{
+				final TileItem item = (TileItem) current;
+
+				current = current.getNext();
+
+				final ItemDespawned itemSpawned = new ItemDespawned(tile, item);
+				onItemDespawned(itemSpawned);
+			}
+		}
+	}
+
 	public void simulateGameEvents()
 	{
-		log.debug("simulating game-events");
+		if (client.getGameState() != GameState.LOGGED_IN) //if not logged in, retrigger gameStateChange. Appsettings are reloaded when gamestate changes to loginscreen, this means we can (and do) call reload scene in urneal engine to force rl to reload the appsettings file.
+		{
+			final GameStateChanged gameStateChanged = new GameStateChanged();
+			gameStateChanged.setGameState(client.getGameState());
+			onGameStateChanged(gameStateChanged);
+			return;
+		}
+
+		activeChunks.clear();
+		client.setGameState(GameState.LOADING);
+
+		for (NPC npc : client.getTopLevelWorldView().npcs())
+		{
+			if (npc != null)
+			{
+				final NpcSpawned npcSpawned = new NpcSpawned(npc);
+				onNpcSpawned(npcSpawned);
+			}
+		}
+
+		for (Player player : client.getTopLevelWorldView().players())
+		{
+			if (player != null)
+			{
+				final PlayerSpawned playerSpawned = new PlayerSpawned(player);
+				onPlayerSpawned(playerSpawned);
+			}
+		}
+
+/*		log.debug("simulating game-events");
 
 		if (client.getGameState() != GameState.LOGGED_IN) //if not logged in, just resend game state
 		{
@@ -1445,77 +1964,8 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 		forEachTile((tile) ->
 		{
-			WallObject wallObject = tile.getWallObject();
-			if (wallObject != null)
-			{
-				final WallObjectSpawned objectSpawned = new WallObjectSpawned();
-				objectSpawned.setTile(tile);
-				objectSpawned.setWallObject(wallObject);
-				onWallObjectSpawned(objectSpawned);
-			}
-
-			DecorativeObject decorativeObject = tile.getDecorativeObject();
-			if (decorativeObject != null)
-			{
-				final DecorativeObjectSpawned objectSpawned = new DecorativeObjectSpawned();
-				objectSpawned.setTile(tile);
-				objectSpawned.setDecorativeObject(decorativeObject);
-				onDecorativeObjectSpawned(objectSpawned);
-			}
-
-			GroundObject groundObject = tile.getGroundObject();
-			if (groundObject != null)
-			{
-				final GroundObjectSpawned objectSpawned = new GroundObjectSpawned();
-				objectSpawned.setTile(tile);
-				objectSpawned.setGroundObject(groundObject);
-				onGroundObjectSpawned(objectSpawned);
-			}
-
-			for (GameObject object : tile.getGameObjects())
-			{
-				if (object != null)
-				{
-					//if (object.getSceneMinLocation().equals(tile.getSceneLocation()))
-					//{
-						if (object instanceof TileObject)
-						{
-							if (object.getRenderable() != null)
-							{
-								if (object.getRenderable() instanceof DynamicObject || object.getRenderable() instanceof Model || object.getRenderable() instanceof ModelData)
-								{
-									final GameObjectSpawned objectSpawned = new GameObjectSpawned();
-									objectSpawned.setTile(tile);
-									objectSpawned.setGameObject(object);
-									onGameObjectSpawned(objectSpawned);
-								}
-								else
-								{
-/*									if(object.getRenderable() instanceof Actor) {
-										log.debug("unhandled renderableClass: Actor");
-									}*/
-								}
-							}
-						}
-					//}
-				}
-			}
-
-			ItemLayer itemLayer = tile.getItemLayer();
-			if (itemLayer != null)
-			{
-				Node current = itemLayer.getTop();
-				while (current instanceof TileItem)
-				{
-					final TileItem item = (TileItem) current;
-
-					current = current.getNext();
-
-					final ItemSpawned itemSpawned = new ItemSpawned(tile, item);
-					onItemSpawned(itemSpawned);
-				}
-			}
-		});
+			simulateTilObjectSpawns(tile);
+		});*/
 	}
 
 	@Provides
@@ -1654,6 +2104,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 				else
 				{
 					client.setLoginScreen(null);
+					client.setShouldRenderLoginScreenFire(true);
 				}
 			}
 			else
@@ -1718,10 +2169,11 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		if (ticksSincePluginLoad <= 1) { return; }
 		//clientThread.invokeAtTickEnd(() -> //invoking later because baslocation likely hasnt been sent to unreal yet
 		//{
-			if (!config.spawnGameObjects())
-			{
-				return;
-			}
+
+		if (!config.spawnGameObjects())
+		{
+			return;
+		}
 
 		if(loggedInForNoServerTicks > 1 && disAllowedDynamicSpawns.contains(event.getWallObject().getId())) {return;}
 
@@ -1736,8 +2188,8 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			long tag = getTag_Unique(event.getWallObject());
 			actorSpawnPacket.writeByte(5); //write tileObject data type
 			actorSpawnPacket.writeByte(tilePlane);
-			actorSpawnPacket.writeByte(tileX);
-			actorSpawnPacket.writeByte(tileY);
+			actorSpawnPacket.writeShort(tileX);
+			actorSpawnPacket.writeShort(tileY);
 			actorSpawnPacket.writeLong(tag);
 
 			sharedmem_rm.backBuffer.writePacket(actorSpawnPacket, "ActorDeSpawn");
@@ -1781,10 +2233,13 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			int objectDefinitionId = event.getWallObject().getId();
 			int plane = event.getTile().getRenderLevel();
 
-			int tileX = (event.getWallObject().getX()) / 128;
-			int tileY = (event.getWallObject().getY()) / 128;
+/*			int tileX = (event.getWallObject().getX()) / 128;
+			int tileY = (event.getWallObject().getY()) / 128;*/
+			int tileX = tile.getSceneLocation().getX();
+			int tileY = tile.getSceneLocation().getY();
 
-			int height = event.getWallObject().getZ() * -1;
+
+		int height = event.getWallObject().getZ() * -1;
 
 			actorSpawnPacket.writeByte(4); //write tileObject data type
 			actorSpawnPacket.writeByte(tileObjectModelType);
@@ -1793,8 +2248,8 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			actorSpawnPacket.writeShort(objectOrientationB);
 			actorSpawnPacket.writeShort(objectDefinitionId);
 			actorSpawnPacket.writeByte(plane);
-			actorSpawnPacket.writeByte(tileX);
-			actorSpawnPacket.writeByte(tileY);
+			actorSpawnPacket.writeShort(tileX);
+			actorSpawnPacket.writeShort(tileY);
 			int tileMinPlane = tile.getPlane();
 			actorSpawnPacket.writeByte(tileMinPlane);
 			actorSpawnPacket.writeShort(height);
@@ -1832,8 +2287,8 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 			actorSpawnPacket.writeByte(4); //write tileObject data type
 			actorSpawnPacket.writeByte(tilePlane);
-			actorSpawnPacket.writeByte(tileX);
-			actorSpawnPacket.writeByte(tileY);
+			actorSpawnPacket.writeShort(tileX);
+			actorSpawnPacket.writeShort(tileY);
 			actorSpawnPacket.writeLong(tag);
 
 			sharedmem_rm.backBuffer.writePacket(actorSpawnPacket, "ActorDeSpawn");
@@ -1852,7 +2307,6 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		//{
 			Tile tile;
 			tile = event.getTile();
-
 
 			Buffer actorSpawnPacket = new Buffer(new byte[100]);
 			int tileObjectModelType = getObjModelTypeFromFlags(event.getDecorativeObject().getConfig());
@@ -1874,8 +2328,10 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			int objectDefinitionId = event.getDecorativeObject().getId();
 			int plane = tile.getRenderLevel();
 
-			int tileX = (event.getDecorativeObject().getX()) / 128;
-			int tileY = (event.getDecorativeObject().getY()) / 128;
+/*			int tileX = (event.getDecorativeObject().getX()) / 128;
+			int tileY = (event.getDecorativeObject().getY()) / 128;*/
+			int tileX = tile.getSceneLocation().getX();
+			int tileY = tile.getSceneLocation().getY();
 
 			int height = event.getDecorativeObject().getZ() * -1;
 
@@ -1886,8 +2342,8 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			actorSpawnPacket.writeShort(objectOrientationB);
 			actorSpawnPacket.writeShort(objectDefinitionId);
 			actorSpawnPacket.writeByte(plane);
-			actorSpawnPacket.writeByte(tileX);
-			actorSpawnPacket.writeByte(tileY);
+			actorSpawnPacket.writeShort(tileX);
+			actorSpawnPacket.writeShort(tileY);
 			int tileMinPlane = tile.getPlane();
 			actorSpawnPacket.writeByte(tileMinPlane);
 			actorSpawnPacket.writeShort(height);
@@ -2036,71 +2492,28 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	}
 
 	// Shut down the executor service (call this when you're done using the executor)
-	public void shutdownExecutor()
+/*	public void shutdownExecutor()
 	{
 		if (executor != null) {
 			executor.shutdown(); // Shutdown the executor service
 			executor = null;
 		}
-	}
+	}*/
 
 	@SneakyThrows
 	private Map<Long, DynamicObject> getAnimatedGameObjects() throws InterruptedException
 	{
 		Map<Long, DynamicObject> allGameObjects = new ConcurrentHashMap<>();
-		Scene scene = client.getScene();
-		if (scene == null || scene.getTiles() == null)
-		{
-			return allGameObjects;
+
+		for(Tile tile : tilesWithAnimateGameObjects) {
+			findAnimatedGameObjectsOnTile(allGameObjects, tile);
 		}
-
-		Tile[][][] tiles = scene.getTiles();
-
-		// Make sure the executor is initialized before use
-		if (executor == null) {
-			throw new IllegalStateException("ExecutorService is not initialized. Call initializeExecutor() first.");
-		}
-
-		List<Future<?>> futures = new ArrayList<>();
-
-		// Size of the chunks to process. Adjust chunk size to balance thread work.
-		int chunkSize = Constants.SCENE_SIZE / 8; // Split the range into 4 chunks
-
-		// Split the grid into chunks and process them in parallel
-		for (int xStart = 0; xStart < Constants.SCENE_SIZE; xStart += chunkSize)
-		{
-			for (int yStart = 0; yStart < Constants.SCENE_SIZE; yStart += chunkSize)
-			{
-				final int xStartFinal = xStart;
-				final int yStartFinal = yStart;
-				futures.add(executor.submit(() -> {
-					// Process the chunk
-					for (int x = xStartFinal; x < Math.min(xStartFinal + chunkSize, Constants.SCENE_SIZE); ++x)
-					{
-						for (int y = yStartFinal; y < Math.min(yStartFinal + chunkSize, Constants.SCENE_SIZE); ++y)
-						{
-							Tile tile = tiles[0][x][y];
-							if (tile != null)
-							{
-								findAnimatedGameObjectsOnTile(allGameObjects, tile);
-							}
-						}
-					}
-				}));
-			}
-		}
-
-		// Wait for all tasks to finish
-		for (Future<?> f : futures)
-		{
-			f.get(); // blocks until task finishes
-		}
-
 		return allGameObjects;
 	}
 
 	private void findAnimatedGameObjectsOnTile(Map<Long, DynamicObject> allGameObjects, Tile tile)
 	{
+		if(tile == null) {return;}
 		// Extract gameObjects, groundObjects, etc. (same logic as before)
 		GameObject[] gameObjects = tile.getGameObjects();
 		if (gameObjects != null)
@@ -2178,7 +2591,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 			if(loggedInForNoServerTicks > 1 && disAllowedDynamicSpawns.contains(event.getGameObject().getId())) {return;}
 
-			client.getObjectDefinition(event.getGameObject().getConfig()).getName();
+			//client.getObjectDefinition(event.getGameObject().getConfig()).getName();
 
 			int isBridgeTile = 0;
 			Tile tile;
@@ -2209,8 +2622,8 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			actorSpawnPacket.writeShort(objectOrientationB);
 			actorSpawnPacket.writeShort(objectDefinitionId);
 			actorSpawnPacket.writeByte(plane);
-			actorSpawnPacket.writeByte(tileX);
-			actorSpawnPacket.writeByte(tileY);
+			actorSpawnPacket.writeShort(tileX);
+			actorSpawnPacket.writeShort(tileY);
 			int tileMinPlane = tile.getPlane();
 
 			actorSpawnPacket.writeByte(tileMinPlane);
@@ -2246,8 +2659,8 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 			actorSpawnPacket.writeByte(4); //write tileObject data type
 			actorSpawnPacket.writeByte(tilePlane);
-			actorSpawnPacket.writeByte(tileX);
-			actorSpawnPacket.writeByte(tileY);
+			actorSpawnPacket.writeShort(tileX);
+			actorSpawnPacket.writeShort(tileY);
 			actorSpawnPacket.writeLong(tag);
 
 			sharedmem_rm.backBuffer.writePacket(actorSpawnPacket, "ActorDeSpawn");
@@ -2274,37 +2687,75 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 			actorSpawnPacket.writeByte(4); //write tileObject data type
 			actorSpawnPacket.writeByte(tilePlane);
-			actorSpawnPacket.writeByte(tileX);
-			actorSpawnPacket.writeByte(tileY);
+			actorSpawnPacket.writeShort(tileX);
+			actorSpawnPacket.writeShort(tileY);
 			actorSpawnPacket.writeLong(tag);
 
 			sharedmem_rm.backBuffer.writePacket(actorSpawnPacket, "ActorDeSpawn");
 		//});
 	}
 
+	long Unique = 1000;
 	long getTag_Unique(TileObject tileObject)
 	{
+		//if(true) {1000return ThreadLocalRandom.current().nextLong(Long.MIN_VALUE, Long.MAX_VALUE);}
+		//Our tag add the tileObj type to make it more unique. it also uses world coordinates so it does not change when the basecoordinate changes.
 		long tag = tileObject.getHash();
-		int tileOIbjType = 0;
+
+		//int plane = (int)(tag >> 62 & 3);
+		int worldView = (int)(tag >> 50 & 4095);
+		//int id = (int)(tag >> 18 & 0xffffffff);
+		int wall = (int)(tag >> 17 & 1);
+		//int type = (int)(tag >> 14 & 7);
+		//int sceney = (int)(tag >> 7 & 127);
+		//int scenex = (int)(tag >> 0 & 127);
+
+		int instConfig = 0;
+		int tileObjType = 0;
 		if (tileObject instanceof GroundObject)
 		{
-			tileOIbjType = 0;
+			tileObjType = 0;
+			instConfig = ((GroundObject) tileObject).getConfig();
 		}
 		if (tileObject instanceof GameObject)
 		{
-			tileOIbjType = 1;
+			tileObjType = 1;
+			instConfig = ((GameObject) tileObject).getConfig();
 		}
 		if (tileObject instanceof DecorativeObject)
 		{
-			tileOIbjType = 2;
+			tileObjType = 2;
+			instConfig = ((DecorativeObject) tileObject).getConfig();
 		}
 		if (tileObject instanceof WallObject)
 		{
-			tileOIbjType = 3;
+			tileObjType = 3;
+			instConfig = ((WallObject) tileObject).getConfig();
 		}
 
-		tag = (tag << 2) | (tileOIbjType & 3);// append tileObjType to make tag unique.
-		return tag;
+
+		int worldX = tileObject.getWorldLocation().getX();
+		int worldY = tileObject.getWorldLocation().getY();
+
+		int isWallB = 0; //is always 0 for spawn events, because wall b doesnt have its own spawn event. in UE we modify the last be so isWallB is true, when we spawn a wallB
+
+
+		Unique++;
+
+		int unused = 0;
+		worldView = 0;
+
+		long newTag = 0;
+		newTag |= ((long)(tileObject.getPlane() & 0b11)) << 62;             // bits 62–63
+		newTag |= ((long)(worldView & 0b111)) << 59;        // bits 59–61
+		newTag |= ((long)(tileObject.getId() & 0x1FFFF)) << 42;             // bits 42–58
+		newTag |= ((long)(worldY & 0x7FFF)) << 26;          // bits 26–40
+		newTag |= ((long)(worldX & 0x7FFF)) << 11;          // bits 11–25
+		newTag |= ((long)(instConfig & 0xFF)) << 3;         // bits 3–10
+		newTag |= ((long)(tileObjType & 0b11)) << 1;        // bits 1–2
+		newTag |= ((long)(isWallB & 0b1));                  // bit 0
+
+		return newTag;
 	}
 
 	@Subscribe
@@ -2321,7 +2772,8 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 			Buffer actorSpawnPacket = new Buffer(new byte[100]);
 			int tileObjectModelType = getObjModelTypeFromFlags(event.getGroundObject().getConfig());
-			int var4 = (event.getGroundObject().getConfig()) >> 6 & 3;
+			//int var4 = (event.getGroundObject().getConfig()) >> 6 & 3;
+			int var4 = (event.getGroundObject().getConfig() >> 6) & 3;
 			int objectOrientationA = var4 * 512;
 			int objectOrientationB = -1;
 			int objectDefinitionId = event.getGroundObject().getId();
@@ -2342,8 +2794,8 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			actorSpawnPacket.writeShort(objectOrientationB);
 			actorSpawnPacket.writeShort(objectDefinitionId);
 			actorSpawnPacket.writeByte(plane);
-			actorSpawnPacket.writeByte(tileX);
-			actorSpawnPacket.writeByte(tileY);
+			actorSpawnPacket.writeShort(tileX);
+			actorSpawnPacket.writeShort(tileY);
 
 			int tileMinPlane = tile.getPlane();
 
@@ -2387,8 +2839,8 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			int itemQuantity = event.getItem().getQuantity();
 			actorSpawnPacket.writeByte(3); //write tileItem data type
 			actorSpawnPacket.writeByte(tilePlane);
-			actorSpawnPacket.writeByte(tileX);
-			actorSpawnPacket.writeByte(tileY);
+			actorSpawnPacket.writeShort(tileX);
+			actorSpawnPacket.writeShort(tileY);
 			actorSpawnPacket.writeShort(height);
 			actorSpawnPacket.writeShort(itemDefinitionId);
 			actorSpawnPacket.writeShort(itemQuantity);
@@ -2416,8 +2868,8 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			int itemDefinitionId = event.getItem().getId();
 			actorSpawnPacket.writeByte(3); //write tileItem data type
 			actorSpawnPacket.writeByte(tilePlane);
-			actorSpawnPacket.writeByte(tileX);
-			actorSpawnPacket.writeByte(tileY);
+			actorSpawnPacket.writeShort(tileX);
+			actorSpawnPacket.writeShort(tileY);
 			actorSpawnPacket.writeShort(itemDefinitionId);
 
 			sharedmem_rm.backBuffer.writePacket(actorSpawnPacket, "ActorDeSpawn");
@@ -2730,6 +3182,8 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		canvasSizeY *= ratioY;
 		sharedmem_rm.setInt(30000040, Math.round(canvasSizeX));
 		sharedmem_rm.setInt(30000045, Math.round(canvasSizeY));
+
+		sharedmem_rm.setInt(30000065, overlayColor_LastFrame);
 
 		sharedmem_rm.SharedMemoryData.write(30000080, bufferProvider.getPixels(), 0, bufferProvider.getHeight() * bufferProvider.getWidth());
 		sharedmem_rm.myKernel32.SetEvent(sharedmem_rm.EventViewportPixelsReady);
@@ -3216,6 +3670,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 	boolean RmNeedsWindowUpdate()
 	{
+		//if(client.getGameCycle() % 100 != 0) {return false;}
 		if (client.getCanvas() == null)
 		{
 			log.debug("Null canvas, wont update rmWindow");

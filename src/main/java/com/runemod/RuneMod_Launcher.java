@@ -24,6 +24,9 @@
  */
 package com.runemod;
 
+import com.sun.jna.platform.win32.User32;
+import com.sun.jna.platform.win32.WinDef;
+import com.sun.jna.platform.win32.WinUser;
 import java.io.BufferedInputStream;
 import java.io.File;
 import java.io.FileInputStream;
@@ -42,6 +45,8 @@ import java.nio.file.Paths;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import lombok.extern.slf4j.Slf4j;
+
+import static com.runemod.RuneModPlugin.unrealIsReady;
 
 @Slf4j
 class RuneMod_Launcher
@@ -101,7 +106,7 @@ class RuneMod_Launcher
 	public int getLatestAppVersion()
 	{
 		HttpClient client = HttpClient.newHttpClient();
-		HttpRequest request = HttpRequest.newBuilder().uri(URI.create("https://runemodfiles.xyz/application/version.txt")).build();
+		HttpRequest request = HttpRequest.newBuilder().uri(URI.create("https://files.runemod.net/application/version.txt")).build();
 		HttpResponse<String> response = null;
 		try
 		{
@@ -192,7 +197,7 @@ class RuneMod_Launcher
 			Files.createDirectories(Paths.get(rmAppLocation));
 
 			String zipFilePath = rmAppLocation + "Windows.zip";
-			if(downloadZip("https://runemodfiles.xyz/application/windows.zip", zipFilePath)) {
+			if(downloadZip("https://files.runemod.net/application/windows.zip", zipFilePath)) {
 				UnzipFile(zipFilePath, rmAppLocation);
 				SetCurrentAppVersion(latestAppVersion);
 				try
@@ -334,6 +339,24 @@ class RuneMod_Launcher
 		ProcessBuilder processBuilder = new ProcessBuilder(command);
 		processBuilder.redirectErrorStream(true); // Combine error and output streams
 		runemodApp = processBuilder.start();
+
+
+
+		new Thread(new Runnable() {
+			@SneakyThrows
+			public void run(){
+				while (true) {
+					WinDef.HWND handle = SharedMemoryManager.findWindowByPid(runemodApp.pid());
+					if (User32.INSTANCE.IsWindow(handle)) {
+						User32.INSTANCE.ShowWindow(handle, WinUser.SW_HIDE);
+						System.out.println("hiding window after launch");
+						break;
+					}
+
+					Thread.sleep(20);
+				}
+			}
+		}).start();
 	}
 
 }

@@ -80,16 +80,28 @@ public interface RuneModConfig extends Config
 	}
 
 	@ConfigItem(
-		keyName = "alternateSyncMode",
-		name = "Alternate Sync Mode",
-		description = "May feel more responsive on some hardware. Warning: will cause rs to show a false fps value",
+		keyName = "lockStep",
+		name = "LockStep",
+		description = "should generally be disabled. When enabled, input lag may occur",
 		position = 1,
-		section = settings
+		section = Developer
 	)
 
-	default boolean alternateSyncMode()
+	default boolean lockStep()
 	{
 		return false;
+	}
+
+	@ConfigItem(
+		keyName = "ChunkStreamingDistance",
+		name = "ChunkStreamingDistance",
+		description = "allows runemod to stream in objects outside of the main scene area, which can reduces loading times while moving through the world",
+		position = 1,
+		section = Developer
+	)
+	default int StreamChunkDistance()
+	{
+		return 7; //6 would mean a 13X13 chunk square around player (6 is like radius. 6X2 = 12. +1 because its radius from centre tile. But this is all thrown off a bit because we actually use subregions, not chunks.
 	}
 
 	@ConfigItem(

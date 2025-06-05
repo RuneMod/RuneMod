@@ -36,6 +36,8 @@ import com.runemod.cache.fs.Storage;
 import com.runemod.cache.fs.Store;
 import com.runemod.cache.index.FileData;
 import com.runemod.cache.region.Region;
+import java.util.HashSet;
+import java.util.Set;
 import lombok.SneakyThrows;
 
 import java.io.File;
@@ -51,15 +53,22 @@ import static net.runelite.client.RuneLite.RUNELITE_DIR;
 public class CacheReader
 {
 	public Store store;
+	public String myCachePath;
 
 	public CacheReader(String cachePath)
 	{
+		cacheFullyLoaded = false;
+		myCachePath = cachePath;
+		initCacheStore();
+	}
+
+	void initCacheStore() {
 		try
 		{
-			store = new Store(new File(cachePath));
-			log.debug("cachePath: " + cachePath);
+			store = new Store(new File(myCachePath));
+			//log.debug("cachePath: " + cachePath);
 			store.load();
-			log.debug("cache contains" + store.getIndexes().size() + "indexs");
+			//log.debug("cache contains" + store.getIndexes().size() + "indexs");
 		}
 		catch (IOException e)
 		{
@@ -67,6 +76,75 @@ public class CacheReader
 			e.printStackTrace();
 		}
 	}
+
+
+	private final Set<String> loadedArchives = new HashSet<>();
+	public static boolean cacheFullyLoaded = false;
+
+	public boolean checkIfCacheFullyLoaded()
+	{
+			try
+			{
+				if (cacheFullyLoaded == true) {
+					return true;
+				}
+
+				initCacheStore(); //reInitCacheStore cos store has changed.
+
+				int total = 0;
+				int missing = 0;
+
+				for (Index index : store.getIndexes())
+				{
+					for (Archive archive : index.getArchives())
+					{
+						String key = index.getId() + ":" + archive.getArchiveId();
+						total++;
+
+						if (loadedArchives.contains(key))
+							continue;
+						try
+						{
+							byte[] data = store.getStorage().load(index.getId(), archive.getArchiveId());
+							if (data != null && data.length > 0)
+							{
+								loadedArchives.add(key);
+							}
+							else
+							{
+								missing++;
+								cacheFullyLoaded = false;
+								return false;
+							}
+						}
+						catch (IOException e)
+						{
+							missing++;
+							cacheFullyLoaded = false;
+							return false;
+						}
+					}
+				}
+
+				if (loadedArchives.size() == total || missing == 0)
+				{
+					cacheFullyLoaded = true;
+					return true;
+				}
+				else
+				{
+					cacheFullyLoaded = false;
+					return false;
+				}
+			}
+			catch (Exception e)
+			{
+				log.warn("Error during cache scan", e);
+			}
+
+			return false;
+	}
+
 
 /*    public static void main(String[] args) throws IOException
     {
