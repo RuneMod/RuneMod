@@ -72,6 +72,7 @@ public class CacheReader
 		}
 		catch (IOException e)
 		{
+			store = null;
 			log.debug("issue loading cache from disk");
 			e.printStackTrace();
 		}
@@ -91,6 +92,24 @@ public class CacheReader
 
 				initCacheStore(); //reInitCacheStore cos store has changed.
 
+				if (store.getIndexes() == null || store.getIndexes().size() < 23) {
+					log.debug("Cache store not ready yet");
+					return false;
+				}
+
+				boolean hasAnyArchives = false;
+				for (Index index : store.getIndexes()) {
+					if (index.getArchives().size() > 0) {
+						hasAnyArchives = true;
+						break;
+					}
+				}
+
+				if (!hasAnyArchives) {
+					log.debug("Cache indexes are present but contain no archives. Likely still initializing.");
+					return false;
+				}
+
 				int total = 0;
 				int missing = 0;
 
@@ -98,8 +117,9 @@ public class CacheReader
 				{
 					for (Archive archive : index.getArchives())
 					{
-						String key = index.getId() + ":" + archive.getArchiveId();
 						total++;
+
+						String key = index.getId() + ":" + archive.getArchiveId();
 
 						if (loadedArchives.contains(key))
 							continue;
@@ -108,7 +128,21 @@ public class CacheReader
 							byte[] data = store.getStorage().load(index.getId(), archive.getArchiveId());
 							if (data != null && data.length > 0)
 							{
-								loadedArchives.add(key);
+								try
+								{
+									ArchiveFiles archiveFiles = archive.getFiles(data);
+									if(archiveFiles.getFiles().size() > 0) {
+										loadedArchives.add(key);
+									} else {
+										missing++;
+										cacheFullyLoaded = false;
+										return false;
+									}
+								}
+								catch (IOException io)
+								{
+									loadedArchives.add(key);
+								}
 							}
 							else
 							{
@@ -126,8 +160,9 @@ public class CacheReader
 					}
 				}
 
-				if (loadedArchives.size() == total || missing == 0)
+				if (loadedArchives.size() == total && missing == 0)
 				{
+					log.debug("there are "+store.getIndexes().size() +"indexes");
 					cacheFullyLoaded = true;
 					return true;
 				}
@@ -139,7 +174,7 @@ public class CacheReader
 			}
 			catch (Exception e)
 			{
-				log.warn("Error during cache scan", e);
+				log.debug("Error during cache scan", e);
 			}
 
 			return false;
@@ -179,7 +214,7 @@ public class CacheReader
 		return index.toIndexData().getArchives().length;
 	}
 
-	public void printRevs()
+	/*public void printRevs()
 	{
 		List<Index> indexes = store.getIndexes();
 		int[] hashes = new int[indexes.size()];
@@ -189,11 +224,11 @@ public class CacheReader
 			//log.debug("index "+index.getId() + " crc32 hash is "+index.getCrc());
 			log.debug("index " + index.getId() + " Rev is " + index.getRevision());
 
-/*            for(Archive archive : index.getArchives()) {
+*//*            for(Archive archive : index.getArchives()) {
                 log.debug("archive "+archive.getArchiveId() + " Rev is "+archive.getRevision());
-            }*/
+            }*//*
 		}
-	}
+	}*/
 
 	public static final int cacheExporterVersion = 1; //I increment this this to force a reexport of rscache. useful for forcing update when the cache exporter is altered.
 
@@ -411,7 +446,7 @@ public class CacheReader
 				RuneModPlugin.sharedmem_rm.backBuffer.writePacket(mainBuffer, "KitDefinition");
 			}
 		}
-		log.debug("Sent " + counter + " SpotSequenceDefinitions");
+		log.debug("Sent " + counter + " KitDefinitions");
 	}
 
 	public void sendSequenceDefinitions()

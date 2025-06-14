@@ -128,6 +128,8 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	private Set<Integer> disAllowedDynamicSpawns = new HashSet<>(); //objdefs in here are not allowed to spawn/despawn except during loading. We have these in order to prevent things like stiles becoming invisible due to being incorporated into the player model. Its bodge, but its the best we can do as we cant tell whether a objdef has been put in a player model, in rl api.
 	boolean initedDisallowedDynamicSpawns = false;
 
+	public Set<Long> taggedTileObjects = new HashSet<>();
+
 	public int overlayColor_LastFrame = 0;
 	public ApplicationSettings appSettings;
 	int sharedMemPixelsUpdatedTick = -1; //used to prevent updating sharedMemory twice in the same tick.
@@ -730,11 +732,10 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		if(myCacheReader != null) {
 			if (myCacheReader.cacheFullyLoaded && runeModAwaitingRsCacheHashes)
 			{ //provide rscache hashes, if runemod is waiting for them
+				runeModAwaitingRsCacheHashes = false;
 				clientThread.invokeAtTickEnd(() -> {
 					myCacheReader.provideRsCacheHashes();
 				});
-
-				runeModAwaitingRsCacheHashes = false;
 			}
 		}
 
@@ -928,6 +929,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 				if(useLockStep) {
 					if(hasLostRuneModWindow()) {
+						log.debug("lockstep timeout, and lost runemod window");
 						disableRuneModPlugin();  //we do this so as not to lockup the client when rm crashes.
 						return;
 					} else {
@@ -936,6 +938,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 				} else {
 					if(noTimeOutsSinceLastUeCom > 40) {
 						if(hasLostRuneModWindow()) {
+							log.debug("nonlockstep timeout, and lost runemod window");
 							disableRuneModPlugin(); //we do this so as not to lockup the client when rm crashes.
 						}
 					}
@@ -1142,41 +1145,76 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	{
 	}*/
 
+
+	/**
+	 * This event is run from the maploader thread prior to the map load completing.
+	 * Most client operations can't be done from this thread safely.
+	 * You probably don't want to use this event.
+	 */
+	@Subscribe
+	public void onPreMapLoad(PreMapLoad preMapLoad)
+	{
+		System.out.println("preMapLoad");
+	}
+
 	@Override
 	public void loadScene(Scene scene)
 	{
-		//clientThread.invoke(() -> {
-			log.debug("LoadScene");
+		ticksSinceLoadScene = 0;
+		log.debug("LoadScene");
 
-			ticksSinceLoadScene = 0;
 
-			if(scene.isInstance()) {
-				//if the scene is instanced we have to destroy all old terrains, because the ones around the scene edges will have some blank tiles which were not included in the instance-map when those terrains were last generated.
-				System.out.println("despawning all terrains because is instanced area");
-				WorldPoint[] activeChunksArr = activeChunks.toArray(WorldPoint[]::new);
-				for(WorldPoint chunkBase : activeChunksArr) {
-					send_DespawnChunk_Packet(chunkBase);
-				}
+		//perhaps we need to do this for wall objects too?
+		//despawn any gameobjects spawned by server. This fixes the scenario where a player leaves an area with player lit fires, and then comes back to it to find fire still there when they should be despawned.
+		for(GameObjectSpawned event: serverSpawnedGameObjects) {
+			GameObjectDespawned despawnEvent = new GameObjectDespawned();
+			despawnEvent.setTile(event.getTile());
+			despawnEvent.setGameObject(event.getGameObject());
+			onGameObjectDespawned(despawnEvent);
+		}
+		serverSpawnedGameObjects.clear();
+
+		if(scene.isInstance()) {
+			//if the scene is instanced we have to destroy all old terrains, because the ones around the scene edges will have some blank tiles which were not included in the instance-map when those terrains were last generated.
+			System.out.println("despawning all terrains because is instanced area");
+			WorldPoint[] activeChunksArr = activeChunks.toArray(WorldPoint[]::new);
+			for(WorldPoint chunkBase : activeChunksArr) {
+				send_DespawnChunk_Packet(chunkBase);
 			}
+		}
 
-			if(config.nullifyDrawCallbacks()) {return;}
-			sendBaseCoordinatePacket(scene); //sends basecoordinate and instance map
+		if(config.nullifyDrawCallbacks()) {return;}
+		sendBaseCoordinatePacket(scene); //sends basecoordinate and instance map
 
-			for (int x = 0-1; x < (Constants.SCENE_SIZE/Constants.CHUNK_SIZE)+1; ++x)
+		for (int x = 0-1; x < (Constants.SCENE_SIZE/Constants.CHUNK_SIZE)+1; ++x)
+		{
+			for (int y = 0-1; y < (Constants.SCENE_SIZE/Constants.CHUNK_SIZE)+1; ++y)
 			{
-				for (int y = 0-1; y < (Constants.SCENE_SIZE/Constants.CHUNK_SIZE)+1; ++y)
-				{
-					int chunkBaseX = (x*Constants.CHUNK_SIZE)+scene.getBaseX();
-					int chunkBaseY = (y*Constants.CHUNK_SIZE)+scene.getBaseY();
-					WorldPoint chunkBase = new WorldPoint(chunkBaseX, chunkBaseY, 0);
+				int chunkBaseX = (x*Constants.CHUNK_SIZE)+scene.getBaseX();
+				int chunkBaseY = (y*Constants.CHUNK_SIZE)+scene.getBaseY();
+				WorldPoint chunkBase = new WorldPoint(chunkBaseX, chunkBaseY, 0);
 
-					if(chunkBase.getX()%16!=0 || chunkBase.getY()%16!=0) {continue;}
+				if(chunkBase.getX()%16!=0 || chunkBase.getY()%16!=0) {continue;}
 
-					send_SpawnChunk_Packet(chunkBase);
-				}
+				send_SpawnChunk_Packet(chunkBase);
 			}
-			//}
-		//});
+		}
+
+		//a system, for despawning objects that shouldnt exist. relies on working unique ids. It is needed in the event that the server-spawns an object in the main scene, we move away from that object, then come back to the area before the object ahs had a chance to do a latent despawn.
+/*			Set<Long> newSceneTaggedTileObjects = new HashSet<>();
+
+		forEachTile(scene, (tile) ->
+		{
+			getTileObjectTagsOnTile(tile, newSceneTaggedTileObjects);
+		});
+
+		for(long tag : taggedTileObjects) {
+			if(tag is not in current scene) {continue;} //we only want to deal with objects that are in the current scene area.
+			if(!newSceneTaggedTileObjects.contains(tag)) {
+				TileObject tileObject = taggedTileObjects.find(tag);
+				DespawnTaggedTileObject(tag);
+			}
+		}*/
 	}
 
 	static final int EXTENDED_SCENE_OFFSET = (Constants.EXTENDED_SCENE_SIZE - Constants.SCENE_SIZE) / 2; // offset for sxy -> msxy
@@ -1264,12 +1302,14 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 		activeChunks.clear();
 
+		taggedTileObjects.clear();
+
 		client.setLoginScreen(null);
 		client.setShouldRenderLoginScreenFire(true);
 
 		CacheReader.cacheFullyLoaded= false;
 
-		runeModAwaitingRsCacheHashes = true;
+		runeModAwaitingRsCacheHashes = false;
 
 		initedDisallowedDynamicSpawns = false;
 
@@ -1682,9 +1722,8 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		int b = col & 0xFF;
 	}
 
-	private void forEachTile(Consumer<Tile> consumer)
+	private void forEachTile(Scene scene, Consumer<Tile> consumer)
 	{
-		final Scene scene = client.getScene();
 		final Tile[][][] tiles = scene.getTiles();
 
 		for (int z = 0; z < Constants.MAX_Z; ++z)
@@ -1817,6 +1856,57 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 					onItemSpawned(itemSpawned);
 				}
 			}
+	}
+
+	void getTileObjectTagsOnTile(Tile tile, Set<Long> setToAddTo) {
+		if(tile == null) {return;}
+		WallObject wallObject = tile.getWallObject();
+		if (wallObject != null)
+		{
+			setToAddTo.add(getTag_Unique(wallObject));
+		}
+
+		DecorativeObject decorativeObject = tile.getDecorativeObject();
+		if (decorativeObject != null)
+		{
+			setToAddTo.add(getTag_Unique(decorativeObject));
+		}
+
+		GroundObject groundObject = tile.getGroundObject();
+		if (groundObject != null)
+		{
+			setToAddTo.add(getTag_Unique(groundObject));
+		}
+
+		for (GameObject object : tile.getGameObjects())
+		{
+			if (object != null)
+			{
+				//if (object.getSceneMinLocation().equals(tile.getSceneLocation()))
+				//{
+				if (object instanceof TileObject)
+				{
+					if (object.getRenderable() != null)
+					{
+						if (object.getRenderable() instanceof DynamicObject || object.getRenderable() instanceof Model || object.getRenderable() instanceof ModelData)
+						{
+							setToAddTo.add(getTag_Unique(object));
+							//final GameObjectSpawned objectSpawned = new GameObjectSpawned();
+							//objectSpawned.setTile(tile);
+							//objectSpawned.setGameObject(object);
+							//onGameObjectSpawned(objectSpawned);
+						}
+						else
+						{
+/*									if(object.getRenderable() instanceof Actor) {
+										log.debug("unhandled renderableClass: Actor");
+									}*/
+						}
+					}
+				}
+				//}
+			}
+		}
 	}
 
 	void simulateTilObjectDespawns(Tile tile) {
@@ -2265,6 +2355,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			actorSpawnPacket.writeShort(offsetY);
 
 			sharedmem_rm.backBuffer.writePacket(actorSpawnPacket, "ActorSpawn");
+			taggedTileObjects.add(tag);
 		//});
 	}
 
@@ -2292,6 +2383,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			actorSpawnPacket.writeLong(tag);
 
 			sharedmem_rm.backBuffer.writePacket(actorSpawnPacket, "ActorDeSpawn");
+			taggedTileObjects.remove(tag);
 		//});
 	}
 
@@ -2359,6 +2451,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			actorSpawnPacket.writeShort(offsetY);
 
 			sharedmem_rm.backBuffer.writePacket(actorSpawnPacket, "ActorSpawn");
+			taggedTileObjects.add(tag);
 		//});
 	}
 
@@ -2578,6 +2671,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		}
 	}
 
+	ArrayList<GameObjectSpawned> serverSpawnedGameObjects = new ArrayList<>();
 	@Subscribe
 	private void onGameObjectSpawned(GameObjectSpawned event)
 	{
@@ -2590,6 +2684,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			}
 
 			if(loggedInForNoServerTicks > 1 && disAllowedDynamicSpawns.contains(event.getGameObject().getId())) {return;}
+
 
 			//client.getObjectDefinition(event.getGameObject().getConfig()).getName();
 
@@ -2638,6 +2733,10 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			actorSpawnPacket.writeShort(offsetY);
 
 			sharedmem_rm.backBuffer.writePacket(actorSpawnPacket, "ActorSpawn");
+			taggedTileObjects.add(tag);
+			if(client.getGameState().ordinal()>=GameState.LOGGED_IN.ordinal()) {
+				serverSpawnedGameObjects.add(event);
+			}
 		//});
 	}
 
@@ -2664,6 +2763,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			actorSpawnPacket.writeLong(tag);
 
 			sharedmem_rm.backBuffer.writePacket(actorSpawnPacket, "ActorDeSpawn");
+			taggedTileObjects.remove(tag);
 		//});
 	}
 
@@ -2692,6 +2792,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			actorSpawnPacket.writeLong(tag);
 
 			sharedmem_rm.backBuffer.writePacket(actorSpawnPacket, "ActorDeSpawn");
+			taggedTileObjects.remove(tag);
 		//});
 	}
 
@@ -2810,6 +2911,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			actorSpawnPacket.writeShort(offsetY);
 
 			sharedmem_rm.backBuffer.writePacket(actorSpawnPacket, "ActorSpawn");
+			taggedTileObjects.add(tag);
 		//});
 	}
 
@@ -2986,6 +3088,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 		sharedmem_rm.backBuffer.writePacket(actorSpawnPacket, "ActorSpawn");
 	}
+
 
 	@Subscribe
 	private void onPlayerSpawned(PlayerSpawned event)
@@ -3562,7 +3665,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		int noProjectiles = 0;
 		if (config.spawnProjectiles())
 		{
-			for (Projectile projectile : client.getTopLevelWorldView().getProjectiles())
+			for (Projectile projectile : client.getProjectiles())
 			{
 				noProjectiles++;
 				hashedEntitys_ThisFrame.add(projectile.hashCode());
@@ -3573,7 +3676,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		{
 			perFramePacket.writeShort(noProjectiles);
 
-			for (Projectile projectile : client.getTopLevelWorldView().getProjectiles())
+			for (Projectile projectile : client.getProjectiles())
 			{
 				int sceneId = projectile.hashCode();
 				perFramePacket.writeInt(sceneId);
@@ -3750,6 +3853,24 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			}
 			return isEqual;
 		}
+	}
+
+
+	//not implemented yet
+	private void playerColourOverrideChanged(Player player)
+	{
+		Buffer packet = new Buffer(new byte[20]);
+
+		int actorOverridesType = 0; //1 is playerColourOverrideChanged
+		packet.writeByte(actorOverridesType);
+
+		Model model = player.getModel();
+		packet.writeShort(player.getId());
+		packet.writeByte(model.getOverrideAmount());
+		packet.writeByte(model.getOverrideHue());
+		packet.writeByte(model.getOverrideLuminance());
+		packet.writeByte(model.getOverrideSaturation());
+		sharedmem_rm.backBuffer.writePacket(packet, "actorOverridesChanged");
 	}
 }
 

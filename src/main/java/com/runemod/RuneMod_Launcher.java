@@ -338,25 +338,31 @@ class RuneMod_Launcher
 
 		ProcessBuilder processBuilder = new ProcessBuilder(command);
 		processBuilder.redirectErrorStream(true); // Combine error and output streams
-		runemodApp = processBuilder.start();
 
+		try
+		{
+			runemodApp = processBuilder.start();
 
+			new Thread(new Runnable() {
+				@SneakyThrows
+				public void run(){
+					while (true) {
+						WinDef.HWND handle = SharedMemoryManager.findWindowByPid(runemodApp.pid());
+						if (User32.INSTANCE.IsWindow(handle)) {
+							User32.INSTANCE.ShowWindow(handle, WinUser.SW_HIDE);
+							System.out.println("hiding window after launch");
+							break;
+						}
 
-		new Thread(new Runnable() {
-			@SneakyThrows
-			public void run(){
-				while (true) {
-					WinDef.HWND handle = SharedMemoryManager.findWindowByPid(runemodApp.pid());
-					if (User32.INSTANCE.IsWindow(handle)) {
-						User32.INSTANCE.ShowWindow(handle, WinUser.SW_HIDE);
-						System.out.println("hiding window after launch");
-						break;
+						Thread.sleep(20);
 					}
-
-					Thread.sleep(20);
 				}
-			}
-		}).start();
+			}).start();
+		}
+		catch (IOException e)
+		{
+			RuneModPlugin.runeMod_loadingScreen.SetStatus_DetailText("There was an error launching RuneMod", true);
+			System.err.println("IOException while launching process: " + e.getMessage());
+		}
 	}
-
 }
