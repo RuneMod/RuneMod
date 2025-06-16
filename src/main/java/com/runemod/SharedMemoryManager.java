@@ -168,7 +168,7 @@ public class SharedMemoryManager
 			case "OverlayDefinition":
 				dataTypeByte = 22;
 				break;
-			case "ColourPalette":
+			case "ActorOverridesChanged":
 				dataTypeByte = 23;
 				break;
 			case "GameStateChanged":
@@ -205,7 +205,7 @@ public class SharedMemoryManager
 				dataTypeByte = 34;
 				break;
 			default:
-				log.debug("no match");
+				log.debug("no opcode match for packet '"+dataType+"'");
 				break;
 		}
 

@@ -1157,22 +1157,27 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		System.out.println("preMapLoad");
 	}
 
-	@Override
-	public void loadScene(Scene scene)
-	{
-		ticksSinceLoadScene = 0;
-		log.debug("LoadScene");
-
-
-		//perhaps we need to do this for wall objects too?
-		//despawn any gameobjects spawned by server. This fixes the scenario where a player leaves an area with player lit fires, and then comes back to it to find fire still there when they should be despawned.
+	void DespawnServerSpawnedObjs() {
 		for(GameObjectSpawned event: serverSpawnedGameObjects) {
+/*			if(event.getGameObject()!=null) {
+				System.out.println("despawning serverSpawnedObj: "+event.getGameObject().getId());
+			}*/
 			GameObjectDespawned despawnEvent = new GameObjectDespawned();
 			despawnEvent.setTile(event.getTile());
 			despawnEvent.setGameObject(event.getGameObject());
 			onGameObjectDespawned(despawnEvent);
 		}
 		serverSpawnedGameObjects.clear();
+	}
+	@Override
+	public void loadScene(Scene scene)
+	{
+		ticksSinceLoadScene = 0;
+		log.debug("LoadScene");
+		DespawnServerSpawnedObjs();
+		//perhaps we need to do this for wall objects too?
+		//despawn any gameobjects spawned by server. This fixes the scenario where a player leaves an area with player lit fires, and then comes back to it to find fire still there when they should be despawned.
+
 
 		if(scene.isInstance()) {
 			//if the scene is instanced we have to destroy all old terrains, because the ones around the scene edges will have some blank tiles which were not included in the instance-map when those terrains were last generated.
@@ -2173,6 +2178,8 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 		if (curGamestate == GameState.LOGIN_SCREEN)
 		{
+			DespawnServerSpawnedObjs();
+
 			SwingUtilities.invokeLater(() ->
 			{
 				SwingUtilities.invokeLater(() ->
@@ -2203,8 +2210,6 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			}
 
 			log.debug("Login SCREEN...");
-			baseX = -1;
-			baseY = -1;
 		}
 		else if (curGamestate == GameState.LOGGING_IN)
 		{
@@ -2217,9 +2222,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		}
 		else if (curGamestate == GameState.HOPPING)
 		{
-			baseX = -1;
-			baseY = -1;
-
+			DespawnServerSpawnedObjs();
 			log.debug("hopping...");
 		}
 		else if (curGamestate == GameState.LOADING)
@@ -3687,9 +3690,15 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 				short Z = (short) ((projectile.getZ() * -1)); //not sure if getStartHeight is correct/helping things.
 				perFramePacket.writeShort(Z);
 
-				short localX_target = (short) projectile.getTarget().getX();
+				short localX_target = 0;
+				short localY_target = 0;
+
+				LocalPoint targetPoint = projectile.getTargetPoint();
+				if(targetPoint!=null) {
+					localX_target = (short) targetPoint.getX();
+					localY_target = (short) targetPoint.getY();
+				}
 				perFramePacket.writeShort(localX_target);
-				short localY_target = (short) projectile.getTarget().getY();
 				perFramePacket.writeShort(localY_target);
 				short Z_target = (short) (projectile.getEndHeight());
 				Z_target += (Perspective.getTileHeight(client, new LocalPoint(localX_target, localY_target), client.getLocalPlayer().getWorldLocation().getPlane()/*client.getTopLevelWorldView().getPlane()*/) * -1);
@@ -3759,6 +3768,8 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		hashedEntitys_LastFrame = hashedEntitys_ThisFrame;
 
 		sharedmem_rm.backBuffer.writePacket(perFramePacket, "PerFramePacket");
+
+		checkForActorColourOverrideChanges();
 	}
 
 	void hashedEntityDespawned(int SceneId)
@@ -3855,22 +3866,85 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		}
 	}
 
+	Set<Actor> actorsWithColorOverrides_LastFrame = new HashSet<>();
+
+	private void checkForActorColourOverrideChanges() {
+		for (Actor actor : client.getPlayers()) {
+			if(actor == null) {
+				continue;
+			}
+			Model model = actor.getModel();
+			if(model == null) {continue;}
+			if(model.getOverrideAmount() != 0) { //if override is active
+				if(!actorsWithColorOverrides_LastFrame.contains(actor)) { //if override has changed to become active
+					actorColourOverrideChanged(actor);
+					actorsWithColorOverrides_LastFrame.add(actor);
+					System.out.println("col override has become active");
+				}
+			} else { //if override is inactive
+				if(actorsWithColorOverrides_LastFrame.contains(actor)) { //if override has changed to become inactive
+					actorColourOverrideChanged(actor);
+					actorsWithColorOverrides_LastFrame.remove(actor);
+					System.out.println("col override has become inactive");
+				}
+			}
+		}
+
+		for (Actor actor : client.getNpcs()) {
+			if(actor == null) {
+				continue;
+			}
+			Model model = actor.getModel();
+			if(model == null) {continue;}
+			if(model.getOverrideAmount() != 0) { //if override is active
+				if(!actorsWithColorOverrides_LastFrame.contains(actor)) { //if override has changed to become active
+					actorColourOverrideChanged(actor);
+					actorsWithColorOverrides_LastFrame.add(actor);
+					System.out.println("col override has become active");
+				}
+			} else { //if override is inactive
+				if(actorsWithColorOverrides_LastFrame.contains(actor)) { //if override has changed to become inactive
+					actorColourOverrideChanged(actor);
+					actorsWithColorOverrides_LastFrame.remove(actor);
+					System.out.println("col override has become inactive");
+				}
+			}
+		}
+	}
 
 	//not implemented yet
-	private void playerColourOverrideChanged(Player player)
+	private void actorColourOverrideChanged(Actor actor)
 	{
+		byte overridesType = 0;//colourOverridesType. we might have other types later for playerCompOverrides/npccompOverriddes
+
+		int actorId = 0;
+		byte actorType = 0;
+		if(actor instanceof Player) {
+			actorId = ((Player) actor).getId();
+			actorType = 1;
+		}
+		if(actor instanceof NPC) {
+			actorId = ((NPC) actor).getId();
+			actorType = 2;
+		}
+
+		if(actorType == 0) {
+			System.out.println("unhandled actor type has ColourOverride");
+			return;
+		}
+
+		Model model = actor.getModel();
+
 		Buffer packet = new Buffer(new byte[20]);
-
-		int actorOverridesType = 0; //1 is playerColourOverrideChanged
-		packet.writeByte(actorOverridesType);
-
-		Model model = player.getModel();
-		packet.writeShort(player.getId());
+		packet.writeByte(overridesType);
+		packet.writeByte(actorType);
+		packet.writeShort(actorId);
 		packet.writeByte(model.getOverrideAmount());
 		packet.writeByte(model.getOverrideHue());
 		packet.writeByte(model.getOverrideLuminance());
 		packet.writeByte(model.getOverrideSaturation());
-		sharedmem_rm.backBuffer.writePacket(packet, "actorOverridesChanged");
+		System.out.println("ColourOverridesChanged. hue:"+model.getOverrideHue() + " sat:"+model.getOverrideSaturation() + " Lum:"+model.getOverrideLuminance() + " amount:"+model.getOverrideAmount());
+		sharedmem_rm.backBuffer.writePacket(packet, "ActorOverridesChanged");
 	}
 }
 
