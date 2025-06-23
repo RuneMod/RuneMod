@@ -27,9 +27,11 @@ package com.runemod;
 import com.google.inject.Provides;
 import java.awt.BorderLayout;
 import java.awt.Color;
-import java.awt.Frame;
+import java.awt.Component;
 import java.awt.GraphicsConfiguration;
 import java.awt.LayoutManager;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
@@ -51,6 +53,7 @@ import javax.sound.sampled.Mixer;
 import javax.swing.JFrame;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.RootPaneContainer;
 import javax.swing.SwingUtilities;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
@@ -124,7 +127,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	static boolean isShutDown = false;
 	private final HashMap<NPC, NpcOverrides_Copy> npcsWithOverrides_LastFrame = new HashMap<NPC, NpcOverrides_Copy>();
 
-	private String[] disAllowedDynamicSpawns_Names = {"rail","stile", "forest","fence"};
+	private String[] disAllowedDynamicSpawns_Names = {"rail","stile", "forest","fence", "rocks", "shortcut"};
 	private Set<Integer> disAllowedDynamicSpawns = new HashSet<>(); //objdefs in here are not allowed to spawn/despawn except during loading. We have these in order to prevent things like stiles becoming invisible due to being incorporated into the player model. Its bodge, but its the best we can do as we cant tell whether a objdef has been put in a player model, in rl api.
 	boolean initedDisallowedDynamicSpawns = false;
 
@@ -145,16 +148,25 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 	GameState curGamestate = GameState.STARTING;
 	GameState lastGameState = GameState.STARTING;
-	volatile int rsUiPosOffsetX = 0;
-	volatile int rsUiPosOffsetY = 0;
-	volatile int rsUiPosX = -1;
-	volatile int rsUiPosY = -1;
+	volatile int rsUiPosX = 0;
+	volatile int rsUiPosY = 0;
+	volatile int canvas2DSizeX = 0;
+	volatile int canvas2DSizeY = 0;
+	volatile int baseOffsetX = 0;
+	volatile int baseOffsetY = 0;
+
 	int baseX = 0;
 	int baseY = 0;
-	int lastCavansX = -1;
-	int lastCavansY = -1;
-	int lastCavansSizeX = -1;
-	int lastCavansSizeY = -1;
+
+	int lastView3DX = -1;
+	int lastView3dY = -1;
+	int lastView3dSizeX = -1;
+	int lastView3dSizeY = -1;
+	int lastCanvas2DSizeX = -1;
+	int lastCanvas2DSizeY = -1;
+	int lastBaseOffsetX = -1;
+	int lastBaseOffsetY = -1;
+
 	private int clientPlane = -1; //used to track when plane has changed
 	private Set<Integer> hashedEntitys_LastFrame = new HashSet<Integer>(); //used to track spawns/despawnes of entities.
 
@@ -504,7 +516,8 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			int baseX = chunkBase.getX();
 			int baseY = chunkBase.getY();
 
-			//for each tile in chunk
+		eventIsSimulation = true;
+		//for each tile in chunk
 			for (int dx = 0; dx < CHUNK_SIZE; dx++)
 			{
 				for (int dy = 0; dy < CHUNK_SIZE; dy++)
@@ -517,6 +530,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 					}
 				}
 			}
+		eventIsSimulation = false;
 	}
 
 	int SUBREGION_SIZE = 16;
@@ -527,6 +541,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		int baseX = subRegionBase.getX();
 		int baseY = subRegionBase.getY();
 
+		eventIsSimulation = true;
 		//for each tile in chunk
 		for (int dx = 0; dx < SUBREGION_SIZE; dx++)
 		{
@@ -540,6 +555,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 				}
 			}
 		}
+		eventIsSimulation = false;
 	}
 
 	void send_DespawnChunk_Packet(WorldPoint chunkBase) { //generally just used to despawn extended chunks.
@@ -556,8 +572,8 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		sharedmem_rm.backBuffer.writePacket(actorSpawnPacket, "ActorDeSpawn");
 	}
 
-	void send_SpawnChunk_Packet(WorldPoint chunkBase) { //generally just used to despawn extended chunks.
-		if(activeChunks.contains(chunkBase)) {return;}
+	boolean send_SpawnChunk_Packet(WorldPoint chunkBase) { //generally just used to despawn extended chunks.
+		if(activeChunks.contains(chunkBase)) {return false;}
 		System.out.println("spawning chunk at:  " + chunkBase);
 		activeChunks.add(chunkBase);
 		Buffer actorSpawnPacket = new Buffer(new byte[20]);
@@ -568,6 +584,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		actorSpawnPacket.writeByte(0);
 
 		sharedmem_rm.backBuffer.writePacket(actorSpawnPacket, "ActorSpawn");
+		return true;
 	}
 
 	@Subscribe
@@ -588,9 +605,9 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		//ArrayList<WorldPoint> spawnedChunks = new ArrayList();
 		WorldPoint playerLoc = client.getLocalPlayer().getWorldLocation();
 
-		for (int dx = -config.StreamChunkDistance(); dx <= config.StreamChunkDistance(); dx++)
+		for (int dx = -config.ExtraChunksLoadDistance(); dx <= config.ExtraChunksLoadDistance(); dx++)
 		{
-			for (int dy = -config.StreamChunkDistance(); dy <= config.StreamChunkDistance(); dy++)
+			for (int dy = -config.ExtraChunksLoadDistance(); dy <= config.ExtraChunksLoadDistance(); dy++)
 			{
 				int playerChunkX = playerLoc.getX() / CHUNK_SIZE;
 				int playerChunkY = playerLoc.getY() / CHUNK_SIZE;
@@ -600,7 +617,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 				WorldPoint chunkBase = new WorldPoint(chunkX*CHUNK_SIZE, chunkY*CHUNK_SIZE, 0);
 
-				if(chunkBase.getX()%16!=0 || chunkBase.getY()%16!=0) {continue;} //we only care about subregion, which are every 16 tiles, hwile chunks are every 8 tiles.
+				//if(chunkBase.getX()%16!=0 || chunkBase.getY()%16!=0) {continue;} //we only care about subregion, which are every 16 tiles, hwile chunks are every 8 tiles.
 
 				int chunkBaseX = chunkBase.getX();
 				int chunkBaseY = chunkBase.getY();
@@ -612,8 +629,12 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 				if(!isInMainScene) {
 					//simulateSpawnEventsForChunk(chunkBase);
-					send_SpawnChunk_Packet(chunkBase);
-					return;
+					boolean spawnedChunk  = send_SpawnChunk_Packet(chunkBase);
+					if(spawnedChunk) {
+						return;
+					}else {
+						continue;
+					}
 					//spawnedChunks.add(chunkBase);
 					//if(spawnedChunks.size() >= 4) {
 						//activeExtendedChunks.addAll(spawnedChunks);
@@ -630,7 +651,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 		WorldPoint[] activeChunksArr = activeChunks.toArray(WorldPoint[]::new);
 		for(WorldPoint chunkBase : activeChunksArr) {
-			if(chunkBase.getX()%16!=0 || chunkBase.getY()%16!=0) {continue;}
+			//if(chunkBase.getX()%16!=0 || chunkBase.getY()%16!=0) {continue;}
 
 			int sceneX = chunkBase.getX()-client.getBaseX();
 			int sceneY = chunkBase.getY()-client.getBaseY();
@@ -641,7 +662,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 			int chunkX = chunkBase.getX() / CHUNK_SIZE;
 			int chunkY = chunkBase.getY() / CHUNK_SIZE;
-			boolean isInRange = Math.abs(playerChunkX-chunkX) <= config.StreamChunkDistance() && Math.abs(playerChunkY-chunkY) <= config.StreamChunkDistance();
+			boolean isInRange = Math.abs(playerChunkX-chunkX) <= config.ExtraChunksLoadDistance() && Math.abs(playerChunkY-chunkY) <= config.ExtraChunksLoadDistance();
 
 			if(!isInRange && !isInMainScene) {
 				send_DespawnChunk_Packet(chunkBase);
@@ -739,12 +760,12 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			}
 		}
 
-		log_Timed_Heavy("_0");
+/*		log_Timed_Heavy("_0");
 		JFrame window = (JFrame) SwingUtilities.getWindowAncestor(client.getCanvas());
 		if (!window.getTitle().equals("RuneLite - RuneLite"))
 		{
 			window.setTitle("RuneLite - RuneLite");
-		}
+		}*/
 
 		log_Timed_Heavy("_1");
 		if (ticksSincePluginLoad <= 2 || client.getGameState().ordinal() < GameState.LOGGING_IN.ordinal() || config.RuneModVisibility() == false || config.useTwoRenderers() == true)
@@ -772,13 +793,13 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		clientThread.invokeAtTickEnd(() -> {
 			if (ticksSinceLoadScene > 300)
 			{
-				if (client.getGameCycle() % 30 == 0)
+				if (client.getGameCycle() % 10 == 0)
 				{
 					if(!client.getTopLevelWorldView().isInstance()){ //dont think extended tiles exist in instanced areas.
 						processExtendedChunkSpawnTask();
 					}
 				}
-				if ((client.getGameCycle() + 4) % 30 == 0) //staggers despawn so it happens a few frames after spawn task
+				if ((client.getGameCycle() + 4) % 10 == 0) //staggers despawn so it happens a few frames after spawn task
 				{
 					processExtendedChunkDespawnTask();
 				}
@@ -802,7 +823,6 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		{
 			return;
 		}
-
 
 		sharedmem_rm.ChildRuneModWinToRl();
 
@@ -848,6 +868,11 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	int noTimeOutsSinceLastUeCom = 0;
 	void communicateWithUnreal(String funcLocation)
 	{
+		if (alreadyCommunicatedUnreal)
+		{
+			log_Timed_Heavy("Already communicated. cancelled communicateWithUnreal::" + funcLocation);
+			return;
+		}
 
 		if(config.disableUeCom()) {
 			return;
@@ -865,12 +890,6 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			return;
 		}
 
-		if (alreadyCommunicatedUnreal)
-		{
-			log_Timed_Heavy("Already communicated. cancelled communicateWithUnreal::" + funcLocation);
-			return;
-		}
-
 		alreadyCommunicatedUnreal = true;
 
 		if(config.increaseTimerResolution()) {
@@ -880,11 +899,11 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		log_Timed_Heavy("communicateWithUnreal::" + funcLocation);
 
 
-		//if(client.getGameCycle() % 4 == 0) {
-			SwingUtilities.invokeLater(() -> {
+		if(client.getGameCycle() % 4 == 0) {
+			//SwingUtilities.invokeLater(() -> {
 				MaintainRuneModAttachment();
-			});
-		//}
+			//});
+		}
 
 		if (client.getGameState().ordinal() < GameState.LOGIN_SCREEN.ordinal())
 		{ //prevents communicating with unreal before client is loaded.
@@ -918,6 +937,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 			if(useLockStep == true) {
 				timeOut = 10000;
+				System.out.println("using locksetp");
 			}
 
 			int val = sharedmem_rm.myKernel32.WaitForSingleObject(sharedmem_rm.EventUeDataReady, timeOut);
@@ -930,7 +950,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 				if(useLockStep) {
 					if(hasLostRuneModWindow()) {
 						log.debug("lockstep timeout, and lost runemod window");
-						disableRuneModPlugin();  //we do this so as not to lockup the client when rm crashes.
+						disableRuneModPlugin();  //we do this so as to keep the client useable even if rm crashes.
 						return;
 					} else {
 						continue; //continue waiting for runemod. the wait/loop could be infinite, aslong as the runemod window exists.
@@ -986,24 +1006,22 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 	Set<Tile> tilesWithAnimateGameObjects = new HashSet<>();
 
-
+	int[] npcHeights = new int[65535];
+	int[] playerHeights = new int[65535];
 
 	@Override
 	public void draw(Projection projection, Scene scene, Renderable renderable, int orientation, int x, int y, int z, long hash)
 	{
-		if(config.nullifyDrawCallbacks()) {
-/*			Model model = renderable instanceof Model ? (Model) renderable : renderable.getModel();
-			if (model != null)
+/*		if(renderable instanceof NPC || renderable instanceof Player) {
+			if (!alreadyCommunicatedUnreal)
 			{
-				// Apply height to renderable from the model
-				if (model != renderable)
-				{
-					renderable.setModelHeight(model.getModelHeight());
-				}
-
-				client.checkClickbox(projection, model, orientation, x, y, z, hash);
-			}*/
-
+				communicateWithUnreal("drawScene");
+				visibleActors.clear();
+				tilesWithAnimateGameObjects.clear();
+			}
+			//System.out.println("npc drawn");
+		}*/
+		if(config.nullifyDrawCallbacks()) {
 			return;
 		}
 		if (curGpuFlags <= 0)
@@ -1037,29 +1055,31 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 					tilesWithAnimateGameObjects.add(client.getTopLevelWorldView().getScene().getTiles()[(int)plane-1][(int)sceneX][(int)sceneY]); //required where tile uses linkedbellow stuff
 				}
 			}
-		}
-
-		if (renderable instanceof Player)
-		{
-			visibleActors.add(renderable);
-		}
-		else
-		{
-			if (renderable instanceof NPC)
+		} else {
+			if (renderable instanceof Player)
 			{
 				visibleActors.add(renderable);
+				playerHeights[((Player)renderable).getId()] = y;
 			}
 			else
 			{
-				if (renderable instanceof GraphicsObject)
+				if (renderable instanceof NPC)
 				{
 					visibleActors.add(renderable);
+					npcHeights[((NPC)renderable).getIndex()] = y;
 				}
 				else
 				{
-					if (renderable instanceof Projectile)
+					if (renderable instanceof GraphicsObject)
 					{
 						visibleActors.add(renderable);
+					}
+					else
+					{
+						if (renderable instanceof Projectile)
+						{
+							visibleActors.add(renderable);
+						}
 					}
 				}
 			}
@@ -1122,10 +1142,12 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			log_Timed_Heavy("!client.isGpu()");
 			return;
 		}
-		communicateWithUnreal("drawScene");
-
-		visibleActors.clear();
-		tilesWithAnimateGameObjects.clear();
+		if (!alreadyCommunicatedUnreal)
+		{
+			communicateWithUnreal("drawScene");
+			visibleActors.clear();
+			tilesWithAnimateGameObjects.clear();
+		}
 	}
 
 	@SneakyThrows
@@ -1348,10 +1370,10 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		client.setUnlockedFps(false);
 		client.setUnlockedFpsTarget(50);
 
-		lastCavansX = 0;
-		lastCavansY = 0;
-		lastCavansSizeX = 0;
-		lastCavansSizeY = 0;
+		lastView3DX = 0;
+		lastView3dY = 0;
+		lastView3dSizeX = 0;
+		lastView3dSizeY = 0;
 
 		curGpuFlags = -1;
 	}
@@ -1370,6 +1392,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		}
 	}
 
+	int winDirtyCosResize = 0;
 	@SneakyThrows
 	void startUp_Custom()
 	{
@@ -1410,11 +1433,25 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		sharedmem_rm = new SharedMemoryManager(this);
 		sharedmem_rm.createSharedMemory("sharedmem_rm", 50000000); //50 mb
 		sharedmem_rm.CreateNamedEvents();
+		sharedmem_rm.write_Rl_hwnd_ToSharedMem();
 
-		JFrame window = (JFrame) SwingUtilities.getAncestorOfClass(Frame.class, client.getCanvas());
-		//window.setIgnoreRepaint(true); //doing this could save a bit of performance however it causes visual issues in runelite.
+		JFrame window = (JFrame) SwingUtilities.getWindowAncestor(client.getCanvas());
+		client.getCanvas().getParent().getParent().addComponentListener(new ComponentAdapter() {
+			@Override
+			public void componentResized(ComponentEvent e) {
+					winDirtyCosResize = 2;
+					System.out.println("window resized");
+			}
+			@Override
+			public void componentMoved(ComponentEvent e) {
+					winDirtyCosResize = 2;
+				System.out.println("window mover");
+			}
+		});
 
 		runeMod_loadingScreen = new RuneMod_LoadingScreen(window, this);
+		//window.setIgnoreRepaint(true); //doing this could save a bit of performance however it causes visual issues in runelite.
+
 
 		runeModLauncher = new RuneMod_Launcher(config.UseAltRuneModLocation() ? config.AltRuneModLocation() : "", config.StartRuneModOnStart());
 
@@ -2149,7 +2186,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 					{
 						if(action!=null)
 						{
-							if (action.equals("Squeeze-through") || action.equals("Climb-over") || action.equals("Jump-over") || action.equals("Hop-over") || action.equals("Enter"))
+							if (action.equals("Squeeze-through") || action.equals("Climb-through ") || action.equals("Climb-over") || action.equals("Jump-over") || action.equals("Hop-over") || action.equals("Enter") || action.equals("Climb"))
 							{
 								System.out.println("disallowed dynamic spawn on obj: " + objDef.getName());
 								disAllowedDynamicSpawns.add(i);
@@ -2674,6 +2711,8 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		}
 	}
 
+	boolean eventIsSimulation = false;
+
 	ArrayList<GameObjectSpawned> serverSpawnedGameObjects = new ArrayList<>();
 	@Subscribe
 	private void onGameObjectSpawned(GameObjectSpawned event)
@@ -2704,8 +2743,32 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 			int plane = tile.getRenderLevel();
 			int tileX = tile.getSceneLocation().getX();
-
 			int tileY = tile.getSceneLocation().getY();
+
+/*			int settings = client.getTopLevelWorldView().getTileSettings()[tileX][tileY][plane];
+			int CalcedMinPlane = -1;
+		if ((settings & 8) != 0) {
+			CalcedMinPlane = 0;
+		} else {
+			FIntVector coordinatesPlane1 = FIntVector(coordinates.X, coordinates.Y, 1);
+			int64 tilePlane1_id = UUser::MakeAssetId(0, UUser::CoordinatesToContentId(coordinatesPlane1));
+
+			UTile_RSClass* tilePlane1 = nullptr;
+			if(tilePlane1_id != id) //prevents tile loading self
+			{
+				tilePlane1 = UMyBPFunctions::getTile(tilePlane1_id, nullptr, false);
+			} else
+			{
+				tilePlane1 = this;
+			}
+
+			int tilePlane1_settings = 0;
+			if (tilePlane1)
+			{
+				tilePlane1_settings = tilePlane1->settings & 2;
+			}
+			CalcedMinPlane = plane > 0 && (tilePlane1_settings) != 0 ? coordinates.Z - 1 : coordinates.Z;
+		}*/
 
 
 			int height = event.getGameObject().getZ() * -1;
@@ -2735,12 +2798,71 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			actorSpawnPacket.writeShort(offsetX);
 			actorSpawnPacket.writeShort(offsetY);
 
+			if(objectDefinitionId == 24775) {
+				Tile actualTile = null;
+					for (int sceneX = 1; sceneX < Constants.SCENE_SIZE - 1; ++sceneX)
+					{
+						for (int sceneY = 1; sceneY < Constants.SCENE_SIZE - 1; ++sceneY)
+						{
+							Tile tile_ = client.getTopLevelWorldView().getScene().getTiles()[plane][sceneX][sceneY];
+							if(tile_!=null) {
+								for(GameObject go : tile_.getGameObjects()) {
+									if (go!=null && go.getId() == 24775) {
+										actualTile = tile;
+									}
+								}
+							}
+						}
+					}
+
+
+					if(actualTile!=null) {
+						System.out.println("obj 24775 event tile: "+event.getTile().getWorldLocation()+" actualTile: "+actualTile.getWorldLocation());
+					}
+/*				calcMinPLanes();
+
+				System.out.println("minplane: "+minPLanes[plane][tileX][tileY]);
+				System.out.println("tile contains "+tile.getGameObjects().length+" gameObjects");
+				if(tile.getBridge()!=null) {
+					System.out.println("hasBridgeTile");
+				}*/
+			}
+
 			sharedmem_rm.backBuffer.writePacket(actorSpawnPacket, "ActorSpawn");
 			taggedTileObjects.add(tag);
-			if(client.getGameState().ordinal()>=GameState.LOGGED_IN.ordinal()) {
+			if(!eventIsSimulation && client.getGameState().ordinal()>=GameState.LOGGED_IN.ordinal()) {
 				serverSpawnedGameObjects.add(event);
 			}
 		//});
+	}
+
+	byte[][][] minPLanes = new byte[4][104][104];
+	void calcMinPLanes() {
+		for (int plane = 0; plane < Constants.MAX_Z; plane++)
+		{
+			for (int sceneX = 1; sceneX < Constants.SCENE_SIZE - 1; ++sceneX)
+			{
+				for (int sceneY = 1; sceneY < Constants.SCENE_SIZE - 1; ++sceneY)
+				{
+					int minPlane = -1;
+					if ((client.getTileSettings()[plane][sceneY][sceneX] & 8) != 0)
+					{
+						minPlane = 0;
+					}
+					else if (plane > 0 && (client.getTileSettings()[1][sceneY][sceneX] & 2) != 0)
+					{
+						minPlane = plane - 1;
+					}
+					else
+					{
+						minPlane = plane;
+					}
+
+					minPLanes[plane][sceneX][sceneY] = (byte)minPlane;
+						//var5.setTileMinPlane(plane, sceneY, sceneX, minPlane);
+				}
+			}
+		}
 	}
 
 	@Subscribe
@@ -3184,11 +3306,70 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	{ //sets the pos offsets, using swing thread, to avoid crash.
 		float dpiScalingFactor = getDpiScalingFactor();
 
-		rsUiPosOffsetX = Math.round(dpiScalingFactor * (client.getCanvas().getParent().getLocationOnScreen().x - client.getCanvas().getLocationOnScreen().x) * -1);
-		rsUiPosOffsetY = Math.round(dpiScalingFactor * (client.getCanvas().getParent().getLocationOnScreen().y - client.getCanvas().getLocationOnScreen().y) * -1);
-		rsUiPosX = client.getCanvas().getLocationOnScreen().x;
-		rsUiPosY = client.getCanvas().getLocationOnScreen().y;
+		//calcBaseOffset();
+
+		baseOffsetX = Math.round((float)client.getCanvas().getLocation().x*dpiScalingFactor);
+		baseOffsetY = Math.round((float)client.getCanvas().getLocation().y*dpiScalingFactor);
+
+		rsUiPosX = baseOffsetX;
+		rsUiPosY = baseOffsetY;
+
+		float ratioX = 1;
+		float ratioY = 1;
+
+		if (client.isStretchedEnabled())
+		{
+			ratioX = (float) client.getStretchedDimensions().width / (float) client.getBufferProvider().getWidth();
+			ratioY = (float) client.getStretchedDimensions().height / (float) client.getBufferProvider().getHeight();
+		}
+		//3d viewport size
+		View3dSizeX = client.getViewportWidth();
+		boolean onLoginScreen = client.getGameState() == GameState.STARTING || client.getGameState() == GameState.LOGIN_SCREEN || client.getGameState() == GameState.LOGGING_IN || client.getGameState() == GameState.LOGIN_SCREEN_AUTHENTICATOR;
+		View3dSizeX *= dpiScalingFactor;
+		View3dSizeX *= ratioX;
+		if (onLoginScreen)
+		{ //when we first arrive on login screen, viewport is 0 width because it is uninitialized. In such cases, I am using the canvas dimensions instead.
+			View3dSizeX = Math.round(client.getCanvas().getWidth() * dpiScalingFactor);
+		}
+
+		View3dSizeY = client.getViewportHeight();
+		View3dSizeY *= dpiScalingFactor;
+		View3dSizeY *= ratioY;
+		//top left position of 3d viewport in rl window.
+		View3dOffsetX = client.getViewportXOffset();
+		View3dOffsetX *= dpiScalingFactor;
+		View3dOffsetX *= ratioX;
+		View3dOffsetX += baseOffsetX; //add the relative location compared to parent, to the 3d viewOffset.
+		if (onLoginScreen)
+		{
+			View3dOffsetX = 0;
+		}
+
+		View3dOffsetY = client.getViewportYOffset();
+		View3dOffsetY *= dpiScalingFactor;
+		View3dOffsetY *= ratioY;
+		View3dOffsetY += baseOffsetY; //add the relative location compared to parent, to the 3d viewOffset.
+		if (onLoginScreen)
+		{
+			View3dOffsetY = 0;
+		}
+		canvas2DSizeX = client.getCanvasWidth();
+		canvas2DSizeX *= dpiScalingFactor;
+		canvas2DSizeX *= ratioX;
+		canvas2DSizeY = client.getCanvasHeight();
+		canvas2DSizeY *= dpiScalingFactor;
+		canvas2DSizeY *= ratioY;
+
+		if (onLoginScreen)
+		{ //when we first arrive on login screen, viewport is 0 width because it is uninitialized. In such cases, I am using the canvas dimensions instead.
+			View3dSizeY = Math.round(client.getCanvas().getHeight() * dpiScalingFactor);
+		}
 	}
+
+	public int View3dSizeX = 200;
+	public int View3dSizeY = 200;
+	public int View3dOffsetX = 0;
+	public int View3dOffsetY = 0;
 
 	private void UpdateSharedMemoryUiPixels()
 	{
@@ -3211,83 +3392,35 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		{
 			return;
 		}
+
+		//SwingUtilities.invokeLater(() -> {
+			UpdateUiPosOffsets();
+		//});
+
 		sharedMemPixelsUpdatedTick = client.getGameCycle();
 		final BufferProvider bufferProvider = client.getBufferProvider();
 
 		int bufferWidth = bufferProvider.getWidth();
 		int bufferHeight = bufferProvider.getHeight();
 
+		//pixelBuffser dimension
 		sharedmem_rm.setInt(30000000, bufferWidth);
 		sharedmem_rm.setInt(30000005, bufferHeight);
 
-		float dpiScalingFactor = getDpiScalingFactor(); // 96 DPI is the standard
+		//CanvasPose. not used currently afik
+		sharedmem_rm.setInt(30000010, rsUiPosX);
+		sharedmem_rm.setInt(30000015, rsUiPosY);
 
-		float ratioX = 1;
-		float ratioY = 1;
-
-		if (client.isStretchedEnabled())
-		{
-			ratioX = (float) client.getStretchedDimensions().width / (float) bufferProvider.getWidth();
-			ratioY = (float) client.getStretchedDimensions().height / (float) bufferProvider.getHeight();
-		}
-
-		SwingUtilities.invokeLater(this::UpdateUiPosOffsets); //this code is run on swing thread to avoid crash.
-		sharedmem_rm.setInt(30000010, rsUiPosOffsetX);
-		sharedmem_rm.setInt(30000015, rsUiPosOffsetY);
-
-
-		//3d viewport size
-		float View3dSizeX = client.getViewportWidth();
-		boolean onLoginScreen = client.getGameState() == GameState.STARTING || client.getGameState() == GameState.LOGIN_SCREEN || client.getGameState() == GameState.LOGGING_IN || client.getGameState() == GameState.LOGIN_SCREEN_AUTHENTICATOR;
-		View3dSizeX *= dpiScalingFactor;
-		View3dSizeX *= ratioX;
-		if (onLoginScreen)
-		{ //when we first arrive on login screen, viewport is 0 width because it is uninitialized. In such cases, I am using the canvas dimensions instead.
-			View3dSizeX = client.getCanvas().getParent().getWidth() * dpiScalingFactor;
-		}
-
-		float View3dSizeY = client.getViewportHeight();
-		View3dSizeY *= dpiScalingFactor;
-		View3dSizeY *= ratioY;
-		if (onLoginScreen)
-		{ //when we first arrive on login screen, viewport is 0 width because it is uninitialized. In such cases, I am using the canvas dimensions instead.
-			View3dSizeY = client.getCanvas().getParent().getHeight() * dpiScalingFactor;
-		}
-
+		//View3dSize
 		sharedmem_rm.setInt(30000020, Math.round(View3dSizeX));
 		sharedmem_rm.setInt(30000025, Math.round(View3dSizeY));
-
-		//top left position of 3d viewport in rl window.
-		float View3dOffsetX = client.getViewportXOffset();
-		View3dOffsetX *= dpiScalingFactor;
-		View3dOffsetX *= ratioX;
-		View3dOffsetX += rsUiPosOffsetX;
-		if (onLoginScreen)
-		{
-			View3dOffsetX = 0;
-		}
-
-		float View3dOffsetY = client.getViewportYOffset();
-		View3dOffsetY *= dpiScalingFactor;
-		View3dOffsetY *= ratioY;
-		View3dOffsetY += rsUiPosOffsetY;
-		if (onLoginScreen)
-		{
-			View3dOffsetY = 0;
-		}
-
+		//View3dOffset
 		sharedmem_rm.setInt(30000030, Math.round(View3dOffsetX));
 		sharedmem_rm.setInt(30000035, Math.round(View3dOffsetY));
 
 		//Size of ui. Can differ from buffer size because of stretchmode.
-		float canvasSizeX = client.getCanvasWidth();
-		canvasSizeX *= dpiScalingFactor;
-		canvasSizeX *= ratioX;
-		float canvasSizeY = client.getCanvasHeight();
-		canvasSizeY *= dpiScalingFactor;
-		canvasSizeY *= ratioY;
-		sharedmem_rm.setInt(30000040, Math.round(canvasSizeX));
-		sharedmem_rm.setInt(30000045, Math.round(canvasSizeY));
+		sharedmem_rm.setInt(30000040, Math.round(canvas2DSizeX));
+		sharedmem_rm.setInt(30000045, Math.round(canvas2DSizeY));
 
 		sharedmem_rm.setInt(30000065, overlayColor_LastFrame);
 
@@ -3356,6 +3489,30 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		packet.writeByte(client.getTopLevelWorldView().getPlane());
 
 		sharedmem_rm.backBuffer.writePacket(packet, "BaseCoordinate");
+	}
+
+	private int getAccurateNpcZ( NPC npc)
+	{
+		NPCComposition comp = npc.getComposition();
+		int size = comp.getSize(); // 1 for small NPCs, larger for big ones
+
+		WorldPoint baseWorldPoint = npc.getWorldLocation();
+		int baseX = baseWorldPoint.getX();
+		int baseY = baseWorldPoint.getY();
+		int plane = baseWorldPoint.getPlane();
+
+		// Compute center of the tile area occupied by the NPC
+		int centerX = baseX + (size - 1) / 2;
+		int centerY = baseY + (size - 1) / 2;
+
+		WorldPoint centerWorldPoint = new WorldPoint(centerX, centerY, plane);
+		LocalPoint centerLocalPoint = LocalPoint.fromWorld(client, centerWorldPoint);
+		if (centerLocalPoint == null)
+		{
+			return 0;
+		}
+
+		return Perspective.getTileHeight(client, centerLocalPoint, plane);
 	}
 
 	@SneakyThrows
@@ -3439,7 +3596,8 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 				int npcInstanceId = npc.getIndex();
 				int npcX = npc.getLocalLocation().getX();
 				int npcY = npc.getLocalLocation().getY();
-				int npcHeight = Perspective.getTileHeight(client, npc.getLocalLocation(), client.getLocalPlayer().getWorldLocation().getPlane()/*client.getTopLevelWorldView().getPlane()*/) * -1;
+				//LocalPoint offsetCentre = new LocalPoint(npcX+(npc.getComposition().getSize()*config.NpcOffsetX()), npcY+(npc.getComposition().getSize()*config.NpcOffsetY()));
+				int npcHeight = npcHeights[npcInstanceId]*-1; /*Perspective.getTileHeight(client, offsetCentre, client.getLocalPlayer().getWorldLocation().getPlane()) * -1;*/
 				int npcOrientation = npc.getCurrentOrientation();
 
 				int actionAnimation = (config.spawnAnimations() ? getAnimation_Unmasked(npc) : -1);
@@ -3539,7 +3697,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 				int playerInstanceId = player.getId();
 				int playerX = player.getLocalLocation().getX();
 				int playerY = player.getLocalLocation().getY();
-				int playerHeight = Perspective.getTileHeight(client, player.getLocalLocation(), client.getLocalPlayer().getWorldLocation().getPlane()/*client.getTopLevelWorldView().getPlane()*/) * -1;
+				int playerHeight = playerHeights[playerInstanceId]*-1; /*Perspective.getTileHeight(client, player.getLocalLocation(), client.getLocalPlayer().getWorldLocation().getPlane()) * -1*/;
 				int playerOrientation = player.getCurrentOrientation();
 
 				int animation = (config.spawnAnimations() ? player.getAnimation() : -1);
@@ -3795,18 +3953,18 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			log.debug("Cant Update RmWindow because rl canvas isnt showing");
 			return false;
 		}
-		int curCavansX = rsUiPosX + client.getViewportXOffset();
-		int curCavansY = rsUiPosY + client.getViewportYOffset();
-		//canvas pos is now always 0, because we have childed runemod win to client.
 
-		int curCavansSizeX = client.getViewportWidth();
-		int curCavansSizeY = client.getViewportHeight();
-		if (curCavansX != lastCavansX || curCavansY != lastCavansY || curCavansSizeX != lastCavansSizeX || curCavansSizeY != lastCavansSizeY)
+		if (baseOffsetX != lastBaseOffsetX || baseOffsetY != lastBaseOffsetY || canvas2DSizeX != lastCanvas2DSizeX || canvas2DSizeY != lastCanvas2DSizeY || View3dOffsetX != lastView3DX || View3dOffsetY != lastView3dY || View3dSizeX != lastView3dSizeX || View3dSizeY != lastView3dSizeY)
 		{
-			lastCavansX = curCavansX;
-			lastCavansY = curCavansY;
-			lastCavansSizeX = curCavansSizeX;
-			lastCavansSizeY = curCavansSizeY;
+			lastView3DX = View3dOffsetX;
+			lastView3dY = View3dOffsetY;
+			lastView3dSizeX = View3dSizeX;
+			lastView3dSizeY = View3dSizeY;
+			lastCanvas2DSizeX = canvas2DSizeX;
+			lastCanvas2DSizeY = canvas2DSizeY;
+			lastBaseOffsetX = baseOffsetX;
+			lastBaseOffsetY = baseOffsetY;
+
 			return true;
 		}
 		return false;

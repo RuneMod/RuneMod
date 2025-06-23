@@ -46,14 +46,13 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import lombok.extern.slf4j.Slf4j;
 
-import static com.runemod.RuneModPlugin.unrealIsReady;
-
 @Slf4j
 class RuneMod_Launcher
 {
 	public String rmAppLocation = System.getProperty("user.home") + "\\.runemod\\application\\";
 	public String AltRuneModLocation = "";
 	public Process runemodApp = null;
+	public Process rsUiDisplayer = null;
 	boolean AutoLaunch;
 
 	RuneMod_Launcher(String altRuneModLocation, boolean AutoLaunch_)
@@ -162,7 +161,7 @@ class RuneMod_Launcher
 	{
 		if (AltRuneModLocation.length() > 1)
 		{
-			LaunchApp(AltRuneModLocation);
+			LaunchRuneMod(AltRuneModLocation);
 			return;
 		}
 
@@ -213,7 +212,7 @@ class RuneMod_Launcher
 
 		if (Files.exists(Paths.get(rmAppLocation + "Windows\\RuneMod\\Binaries\\Win64\\RuneMod-Win64-Shipping.exe")))
 		{
-			LaunchApp(rmAppLocation + "Windows\\RuneMod\\Binaries\\Win64\\RuneMod-Win64-Shipping.exe");
+			LaunchRuneMod(rmAppLocation + "Windows\\RuneMod\\Binaries\\Win64\\RuneMod-Win64-Shipping.exe");
 		}
 		else
 		{
@@ -313,9 +312,27 @@ class RuneMod_Launcher
 		RuneModPlugin.runeMod_loadingScreen.SetStatus_DetailText("UnZipping finished", true);
 	}
 
-	public void LaunchApp(String filePath) throws IOException
+/*	public void LaunchRsUiDisplayer() throws IOException
 	{
+		//launch uiDisplayer
+		String[] command = {rmAppLocation + "\\ImageCompressor\\RsUiDisplayer.exe"};
+		ProcessBuilder processBuilder = new ProcessBuilder(command);
+		processBuilder.redirectErrorStream(true); // Combine error and output streams
 
+		try
+		{
+			rsUiDisplayer = processBuilder.start();
+			log.debug("Launched RsUiDisplayer");
+		}
+		catch (IOException e)
+		{
+			RuneModPlugin.runeMod_loadingScreen.SetStatus_DetailText("There was an error launching RsUiDisplayer", true);
+			System.err.println("IOException while launching rsUiDisplayer process: " + e.getMessage());
+		}
+	}*/
+
+	public void LaunchRuneMod(String filePath) throws IOException
+	{
 		if (AutoLaunch == false)
 		{
 			RuneModPlugin.runeMod_loadingScreen.SetStatus_DetailText("Auto launch turned off, will not auto-start runemod.exe. Awaiting manual start of runemod.exe...", true);
@@ -342,7 +359,6 @@ class RuneMod_Launcher
 		try
 		{
 			runemodApp = processBuilder.start();
-
 			new Thread(new Runnable() {
 				@SneakyThrows
 				public void run(){
@@ -362,7 +378,7 @@ class RuneMod_Launcher
 		catch (IOException e)
 		{
 			RuneModPlugin.runeMod_loadingScreen.SetStatus_DetailText("There was an error launching RuneMod", true);
-			System.err.println("IOException while launching process: " + e.getMessage());
+			System.err.println("IOException while launching runemod process: " + e.getMessage());
 		}
 	}
 }

@@ -24,6 +24,7 @@
  */
 package com.runemod;
 
+import com.sun.jna.Library;
 import com.sun.jna.Native;
 import com.sun.jna.Pointer;
 import com.sun.jna.platform.win32.Kernel32;
@@ -33,7 +34,12 @@ import com.sun.jna.platform.win32.WinNT;
 import com.sun.jna.platform.win32.WinUser;
 import com.sun.jna.ptr.IntByReference;
 import com.sun.jna.win32.W32APIOptions;
-import java.awt.Container;
+import java.awt.Component;
+import java.awt.Dimension;
+import java.awt.DisplayMode;
+import java.awt.GraphicsDevice;
+import java.awt.GraphicsEnvironment;
+import java.awt.Toolkit;
 import java.awt.Window;
 import javax.swing.JFrame;
 import javax.swing.SwingUtilities;
@@ -48,11 +54,14 @@ public class SharedMemoryManager
 {
 	static byte TerminatingPacketOpCode = 1;
 	public final MyKernel32 myKernel32;
+	public final MyUser32 myUser32;
 	public WinNT.HANDLE EventRlDataReady;
 	public WinNT.HANDLE EventUeDataReady;
 	public WinNT.HANDLE EventViewportPixelsReady;
 	public Pointer SharedMemoryData;
 	public WinDef.HWND RuneModHandle = null;
+	public WinDef.HWND RsUiDisplayerHandle = null;
+	public WinDef.HWND rlWinHandle = null;
 	public boolean RmWinIsChilded = false;
 	public int gameCycle_Unreal = -1;
 	String SharedMemoryName = "";
@@ -67,6 +76,7 @@ public class SharedMemoryManager
 	{
 		runeModPlugin = runeModPlugin_;
 		myKernel32 = MyKernel32.INSTANCE;
+		myUser32 = MyUser32.INSTANCE;
 	}
 
 	public static WinDef.HWND findWindowByPid(long targetPid) {
@@ -220,6 +230,42 @@ public class SharedMemoryManager
 		SharedMemoryData.setByte(3 + offset, (byte) (anInt));
 	}
 
+	public void setLong(int offset, long value)
+	{
+		SharedMemoryData.setByte(0 + offset, (byte) (value >> 56));
+		SharedMemoryData.setByte(1 + offset, (byte) (value >> 48));
+		SharedMemoryData.setByte(2 + offset, (byte) (value >> 40));
+		SharedMemoryData.setByte(3 + offset, (byte) (value >> 32));
+		SharedMemoryData.setByte(4 + offset, (byte) (value >> 24));
+		SharedMemoryData.setByte(5 + offset, (byte) (value >> 16));
+		SharedMemoryData.setByte(6 + offset, (byte) (value >> 8));
+		SharedMemoryData.setByte(7 + offset, (byte) (value));
+	}
+
+	public void setLongLE(int offset, long value) //little endian
+	{
+		SharedMemoryData.setByte(0 + offset, (byte) (value));
+		SharedMemoryData.setByte(1 + offset, (byte) (value >> 8));
+		SharedMemoryData.setByte(2 + offset, (byte) (value >> 16));
+		SharedMemoryData.setByte(3 + offset, (byte) (value >> 24));
+		SharedMemoryData.setByte(4 + offset, (byte) (value >> 32));
+		SharedMemoryData.setByte(5 + offset, (byte) (value >> 40));
+		SharedMemoryData.setByte(6 + offset, (byte) (value >> 48));
+		SharedMemoryData.setByte(7 + offset, (byte) (value >> 56));
+	}
+
+	public long getLongLE(int offset)
+	{
+		return ((long)(SharedMemoryData.getByte(0 + offset) & 0xFF)) |
+			((long)(SharedMemoryData.getByte(1 + offset) & 0xFF) << 8) |
+			((long)(SharedMemoryData.getByte(2 + offset) & 0xFF) << 16) |
+			((long)(SharedMemoryData.getByte(3 + offset) & 0xFF) << 24) |
+			((long)(SharedMemoryData.getByte(4 + offset) & 0xFF) << 32) |
+			((long)(SharedMemoryData.getByte(5 + offset) & 0xFF) << 40) |
+			((long)(SharedMemoryData.getByte(6 + offset) & 0xFF) << 48) |
+			((long)(SharedMemoryData.getByte(7 + offset) & 0xFF) << 56);
+	}
+
 	public void setMedium(int offset, int anInt)
 	{
 		SharedMemoryData.setByte(0 + offset, (byte) (anInt >> 16));
@@ -324,10 +370,12 @@ public class SharedMemoryManager
 		if (visibility)
 		{
 			User32.INSTANCE.ShowWindow(RuneModHandle, WinUser.SW_SHOWNOACTIVATE);
+			User32.INSTANCE.ShowWindow(findRsUiDisplayerWindow(), WinUser.SW_SHOWNOACTIVATE);
 		}
 		else
 		{
 			User32.INSTANCE.ShowWindow(RuneModHandle, WinUser.SW_HIDE);
+			User32.INSTANCE.ShowWindow(findRsUiDisplayerWindow(), WinUser.SW_HIDE);
 		}
 	}
 
@@ -338,7 +386,12 @@ public class SharedMemoryManager
 
 	public WinDef.HWND findRuneModWindow()
 	{
-		WinDef.HWND handle = User32.INSTANCE.FindWindow(null, "RuneModWin");
+		long hwndVal = getLongLE(30000050); //read runemod handle from shared memory
+
+		Pointer hwndPointer = new Pointer(hwndVal);
+		WinDef.HWND handle = new WinDef.HWND(hwndPointer);
+
+		//WinDef.HWND handle = User32.INSTANCE.FindWindow(null, "RuneModWin");
 		if (User32.INSTANCE.IsWindow(handle))
 		{
 			log.debug("found runemod window");
@@ -349,6 +402,78 @@ public class SharedMemoryManager
 			log.debug("runemod window not yet found");
 			return null;
 		}
+	}
+
+	public static Window getRootWindow(Component component) {
+		Window window = SwingUtilities.getWindowAncestor(component);
+		if (window == null) {
+			return null;
+		}
+
+		while (window.getOwner() instanceof Window) {
+			window = (Window) window.getOwner();
+		}
+
+		return window;
+	}
+
+	public void write_Rl_hwnd_ToSharedMem()
+	{
+		//if(RuneModHandle == null && runeModPlugin.client.getCanvas().isShowing()) {
+			//Component window = SwingUtilities.getWindowAncestor(runeModPlugin.client.getCanvas().getParent().getParent());
+
+			//rlWinHandle = new WinDef.HWND(Native.getComponentPointer(window));
+			rlWinHandle = new WinDef.HWND(Native.getComponentPointer(runeModPlugin.client.getCanvas().getParent()));
+			long hwndVal = Pointer.nativeValue(rlWinHandle.getPointer());
+			setLongLE(30000070, hwndVal);
+		//}
+	}
+
+	public WinDef.HWND findRsUiDisplayerWindow()
+	{
+		long hwndVal = getLongLE(30000060); //read handle from shared memory
+
+		Pointer hwndPointer = new Pointer(hwndVal);
+		WinDef.HWND handle = new WinDef.HWND(hwndPointer);
+
+		if (User32.INSTANCE.IsWindow(handle))
+		{
+			//log.debug("found rsUiDisplayer window");
+			return handle;
+		}
+		else
+		{
+			//log.debug("rsUiDisplayer window not yet found");
+			return null;
+		}
+	}
+
+/*	public void ChildUiWinToRl()
+	{
+		if(RsUiDisplayerHandle == null) {
+			RsUiDisplayerHandle = findRsUiDisplayerWindow();
+
+			JFrame window = (JFrame) SwingUtilities.getWindowAncestor(runeModPlugin.client.getCanvas());
+			WinDef.HWND rlWinHandle = new WinDef.HWND(Native.getComponentPointer(window));
+			User32.INSTANCE.SetParent(RsUiDisplayerHandle, rlWinHandle);
+		}
+	}*/
+
+	public static Dimension getLargestMonitorResolution() {
+		GraphicsEnvironment ge = GraphicsEnvironment.getLocalGraphicsEnvironment();
+		GraphicsDevice[] screens = ge.getScreenDevices();
+
+		Dimension largest = new Dimension(0, 0);
+		for (GraphicsDevice screen : screens) {
+			DisplayMode dm = screen.getDisplayMode();
+			int width = dm.getWidth();
+			int height = dm.getHeight();
+			if (width * height > largest.width * largest.height) {
+				largest.setSize(width, height);
+			}
+		}
+
+		return largest;
 	}
 
 	public boolean ChildRuneModWinToRl()
@@ -373,22 +498,12 @@ public class SharedMemoryManager
 		}
 
 		log.debug("ChildingRuneModWindowToRL ...");
-
-		WinDef.HWND mainFrameComponentHandle = new WinDef.HWND(Native.getComponentPointer(runeModPlugin.client.getCanvas().getParent()));
-		User32.INSTANCE.SetParent(RuneModHandle, mainFrameComponentHandle);
+		User32.INSTANCE.SetParent(RuneModHandle, rlWinHandle);
+		Dimension screenSize = getLargestMonitorResolution();
+		User32.INSTANCE.SetWindowPos(RuneModHandle, null, 0, 0, screenSize.width, screenSize.height, User32.SWP_NOACTIVATE/* | User32.SWP_NOREDRAW | User32.SWP_NOCOPYBITS*/);
 		RmWinIsChilded = true;
 
 		RuneModPlugin.toggleRuneModLoadingScreen(false);
-
-		//WinDef.HWND rmControls = User32.INSTANCE.FindWindow(null, "RuneModControls");
-
-		//JFrame window = (JFrame) SwingUtilities.getWindowAncestor(runeModPlugin.client.getCanvas());
-		//window.requestFocus();
-		//bring rm controls to front. if we dont tdo this, rm controls dont appear at front until we reactivate rl win
-		//User32.INSTANCE.SetFocus(mainFrameComponentHandle);
-		//User32.INSTANCE.SetWindowPos(rmControls, RuneModHandle, 0, 0, 0, 0, User32);
-		//User32.INSTANCE.SetWindowPos(rmControls, RuneModHandle, 0, 0, 0, 0, User32.SWP_NOACTIVATE | User32.SWP_NOMOVE | User32.SWP_NOSIZE | User32.SWP_FRAMECHANGED);
-
 		return true;
 	}
 
@@ -456,7 +571,7 @@ public class SharedMemoryManager
 			return;
 		}
 
-		Container parent = runeModPlugin.client.getCanvas().getParent();
+/*		Container parent = runeModPlugin.client.getCanvas().getParent();
 		int canvasPosX = parent.getLocationOnScreen().x;
 		int canvasPosY = parent.getLocationOnScreen().y;
 		int canvasSizeX = parent.getWidth();
@@ -465,30 +580,22 @@ public class SharedMemoryManager
 		float dpiScalingFactor = runeModPlugin.getDpiScalingFactor(); // 96 DPI is the standard
 
 		canvasSizeX = Math.round(canvasSizeX * dpiScalingFactor);
-		canvasSizeY = Math.round(canvasSizeY * dpiScalingFactor);
+		canvasSizeY = Math.round(canvasSizeY * dpiScalingFactor);*/
 
-		//since we have childed unreal window to rl, pos is always 0 (location is now relative.
-		canvasPosX = 0;
-		canvasPosY = 0;
+/*		int canvas3DSizeX = (int)runeModPlugin.View3dSizeX;
+		int canvas3DSizeY = (int)runeModPlugin.View3dSizeY;
+		int canvas3DPosX = (int)runeModPlugin.View3dOffsetX+runeModPlugin.baseOffsetX;
+		int canvas3DPosY = (int)runeModPlugin.View3dOffsetY+runeModPlugin.baseOffsetY;
 
-		log.debug("Updating RuneMod windows. PosX: " + canvasPosX + " posY: " + canvasPosY + " sizeX: " + canvasSizeX + " sizeY: " + canvasSizeY);
+		log.debug("Updating RuneMod windows. PosX: " + canvas3DPosX + " posY: " + canvas3DPosY + " sizeX: " + canvas3DSizeX + " sizeY: " + canvas3DSizeY);*/
 
-		User32.INSTANCE.SetWindowPos(RuneModHandle, null, canvasPosX, canvasPosY, canvasSizeX, canvasSizeY, User32.SWP_NOACTIVATE);
+		//User32.INSTANCE.SetWindowPos(RuneModHandle, null, canvas3DPosX, canvas3DPosY, canvas3DSizeX, canvas3DSizeY, User32.SWP_NOACTIVATE | User32.SWP_NOREDRAW | User32.SWP_NOCOPYBITS);
 
-		// Resize the Unreal window
-/*		User32.INSTANCE.MoveWindow(
-			RuneModHandle,
-			0, 0,
-			canvasSizeX,
-			canvasSizeY,
-			true // repaint
-		);*/
-
-/*		User32.INSTANCE.SendMessage(RuneModHandle,0x0047, new WinDef.WPARAM(0), new WinDef.LPARAM(0));
-
-		User32.INSTANCE.UpdateWindow(RuneModHandle);
-		User32.INSTANCE.RedrawWindow(RuneModHandle, null, null, new WinDef.DWORD(WinUser.RDW_INVALIDATE | WinUser.RDW_UPDATENOW));*/
-
+		//also maintain rsUi overlay
+		RsUiDisplayerHandle = findRsUiDisplayerWindow();
+		if(RsUiDisplayerHandle!=null) {
+			User32.INSTANCE.SetWindowPos(RsUiDisplayerHandle, null, runeModPlugin.baseOffsetX, runeModPlugin.baseOffsetY, runeModPlugin.canvas2DSizeX, runeModPlugin.canvas2DSizeY, User32.SWP_NOACTIVATE/* | User32.SWP_NOREDRAW | User32.SWP_NOCOPYBITS*/);
+		}
 	}
 
 	public void handleUnrealData()
@@ -603,5 +710,12 @@ public class SharedMemoryManager
 		MyKernel32 INSTANCE = Native.loadLibrary("kernel32", MyKernel32.class, W32APIOptions.DEFAULT_OPTIONS);
 		int timeBeginPeriod(int period);
 		int timeEndPeriod(int period);
+	}
+
+	public interface MyUser32 extends Library
+	{
+		MyUser32 INSTANCE = Native.loadLibrary("user32", MyUser32.class, W32APIOptions.DEFAULT_OPTIONS);
+
+		boolean ScreenToClient(WinDef.HWND hWnd, WinDef.POINT lpPoint);
 	}
 }
