@@ -28,14 +28,20 @@ import com.google.inject.Provides;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
+import java.awt.Desktop;
 import java.awt.GraphicsConfiguration;
 import java.awt.LayoutManager;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 import java.lang.reflect.Field;
+import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -50,6 +56,8 @@ import javax.sound.sampled.BooleanControl;
 import javax.sound.sampled.Line;
 import javax.sound.sampled.LineUnavailableException;
 import javax.sound.sampled.Mixer;
+import javax.swing.JButton;
+import javax.swing.JDialog;
 import javax.swing.JFrame;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
@@ -127,7 +135,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	static boolean isShutDown = false;
 	private final HashMap<NPC, NpcOverrides_Copy> npcsWithOverrides_LastFrame = new HashMap<NPC, NpcOverrides_Copy>();
 
-	private String[] disAllowedDynamicSpawns_Names = {"rail","stile", "forest","fence", "rocks", "shortcut"};
+	private String[] disAllowedDynamicSpawns_Names = {"rail", "stile", "forest", "fence", "rocks", "shortcut"};
 	private Set<Integer> disAllowedDynamicSpawns = new HashSet<>(); //objdefs in here are not allowed to spawn/despawn except during loading. We have these in order to prevent things like stiles becoming invisible due to being incorporated into the player model. Its bodge, but its the best we can do as we cant tell whether a objdef has been put in a player model, in rl api.
 	boolean initedDisallowedDynamicSpawns = false;
 
@@ -143,6 +151,9 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	boolean runeModAwaitingRsCacheHashes = false;
 	boolean alreadyCommunicatedUnreal = false; //whether we have communicated with unreal this frame.
 	int curGpuFlags = -1; //there is no client.setGpuFlags, so I use this to keep track of them myself.
+	//int GpuFlagsEnableNo = 17;//DrawCallbacks.GPU | DrawCallbacks.ZBUF
+	//int GpuFlagsEnableNo = 3;
+	int GpuFlagsEnableNo = 1;
 	Set<Renderable> visibleActors = new HashSet<Renderable>();
 	Set<WorldPoint> activeChunks = new HashSet<WorldPoint>();
 
@@ -212,7 +223,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		if (config_static.HeavyLogging())
 		{
 			//log.debug("[" + getCurTimeSeconds() + "]	" + message);
-			log.debug("[" + (System.currentTimeMillis()-1745838397221L) + "]	" + message);
+			log.debug("[" + (System.currentTimeMillis() - 1745838397221L) + "]	" + message);
 		}
 	}
 
@@ -232,11 +243,13 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		}
 	};
 
-	public void registerMouseListener() {
+	public void registerMouseListener()
+	{
 		client.getCanvas().addMouseListener(mouseListener);
 	}
 
-	public void unRegisterMouseListener() {
+	public void unRegisterMouseListener()
+	{
 		client.getCanvas().addMouseListener(mouseListener);
 	}
 
@@ -339,36 +352,49 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		int b = BGR & 0xFF / 255;
 	}
 
-	public void muteLoginScreenMusic(boolean mute){ //bodged, coppied from reddit. used to mute loginscreen.
+	public void muteLoginScreenMusic(boolean mute)
+	{ //bodged, coppied from reddit. used to mute loginscreen.
 		javax.sound.sampled.Mixer.Info[] mixers = AudioSystem.getMixerInfo();
 
-		for (int i = 0; i < mixers.length; i++) {
+		for (int i = 0; i < mixers.length; i++)
+		{
 			Mixer.Info mixerInfo = mixers[i];
 			// System.out.println("Mixer Name:" + mixerInfo.getName());
 			Mixer mixer = AudioSystem.getMixer(mixerInfo);
 			Line.Info[] lineinfos = mixer.getTargetLineInfo();
-			for (Line.Info lineinfo : lineinfos) {
+			for (Line.Info lineinfo : lineinfos)
+			{
 				// System.out.println("line:" + lineinfo);
 				Line line = null;
-				try {
+				try
+				{
 					line = mixer.getLine(lineinfo);
-					if (line != null) {
+					if (line != null)
+					{
 						line.open();
-						if (line.isControlSupported(BooleanControl.Type.MUTE)) {
+						if (line.isControlSupported(BooleanControl.Type.MUTE))
+						{
 							BooleanControl bc = (BooleanControl) line.getControl(BooleanControl.Type.MUTE);
-							if (bc != null) {
+							if (bc != null)
+							{
 								System.out.println(line.getLineInfo().toString());
-								if (line.getLineInfo().toString().contains("SPEAKER target")) {
+								if (line.getLineInfo().toString().contains("SPEAKER target"))
+								{
 									bc.setValue(mute); // true to mute the line, false to unmute
 									// Implement logic to manage audio settings or mute state
 								}
 							}
 						}
 					}
-				} catch (LineUnavailableException e) {
+				}
+				catch (LineUnavailableException e)
+				{
 					// e.printStackTrace();
-				} finally {
-					if (line != null && line.isOpen()) {
+				}
+				finally
+				{
+					if (line != null && line.isOpen())
+					{
 						line.close(); // Ensure the line is closed after use
 					}
 				}
@@ -376,19 +402,24 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		}
 	}
 
-	int getAnimation_Unmasked(NPC npc) {
+	int getAnimation_Unmasked(NPC npc)
+	{
 		try
 		{
-			if(field_animation == null) {
+			if (field_animation == null)
+			{
 				return npc.getAnimation();
 			}
 
 			int animationVal_Obbed = field_animation.getInt(npc); //obfuscated anim val
 			Integer deobbedVal = ObbedAnim_deobedAnim_Map.get(animationVal_Obbed);
-			if(deobbedVal != null) {
+			if (deobbedVal != null)
+			{
 				//System.out.println("unmasked anim "+deobbedVal);
 				return deobbedVal;
-			}else {
+			}
+			else
+			{
 				return npc.getAnimation();
 			}
 		}
@@ -400,9 +431,12 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	}
 
 	@SneakyThrows
-	void mapObfuscatedAnimValues() {
-		if(!mappedMaskedAnims) {
-			if(client.getNpcs().size() > 0) { //Map obfuscated masked anim values, using the first npc we find
+	void mapObfuscatedAnimValues()
+	{
+		if (!mappedMaskedAnims)
+		{
+			if (client.getNpcs().size() > 0)
+			{ //Map obfuscated masked anim values, using the first npc we find
 				mappedMaskedAnims = true;
 				log.debug("mapping masked anims");
 				NPC npc = client.getNpcs().get(0);
@@ -413,16 +447,19 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 					//first we find the name of the field that has the "Sequence" value.
 					ArrayList<Field> fields = new ArrayList<>();
-					for(Field field : npc.getClass().getSuperclass().getDeclaredFields()) {
-						if(field.getType() == int.class) {
+					for (Field field : npc.getClass().getSuperclass().getDeclaredFields())
+					{
+						if (field.getType() == int.class)
+						{
 							field.setAccessible(true);
 							fields.add(field);
 						}
 					}
-					System.out.println("object has "+fields.size() + " int fields");
+					System.out.println("object has " + fields.size() + " int fields");
 					int[] fieldValuesBeforeChange = new int[fields.size()];
 					int index = -1;
-					for(Field field : fields) {
+					for (Field field : fields)
+					{
 						index++;
 						fieldValuesBeforeChange[index] = field.getInt(npc);
 					}
@@ -432,10 +469,12 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 					String fieldName = "null";
 					index = -1;
-					for(Field field : fields) {
+					for (Field field : fields)
+					{
 						index++;
-						if(field.getInt(npc)!=fieldValuesBeforeChange[index]) {
-							log.debug("field "+field.getName() + " is Sequence field?");//name of "sequence" field
+						if (field.getInt(npc) != fieldValuesBeforeChange[index])
+						{
+							log.debug("field " + field.getName() + " is Sequence field?");//name of "sequence" field
 							fieldName = field.getName();
 						}
 					}
@@ -443,7 +482,8 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 					field_animation = npc.getClass().getSuperclass().getDeclaredField(fieldName); //"sequence" field
 					field_animation.setAccessible(true);
 
-					for (int knownMaskedAnim : knownMaskedAnimIds) {
+					for (int knownMaskedAnim : knownMaskedAnimIds)
+					{
 						npc.setAnimation(knownMaskedAnim);
 						int animationVal_Obbed = 0; //obfuscated anim val
 						try
@@ -511,29 +551,30 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 	public void simulateSpawnEventsForChunk(WorldPoint chunkBase)
 	{
-			System.out.println("spawning extended tiles for chunk:  " + chunkBase);
+		System.out.println("spawning extended tiles for chunk:  " + chunkBase);
 
-			int baseX = chunkBase.getX();
-			int baseY = chunkBase.getY();
+		int baseX = chunkBase.getX();
+		int baseY = chunkBase.getY();
 
 		eventIsSimulation = true;
 		//for each tile in chunk
-			for (int dx = 0; dx < CHUNK_SIZE; dx++)
+		for (int dx = 0; dx < CHUNK_SIZE; dx++)
+		{
+			for (int dy = 0; dy < CHUNK_SIZE; dy++)
 			{
-				for (int dy = 0; dy < CHUNK_SIZE; dy++)
+				for (int plane = 0; plane < 4; plane++)
 				{
-					for (int plane = 0; plane < 4; plane++)
-					{
-						WorldPoint tileWorldPoint = new WorldPoint(baseX + dx, baseY + dy, plane);
-						Tile tile = getExtendedSceneTileFromWorldPoint(tileWorldPoint);
-						simulateTilObjectSpawns(tile);
-					}
+					WorldPoint tileWorldPoint = new WorldPoint(baseX + dx, baseY + dy, plane);
+					Tile tile = getExtendedSceneTileFromWorldPoint(tileWorldPoint);
+					simulateTilObjectSpawns(tile);
 				}
 			}
+		}
 		eventIsSimulation = false;
 	}
 
 	int SUBREGION_SIZE = 16;
+
 	public void simulateSpawnEventsForSubRegion(WorldPoint subRegionBase)
 	{
 		System.out.println("spawning extended tile objects for chunk:  " + subRegionBase);
@@ -558,9 +599,13 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		eventIsSimulation = false;
 	}
 
-	void send_DespawnChunk_Packet(WorldPoint chunkBase) { //generally just used to despawn extended chunks.
+	void send_DespawnChunk_Packet(WorldPoint chunkBase)
+	{ //generally just used to despawn extended chunks.
 		System.out.println("despawning chunk at:  " + chunkBase);
-		if(!activeChunks.contains(chunkBase)) {return;}
+		if (!activeChunks.contains(chunkBase))
+		{
+			return;
+		}
 		activeChunks.remove(chunkBase);
 		Buffer actorSpawnPacket = new Buffer(new byte[20]);
 		actorSpawnPacket.writeByte(7); //write chunk data type
@@ -572,8 +617,15 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		sharedmem_rm.backBuffer.writePacket(actorSpawnPacket, "ActorDeSpawn");
 	}
 
-	boolean send_SpawnChunk_Packet(WorldPoint chunkBase) { //generally just used to despawn extended chunks.
-		if(activeChunks.contains(chunkBase)) {return false;}
+	boolean send_SpawnChunk_Packet(WorldPoint chunkBase)
+	{ //generally just used to despawn extended chunks.
+		if (activeChunks.contains(chunkBase))
+		{
+			return false;
+		}
+
+		if(chunkBase.getX()%16!=0 || chunkBase.getY()%16!=0) {return false;} //we only care about subregion, which are every 16 tiles
+
 		System.out.println("spawning chunk at:  " + chunkBase);
 		activeChunks.add(chunkBase);
 		Buffer actorSpawnPacket = new Buffer(new byte[20]);
@@ -592,15 +644,22 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	{
 		//spawn stuff on extended tiles. does not yet handle despawn
 
-		if(client.getGameState() == GameState.LOGGED_IN) {
+		if (client.getGameState() == GameState.LOGGED_IN)
+		{
 			loggedInForNoServerTicks++;
-		} else {
+		}
+		else
+		{
 			loggedInForNoServerTicks = 0;
 		}
 	}
 
-	void processExtendedChunkSpawnTask() {
-		if(client.getLocalPlayer() == null) {return;}
+	void processExtendedChunkSpawnTask()
+	{
+		if (client.getLocalPlayer() == null)
+		{
+			return;
+		}
 
 		//ArrayList<WorldPoint> spawnedChunks = new ArrayList();
 		WorldPoint playerLoc = client.getLocalPlayer().getWorldLocation();
@@ -612,32 +671,34 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 				int playerChunkX = playerLoc.getX() / CHUNK_SIZE;
 				int playerChunkY = playerLoc.getY() / CHUNK_SIZE;
 
-				int chunkX = playerChunkX+dx;
-				int chunkY = playerChunkY+dy;
+				int chunkX = playerChunkX + dx;
+				int chunkY = playerChunkY + dy;
 
-				WorldPoint chunkBase = new WorldPoint(chunkX*CHUNK_SIZE, chunkY*CHUNK_SIZE, 0);
-
-				//if(chunkBase.getX()%16!=0 || chunkBase.getY()%16!=0) {continue;} //we only care about subregion, which are every 16 tiles, hwile chunks are every 8 tiles.
+				WorldPoint chunkBase = new WorldPoint(chunkX * CHUNK_SIZE, chunkY * CHUNK_SIZE, 0);
 
 				int chunkBaseX = chunkBase.getX();
 				int chunkBaseY = chunkBase.getY();
 
-				int sceneX = chunkBaseX-client.getBaseX();
-				int sceneY = chunkBaseY-client.getBaseY();
+				int sceneX = chunkBaseX - client.getBaseX();
+				int sceneY = chunkBaseY - client.getBaseY();
 
-				boolean isInMainScene = (sceneX >= 0-8 && sceneX < 104 && sceneY >= 0-8 && sceneY < 104);
+				boolean isInMainScene = (sceneX >= 0 - 8 && sceneX < 104 && sceneY >= 0 - 8 && sceneY < 104);
 
-				if(!isInMainScene) {
+				if (!isInMainScene)
+				{
 					//simulateSpawnEventsForChunk(chunkBase);
-					boolean spawnedChunk  = send_SpawnChunk_Packet(chunkBase);
-					if(spawnedChunk) {
+					boolean spawnedChunk = send_SpawnChunk_Packet(chunkBase);
+					if (spawnedChunk)
+					{
 						return;
-					}else {
+					}
+					else
+					{
 						continue;
 					}
 					//spawnedChunks.add(chunkBase);
 					//if(spawnedChunks.size() >= 4) {
-						//activeExtendedChunks.addAll(spawnedChunks);
+					//activeExtendedChunks.addAll(spawnedChunks);
 					//}
 				}
 			}
@@ -645,26 +706,32 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		//activeExtendedChunks.addAll(spawnedChunks);
 	}
 
-	void processExtendedChunkDespawnTask() { //find chunks that need to be despawned and despawns them.
-		if(activeChunks.isEmpty()) { return; }
+	void processExtendedChunkDespawnTask()
+	{ //find chunks that need to be despawned and despawns them.
+		if (activeChunks.isEmpty())
+		{
+			return;
+		}
 		WorldPoint playerLoc = client.getLocalPlayer().getWorldLocation();
 
 		WorldPoint[] activeChunksArr = activeChunks.toArray(WorldPoint[]::new);
-		for(WorldPoint chunkBase : activeChunksArr) {
+		for (WorldPoint chunkBase : activeChunksArr)
+		{
 			//if(chunkBase.getX()%16!=0 || chunkBase.getY()%16!=0) {continue;}
 
-			int sceneX = chunkBase.getX()-client.getBaseX();
-			int sceneY = chunkBase.getY()-client.getBaseY();
-			boolean isInMainScene = (sceneX >= 0-8 && sceneX < 104 && sceneY >= 0-8 && sceneY < 104);
+			int sceneX = chunkBase.getX() - client.getBaseX();
+			int sceneY = chunkBase.getY() - client.getBaseY();
+			boolean isInMainScene = (sceneX >= 0 - 8 && sceneX < 104 && sceneY >= 0 - 8 && sceneY < 104);
 
 			int playerChunkX = playerLoc.getX() / CHUNK_SIZE;
 			int playerChunkY = playerLoc.getY() / CHUNK_SIZE;
 
 			int chunkX = chunkBase.getX() / CHUNK_SIZE;
 			int chunkY = chunkBase.getY() / CHUNK_SIZE;
-			boolean isInRange = Math.abs(playerChunkX-chunkX) <= config.ExtraChunksLoadDistance() && Math.abs(playerChunkY-chunkY) <= config.ExtraChunksLoadDistance();
+			boolean isInRange = Math.abs(playerChunkX - chunkX) <= config.ExtraChunksLoadDistance() && Math.abs(playerChunkY - chunkY) <= config.ExtraChunksLoadDistance();
 
-			if(!isInRange && !isInMainScene) {
+			if (!isInRange && !isInMainScene)
+			{
 				send_DespawnChunk_Packet(chunkBase);
 				//DespawnedChunks.add(chunkBase);
 				return;
@@ -675,6 +742,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	}
 
 	int ticksSinceLoadScene = 0;
+
 	@Subscribe
 	private void onBeforeRender(BeforeRender event)
 	{
@@ -692,7 +760,8 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			ticksSincePluginLoad++;
 		}
 
-		if(client.getTopLevelWorldView()!=null) {
+		if (client.getTopLevelWorldView() != null)
+		{
 			client.getTopLevelWorldView().getScene().setDrawDistance(90);
 		}
 
@@ -702,7 +771,8 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		{
 			startUp_Custom();
 
-			if(startedWhileLoggedIn) {
+			if (startedWhileLoggedIn)
+			{
 				return;
 			}
 
@@ -711,9 +781,15 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			runeModLauncher.launch();
 		}
 
-		if (ticksSincePluginLoad <= 1) { return; }
+		if (ticksSincePluginLoad <= 1)
+		{
+			return;
+		}
 
-		if(startedWhileLoggedIn) { return; }
+		if (startedWhileLoggedIn)
+		{
+			return;
+		}
 
 		if (config.OrbitCamera())
 		{
@@ -726,10 +802,12 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		if (!CacheReader.cacheFullyLoaded && client.getGameState().ordinal() >= GameState.STARTING.ordinal() && client.getGameCycle() % 20 == 0)
 		{
 
-			if(myCacheReader == null) {
+			if (myCacheReader == null)
+			{
 				cachePath = RUNELITE_DIR + "\\jagexcache\\oldschool\\LIVE";
 
-				if(client.getWorldType().contains(WorldType.BETA_WORLD)) { //incomplete. would need a system to detec when we have changed to a beta world and donwloaded beta cache
+				if (client.getWorldType().contains(WorldType.BETA_WORLD))
+				{ //incomplete. would need a system to detec when we have changed to a beta world and donwloaded beta cache
 					log.debug("isBetaWorld");
 					cachePath = RUNELITE_DIR + "\\jagexcache\\oldschool-beta\\LIVE";
 				}
@@ -750,7 +828,8 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			}
 		}
 
-		if(myCacheReader != null) {
+		if (myCacheReader != null)
+		{
 			if (myCacheReader.cacheFullyLoaded && runeModAwaitingRsCacheHashes)
 			{ //provide rscache hashes, if runemod is waiting for them
 				runeModAwaitingRsCacheHashes = false;
@@ -782,20 +861,22 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			clientThread.invokeAtTickEnd(() -> {
 				if (isShutDown == false)
 				{
-					if (curGpuFlags != 3)
+					if (curGpuFlags != GpuFlagsEnableNo)
 					{
 						communicateWithUnreal("onBeforeRender_TickEnd"); //here to set rm visibility before gpu flags get set. we do this to prevent momentarily showing unrendered client before rm visibility is set to true;
-						setGpuFlags(3);
+						setGpuFlags(GpuFlagsEnableNo);
 					}
 				}
 			});
 		}
+
 		clientThread.invokeAtTickEnd(() -> {
 			if (ticksSinceLoadScene > 300)
 			{
 				if (client.getGameCycle() % 10 == 0)
 				{
-					if(!client.getTopLevelWorldView().isInstance()){ //dont think extended tiles exist in instanced areas.
+					if (!client.getTopLevelWorldView().isInstance())
+					{ //dont think extended tiles exist in instanced areas.
 						processExtendedChunkSpawnTask();
 					}
 				}
@@ -834,7 +915,8 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		sharedmem_rm.setRuneModVisibility(config.RuneModVisibility() == true);
 	}
 
-	void disableRuneModPlugin() {
+	void disableRuneModPlugin()
+	{
 		SwingUtilities.invokeLater(() ->
 		{
 			try
@@ -856,16 +938,21 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			}
 		});
 	}
-	boolean hasLostRuneModWindow() {
-		if(sharedmem_rm.RuneModHandle != null && !sharedmem_rm.isRuneModHandleValid())
+
+	boolean hasLostRuneModWindow()
+	{
+		if (sharedmem_rm.RuneModHandle != null && !sharedmem_rm.isRuneModHandleValid())
 		{
 			return true;
-		} else {
+		}
+		else
+		{
 			return false;
 		}
 	}
 
 	int noTimeOutsSinceLastUeCom = 0;
+
 	void communicateWithUnreal(String funcLocation)
 	{
 		if (alreadyCommunicatedUnreal)
@@ -874,7 +961,8 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			return;
 		}
 
-		if(config.disableUeCom()) {
+		if (config.disableUeCom())
+		{
 			return;
 		}
 
@@ -892,16 +980,18 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 		alreadyCommunicatedUnreal = true;
 
-		if(config.increaseTimerResolution()) {
+		if (config.increaseTimerResolution())
+		{
 			sharedmem_rm.SetTimeBeginPeriod();
 		}
 
 		log_Timed_Heavy("communicateWithUnreal::" + funcLocation);
 
 
-		if(client.getGameCycle() % 4 == 0) {
+		if (client.getGameCycle() % 4 == 0)
+		{
 			//SwingUtilities.invokeLater(() -> {
-				MaintainRuneModAttachment();
+			MaintainRuneModAttachment();
 			//});
 		}
 
@@ -921,21 +1011,26 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		//while (true) {
 
 		//wait for ue to signal ueData is ready
-		while (true) {
+		while (true)
+		{
 			int timeOut = 0;
 
 			boolean useLockStep = false; //lockstep prevent runelite from coint
-			if(config.lockStep()) {
+			if (config.lockStep())
+			{
 				useLockStep = true;
 			}
-			if(ticksSinceLoadScene < 10) {
+			if (ticksSinceLoadScene < 10)
+			{
 				useLockStep = true;
 			}
-			if(!unrealIsReady) {
+			if (!unrealIsReady)
+			{
 				useLockStep = true;
 			}
 
-			if(useLockStep == true) {
+			if (useLockStep == true)
+			{
 				timeOut = 10000;
 				System.out.println("using locksetp");
 			}
@@ -943,28 +1038,39 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			int val = sharedmem_rm.myKernel32.WaitForSingleObject(sharedmem_rm.EventUeDataReady, timeOut);
 
 			//if wait timed out
-			if(val == 258) {
+			if (val == 258)
+			{
 				noTimeOutsSinceLastUeCom++;
-				System.out.println("wait timeOut, noTimeOuts: "+noTimeOutsSinceLastUeCom);
+				System.out.println("wait timeOut, noTimeOuts: " + noTimeOutsSinceLastUeCom);
 
-				if(useLockStep) {
-					if(hasLostRuneModWindow()) {
+				if (useLockStep)
+				{
+					if (hasLostRuneModWindow())
+					{
 						log.debug("lockstep timeout, and lost runemod window");
 						disableRuneModPlugin();  //we do this so as to keep the client useable even if rm crashes.
 						return;
-					} else {
+					}
+					else
+					{
 						continue; //continue waiting for runemod. the wait/loop could be infinite, aslong as the runemod window exists.
 					}
-				} else {
-					if(noTimeOutsSinceLastUeCom > 40) {
-						if(hasLostRuneModWindow()) {
+				}
+				else
+				{
+					if (noTimeOutsSinceLastUeCom > 40)
+					{
+						if (hasLostRuneModWindow())
+						{
 							log.debug("nonlockstep timeout, and lost runemod window");
 							disableRuneModPlugin(); //we do this so as not to lockup the client when rm crashes.
 						}
 					}
 					return;
 				}
-			}else {
+			}
+			else
+			{
 				noTimeOutsSinceLastUeCom = 0;
 				log_Timed_Heavy("1 awaitUeDataIsReady = " + val);
 				break;
@@ -1005,9 +1111,103 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	//HashMap<Long, DynamicObject> animatedDynamicObjects = new HashMap<Long, DynamicObject>(); //testing
 
 	Set<Tile> tilesWithAnimateGameObjects = new HashSet<>();
+	Set<TileObject> AnimatedTileObjects = new HashSet<>();
 
 	int[] npcHeights = new int[65535];
 	int[] playerHeights = new int[65535];
+
+	void checkForEntitiesInOtherViews()
+	{
+
+		WorldView wv = client.getTopLevelWorldView();
+		if (wv == null) return;
+		//rebuild(wv);
+		for (WorldEntity we : wv.worldEntities())
+		{
+			wv = we.getWorldView();
+			//rebuild(wv);
+		}
+/*
+		client.getWorldView()
+
+		if(client.getGameCycle()%50 == 0) {
+			//if(player.getWorldView().getId() != - 1) {
+			System.out.println("player " + player.getName() + " in worldView "+player.getWorldView().getId());
+			//}
+		}
+		if(client.getGameCycle()%50 == 0) {
+			NPC actor = (NPC)renderable;
+			//if(player.getWorldView().getId() != - 1) {
+			System.out.println("player " + actor.getName() + " in worldView "+actor.getWorldView().getId());
+			//}
+		}*/
+	}
+
+/*	@Override
+	public void drawDynamic(Projection worldProjection, Scene scene, TileObject tileObject, Renderable r, Model m, int orient, int x, int y, int z)
+	{
+		if (r instanceof Player)
+		{
+			Player player = (Player)(r);
+			if(client.getGameCycle()%50 == 0) {
+				//if(player.getWorldView().getId() != - 1) {
+				System.out.println("player " + player.getName() + " in worldView "+player.getWorldView().getId());
+				//}
+			}
+		}
+	}*/
+
+/*	@Override
+	public void drawPass(Projection entityProjection, Scene scene, int pass)
+	{
+		if(entityProjection instanceof FloatProjection)
+		{
+			FloatProjection floatProjection = (FloatProjection) entityProjection;
+			if (floatProjection != null)
+			{
+				System.out.println("drawing projection");
+				for (int i = 0; i < floatProjection.getProjection().length; i++)
+				{
+					System.out.print(i + " ");
+				}
+			}
+			else
+			{
+				System.out.println("drawZone projection is not floatVec");
+			}
+		}
+	}
+
+	@Override
+	public void drawZone(Projection entityProjection, Scene scene, int pass, int zx, int zz)
+	{
+		if(entityProjection instanceof FloatProjection) {
+			FloatProjection floatProjection = (FloatProjection)entityProjection;
+			if(floatProjection!=null){
+				System.out.println("drawZone drawing projection");
+				for(int i = 0; i < floatProjection.getProjection().length; i++) {
+					System.out.print(i+ " ");
+				}
+			}else {
+				System.out.println("drawZone projection is not floatVec");
+			}
+		}
+	}*/
+
+	public void drawTemp(Projection worldProjection, Scene scene, GameObject gameObject, Model m){
+		System.out.println("drawTemp obj id:"+gameObject.getId());
+		if(gameObject instanceof Player) {
+			System.out.println("drawingPLayer drawTemp");
+		}
+	}
+	public void drawDynamic(Projection worldProjection, Scene scene, TileObject tileObject, Renderable r, Model m, int orient, int x, int y, int z)
+	{
+		System.out.println("drawDynamic obj id:"+tileObject.getId());
+		AnimatedTileObjects.add(tileObject);
+		if(r instanceof Player) {
+			System.out.println("drawingPLayer drawDynamic");
+		}
+	}
 
 	@Override
 	public void draw(Projection projection, Scene scene, Renderable renderable, int orientation, int x, int y, int z, long hash)
@@ -1059,7 +1259,9 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			if (renderable instanceof Player)
 			{
 				visibleActors.add(renderable);
-				playerHeights[((Player)renderable).getId()] = y;
+
+				Player player = (Player)renderable;
+				playerHeights[player.getId()] = y;
 			}
 			else
 			{
@@ -1131,6 +1333,22 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	{
 		if(config.nullifyDrawCallbacks()) {return;}
 
+		if(curGpuFlags == 17) {
+			for(Player obj: client.getTopLevelWorldView().players()) {
+				visibleActors.add(obj);
+				playerHeights[obj.getId()] = 0;
+			}
+			for(NPC obj: client.getTopLevelWorldView().npcs()) {
+				visibleActors.add(obj);
+			}
+			for(Projectile obj: client.getProjectiles()) {
+				visibleActors.add(obj);
+			}
+			for(GraphicsObject obj: client.getGraphicsObjects()) {
+				visibleActors.add(obj);
+			}
+		}
+
 		log_Timed_Heavy("drawScene");
 		if (curGpuFlags <= 0)
 		{
@@ -1147,6 +1365,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			communicateWithUnreal("drawScene");
 			visibleActors.clear();
 			tilesWithAnimateGameObjects.clear();
+			AnimatedTileObjects.clear();
 		}
 	}
 
@@ -1191,41 +1410,86 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		}
 		serverSpawnedGameObjects.clear();
 	}
+
+/*	void checkWorldViewsForActors() {
+		if(client.getGameCycle()%50!=0) {return;}
+		for(WorldView wv : worldViews) {
+			if(wv!=null) {
+				for (Player player : wv.players()) {
+					System.out.println("wv "+wv.getId() + " has payer "+player.getName());
+				}
+			}
+		}
+	}*/
+	Set<WorldView> worldViews = new HashSet<>();
+	@Override
+	public void loadScene(WorldView worldView, Scene scene)
+	{
+		clientThread.invoke(() -> //invoke on client thread because might be dangerous doing stuff on maploader thread.
+		{
+			System.out.println("loadScene. worldView id:" + worldView.getId() + " baseX:" + worldView.getBaseX() + "baseY:" + worldView.getBaseY());
+			worldViews.add(worldView);
+		});
+/*		if(wvId!=-1) {
+			worldViews.add(worldView);
+			for(Player player : worldView.players()) {
+				PlayerSpawned playerSpawned = new PlayerSpawned(player);
+				onPlayerSpawned(playerSpawned);
+				LocalPoint playerLoc = player.getLocalLocation();
+				System.out.println("PlayerLocation:" + playerLoc);
+				LocalPoint locaPointInWv = LocalPoint.fromWorld(worldView, player.getWorldLocation());
+				System.out.println("loc in worldView: "+locaPointInWv);
+			}
+		}*/
+	}
+
 	@Override
 	public void loadScene(Scene scene)
 	{
-		ticksSinceLoadScene = 0;
-		log.debug("LoadScene");
-		DespawnServerSpawnedObjs();
-		//perhaps we need to do this for wall objects too?
-		//despawn any gameobjects spawned by server. This fixes the scenario where a player leaves an area with player lit fires, and then comes back to it to find fire still there when they should be despawned.
-
-
-		if(scene.isInstance()) {
-			//if the scene is instanced we have to destroy all old terrains, because the ones around the scene edges will have some blank tiles which were not included in the instance-map when those terrains were last generated.
-			System.out.println("despawning all terrains because is instanced area");
-			WorldPoint[] activeChunksArr = activeChunks.toArray(WorldPoint[]::new);
-			for(WorldPoint chunkBase : activeChunksArr) {
-				send_DespawnChunk_Packet(chunkBase);
-			}
-		}
-
-		if(config.nullifyDrawCallbacks()) {return;}
-		sendBaseCoordinatePacket(scene); //sends basecoordinate and instance map
-
-		for (int x = 0-1; x < (Constants.SCENE_SIZE/Constants.CHUNK_SIZE)+1; ++x)
+		System.out.println("loadScene. worldView id:"+scene.getWorldViewId());
+		clientThread.invoke(() -> //invoke on client thread because might be dangerous doing stuff on maploader thread.
 		{
-			for (int y = 0-1; y < (Constants.SCENE_SIZE/Constants.CHUNK_SIZE)+1; ++y)
+			ticksSinceLoadScene = 0;
+			log.debug("LoadScene");
+			DespawnServerSpawnedObjs();
+			//perhaps we need to do this for wall objects too?
+			//despawn any gameobjects spawned by server. This fixes the scenario where a player leaves an area with player lit fires, and then comes back to it to find fire still there when they should be despawned.
+
+
+			if (scene.isInstance())
 			{
-				int chunkBaseX = (x*Constants.CHUNK_SIZE)+scene.getBaseX();
-				int chunkBaseY = (y*Constants.CHUNK_SIZE)+scene.getBaseY();
-				WorldPoint chunkBase = new WorldPoint(chunkBaseX, chunkBaseY, 0);
-
-				if(chunkBase.getX()%16!=0 || chunkBase.getY()%16!=0) {continue;}
-
-				send_SpawnChunk_Packet(chunkBase);
+				//if the scene is instanced we have to destroy all old terrains, because the ones around the scene edges will have some blank tiles which were not included in the instance-map when those terrains were last generated.
+				System.out.println("despawning all terrains because is instanced area");
+				WorldPoint[] activeChunksArr = activeChunks.toArray(WorldPoint[]::new);
+				for (WorldPoint chunkBase : activeChunksArr)
+				{
+					send_DespawnChunk_Packet(chunkBase);
+				}
 			}
-		}
+
+			if (config.nullifyDrawCallbacks())
+			{
+				return;
+			}
+			sendBaseCoordinatePacket(scene); //sends basecoordinate and instance map
+
+			for (int x = 0 - 1; x < (Constants.SCENE_SIZE / Constants.CHUNK_SIZE) + 1; ++x)
+			{
+				for (int y = 0 - 1; y < (Constants.SCENE_SIZE / Constants.CHUNK_SIZE) + 1; ++y)
+				{
+					int chunkBaseX = (x * Constants.CHUNK_SIZE) + scene.getBaseX();
+					int chunkBaseY = (y * Constants.CHUNK_SIZE) + scene.getBaseY();
+					WorldPoint chunkBase = new WorldPoint(chunkBaseX, chunkBaseY, 0);
+
+					if (chunkBase.getX() % 16 != 0 || chunkBase.getY() % 16 != 0)
+					{
+						continue;
+					}
+
+					send_SpawnChunk_Packet(chunkBase);
+				}
+			}
+		});
 
 		//a system, for despawning objects that shouldnt exist. relies on working unique ids. It is needed in the event that the server-spawns an object in the main scene, we move away from that object, then come back to the area before the object ahs had a chance to do a latent despawn.
 /*			Set<Long> newSceneTaggedTileObjects = new HashSet<>();
@@ -1396,15 +1660,8 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	@SneakyThrows
 	void startUp_Custom()
 	{
-		SwingUtilities.invokeLater(() ->
-		{
-			SwingUtilities.invokeLater(() ->
-			{
-				muteLoginScreenMusic(!unrealIsReady);
-			});
-		});
 
-		log.debug("added "+disAllowedDynamicSpawns.stream().count() +"  disAllowed Dynamic Spawns");
+		CheckUePreReqs();
 
 		if (client.getGameState().ordinal() > GameState.LOGIN_SCREEN_AUTHENTICATOR.ordinal())
 		{
@@ -1423,6 +1680,16 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		}else {
 			startedWhileLoggedIn = false;
 		}
+
+		SwingUtilities.invokeLater(() ->
+		{
+			SwingUtilities.invokeLater(() ->
+			{
+				muteLoginScreenMusic(!unrealIsReady);
+			});
+		});
+
+		log.debug("added "+disAllowedDynamicSpawns.stream().count() +"  disAllowed Dynamic Spawns");
 
 		setDefaults();
 
@@ -1557,6 +1824,16 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		return isValidKey;
 	}*/
 
+	void CheckUePreReqs() {
+		if(!PrerequisiteChecker.isVCRedistInstalled()) {
+			disableRuneModPlugin();
+			SwingUtilities.invokeLater(() ->
+			{
+				PrerequisiteChecker.createMissingPreReqsPopup();
+			});
+		}
+	}
+
 	@SneakyThrows
 	@Override
 	protected void startUp() throws IOException
@@ -1575,7 +1852,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 		log.info("Starting RuneMod plugin");
 
-		initializeExecutor();
+		//initializeExecutor();
 
 		//checkBetaKey();
 		ticksSincePluginLoad = -1;
@@ -2613,7 +2890,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	}*/
 
 	// Instance-level ExecutorService for reuse
-	private ExecutorService executor;
+/*	private ExecutorService executor;
 
 	// Initialize the ExecutorService once (e.g., in your constructor or initialization code)
 	public void initializeExecutor()
@@ -2622,7 +2899,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			int threadCount = Runtime.getRuntime().availableProcessors();
 			executor = Executors.newFixedThreadPool(threadCount);
 		}
-	}
+	}*/
 
 	// Shut down the executor service (call this when you're done using the executor)
 /*	public void shutdownExecutor()
@@ -2636,10 +2913,34 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	@SneakyThrows
 	private Map<Long, DynamicObject> getAnimatedGameObjects() throws InterruptedException
 	{
-		Map<Long, DynamicObject> allGameObjects = new ConcurrentHashMap<>();
-
-		for(Tile tile : tilesWithAnimateGameObjects) {
-			findAnimatedGameObjectsOnTile(allGameObjects, tile);
+		Map<Long, DynamicObject> allGameObjects = new HashMap<>();
+		if(curGpuFlags != 17) {
+			for(Tile tile : tilesWithAnimateGameObjects) {
+				findAnimatedGameObjectsOnTile(allGameObjects, tile);
+			}
+			return allGameObjects;
+		}else {
+			for (TileObject tileObj : AnimatedTileObjects) {
+				Renderable r = null;
+				if(tileObj instanceof GameObject) {
+					r = ((GameObject)tileObj).getRenderable();
+				}
+				if(tileObj instanceof GroundObject) {
+					r = ((GroundObject)tileObj).getRenderable();
+				}
+				if(tileObj instanceof WallObject) {
+					r = ((WallObject)tileObj).getRenderable1();
+				}
+				if(tileObj instanceof DecorativeObject) {
+					r = ((DecorativeObject)tileObj).getRenderable();
+				}
+				if(r instanceof DynamicObject){
+					DynamicObject dynOb = (DynamicObject)r;
+					if(dynOb.getAnimation()!=null) {
+						allGameObjects.put(getTag_Unique(tileObj), (DynamicObject)r);
+					}
+				}
+			}
 		}
 		return allGameObjects;
 	}
@@ -3491,30 +3792,6 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		sharedmem_rm.backBuffer.writePacket(packet, "BaseCoordinate");
 	}
 
-	private int getAccurateNpcZ( NPC npc)
-	{
-		NPCComposition comp = npc.getComposition();
-		int size = comp.getSize(); // 1 for small NPCs, larger for big ones
-
-		WorldPoint baseWorldPoint = npc.getWorldLocation();
-		int baseX = baseWorldPoint.getX();
-		int baseY = baseWorldPoint.getY();
-		int plane = baseWorldPoint.getPlane();
-
-		// Compute center of the tile area occupied by the NPC
-		int centerX = baseX + (size - 1) / 2;
-		int centerY = baseY + (size - 1) / 2;
-
-		WorldPoint centerWorldPoint = new WorldPoint(centerX, centerY, plane);
-		LocalPoint centerLocalPoint = LocalPoint.fromWorld(client, centerWorldPoint);
-		if (centerLocalPoint == null)
-		{
-			return 0;
-		}
-
-		return Perspective.getTileHeight(client, centerLocalPoint, plane);
-	}
-
 	@SneakyThrows
 	private void WritePerFramePacket()
 	{
@@ -3600,18 +3877,22 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 				int npcHeight = npcHeights[npcInstanceId]*-1; /*Perspective.getTileHeight(client, offsetCentre, client.getLocalPlayer().getWorldLocation().getPlane()) * -1;*/
 				int npcOrientation = npc.getCurrentOrientation();
 
-				int actionAnimation = (config.spawnAnimations() ? getAnimation_Unmasked(npc) : -1);
-				int poseAnimation = (config.spawnAnimations() ? npc.getPoseAnimation() : -1);
+				int animationId_Action = (config.spawnAnimations() ? getAnimation_Unmasked(npc) : -1);
+				int animationId_Pose = (config.spawnAnimations() ? npc.getPoseAnimation() : -1);
 
-				int actionAnimFrame = npc.getAnimationFrame();
-				int poseAnimFrame = npc.getPoseAnimationFrame();
+				//boolean enableActionSeq = player.getAnimation() != -1 && player.getSequenceDelay() == 0;
+				boolean disableMovementSeq = npc.getPoseAnimation() == -1 || /*player.isUnanimated || */npc.getPoseAnimation() == npc.getIdlePoseAnimation() && animationId_Action != -1;
+				if(disableMovementSeq) {animationId_Pose = -1;}
+
+				int animationFrameIdx_Action = npc.getAnimationFrame();
+				int animationFrameIdx_Pose = npc.getPoseAnimationFrame();
 
 				boolean shouldDraw = visibleActors.contains(npc) && hooks.draw(npc, false);
 
 				if (!shouldDraw)
 				{
-					actionAnimFrame = -2; //-2 causes entity to be hidden in rm
-					poseAnimFrame = -2;
+					animationFrameIdx_Action = -2; //-2 causes entity to be hidden in rm
+					animationFrameIdx_Pose = -2;
 				}
 
 				perFramePacket.writeInt(npcInstanceId);
@@ -3620,11 +3901,11 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 				perFramePacket.writeShort(npcHeight);
 				perFramePacket.writeShort(npcOrientation);
 
-				perFramePacket.writeInt(actionAnimation);
-				perFramePacket.writeShort(actionAnimFrame);
+				perFramePacket.writeInt(animationId_Action);
+				perFramePacket.writeShort(animationFrameIdx_Action);
 
-				perFramePacket.writeInt(poseAnimation);
-				perFramePacket.writeShort(poseAnimFrame);
+				perFramePacket.writeInt(animationId_Pose);
+				perFramePacket.writeShort(animationFrameIdx_Pose);
 
 				int numActorSpotAnims = 0;
 				if (!config.spawnNpcGFX() || !shouldDraw)
@@ -3670,7 +3951,15 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			}
 		}
 
-		var players = client.getTopLevelWorldView().players();
+		IndexedObjectSet<? extends Player> players = client.getTopLevelWorldView().players();
+/*		ArrayList<Player> players = new ArrayList<>();
+		for(WorldView wv : worldViews) {
+			if(!wv.isTopLevel()) {
+				for (Player player : wv.players()) {
+					players.add(player);
+				}
+			}
+		}*/
 
 		int playerCount = 0;
 		for (Player player : players)
@@ -3700,18 +3989,54 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 				int playerHeight = playerHeights[playerInstanceId]*-1; /*Perspective.getTileHeight(client, player.getLocalLocation(), client.getLocalPlayer().getWorldLocation().getPlane()) * -1*/;
 				int playerOrientation = player.getCurrentOrientation();
 
-				int animation = (config.spawnAnimations() ? player.getAnimation() : -1);
-				int poseAnimation = (config.spawnAnimations() ? player.getPoseAnimation() : -1);
+				int animationId_Action = (config.spawnAnimations() ? player.getAnimation() : -1);
+				int animationId_Pose = (config.spawnAnimations() ? player.getPoseAnimation() : -1);
 
-				int animFrame = player.getAnimationFrame();
-				int poseAnimFrame = player.getPoseAnimationFrame();
+
+				//boolean enableActionSeq = player.getAnimation() != -1 && player.getSequenceDelay() == 0;
+				boolean disableMovementSeq = player.getPoseAnimation() == -1 || /*player.isUnanimated || */player.getPoseAnimation() == player.getIdlePoseAnimation() && animationId_Action != -1;
+				if(disableMovementSeq) {animationId_Pose = -1;}
+
+
+/*				SequenceDefinition var1 = super.sequence != -1 && super.sequenceDelay == 0 ? class353.SequenceDefinition_get(super.sequence) : null;
+				SequenceDefinition var2 = super.movementSequence == -1 || this.isUnanimated || super.movementSequence == super.idleSequence && var1 != null ? null : class353.SequenceDefinition_get(super.movementSequence);*/
+
+				int animationFrameIdx_Action = player.getAnimationFrame();
+				int animationFrameIdx_Pose = player.getPoseAnimationFrame();
 
 				boolean shouldDraw = visibleActors.contains(player) && hooks.draw(player, false);
 
+/*				if(!player.getWorldView().isTopLevel()) {
+					if(player.getName().equalsIgnoreCase("noodleeater")) {
+						playerInstanceId = 20;
+						shouldDraw = true;
+						int sizeDifX = 104-player.getWorldView().getSizeX();
+						int sizeDifY = 104-player.getWorldView().getSizeY();
+						//playerX = 6208;
+						//playerY = -1555;
+						//int offsetX = player.getWorldLocation().getX()*128;
+						//int offsetY = player.getWorldLocation().getY()*128;
+						//int DifX = client.getTopLevelWorldView().getBaseX()-player.getWorldView().getBaseX();
+						//int DifY = client.getTopLevelWorldView().getBaseY()-player.getWorldView().getBaseY();
+
+						int wvBaseX = player.getWorldView().getBaseX();
+						int wvBaseY = player.getWorldView().getBaseY();
+						System.out.println("playerLocalLocation:"+player.getLocalLocation());
+						LocalPoint localFromWorld = LocalPoint.fromWorld(player.getWorldView(), player.getWorldLocation());
+						System.out.println("localFromWorld:"+localFromWorld);
+
+						System.out.println("wvBaseX:"+wvBaseX + " wvBaseY:"+wvBaseY);
+						System.out.println("wvSizeX: "+player.getWorldView().getSizeX()+" wvSizeY"+player.getWorldView().getSizeY());
+						playerX+=sizeDifX*128;
+						playerY+=sizeDifY*128;
+						playerHeight = 0;
+					}
+				}*/
+
 				if (!shouldDraw)
 				{
-					animFrame = -2; //-2 causes entity to be hidden in rm
-					poseAnimFrame = -2;
+					animationFrameIdx_Action = -2; //-2 causes entity to be hidden in rm
+					animationFrameIdx_Pose = -2;
 				}
 
 				perFramePacket.writeShort(playerInstanceId);
@@ -3720,11 +4045,10 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 				perFramePacket.writeShort(playerHeight);
 				perFramePacket.writeShort(playerOrientation);
 
-				perFramePacket.writeInt(animation);
-
-				perFramePacket.writeShort(animFrame);
-				perFramePacket.writeInt(poseAnimation);
-				perFramePacket.writeShort(poseAnimFrame);
+				perFramePacket.writeInt(animationId_Action);
+				perFramePacket.writeShort(animationFrameIdx_Action);
+				perFramePacket.writeInt(animationId_Pose);
+				perFramePacket.writeShort(animationFrameIdx_Pose);
 
 
 				int numActorSpotAnims = 0;
