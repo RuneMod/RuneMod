@@ -115,6 +115,12 @@ import java.io.FileReader;
 @Slf4j
 public class RuneModPlugin extends Plugin implements DrawCallbacks
 {
+	public enum ClientType {
+		UNKNOWN,
+		RUNELITE,
+		ALORA,
+	}
+
 	public static SharedMemoryManager sharedmem_rm = null;
 
 	public static CacheReader myCacheReader;
@@ -2995,12 +3001,32 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 					allGameObjects.put(getTag_Unique(deco), d);
 				}
 			}
+			r = deco.getRenderable2();
+			if (r instanceof DynamicObject)
+			{
+				DynamicObject d = (DynamicObject) r;
+				if (d.getAnimation() != null)
+				{
+					allGameObjects.put(getTag_Unique(deco), d);
+				}
+			}
 		}
+
 
 		WallObject wall = tile.getWallObject();
 		if (wall != null)
 		{
 			Renderable r = wall.getRenderable1();
+			if (r instanceof DynamicObject)
+			{
+				DynamicObject d = (DynamicObject) r;
+				if (d.getAnimation() != null)
+				{
+					allGameObjects.put(getTag_Unique(wall), d);
+				}
+			}
+
+			r = wall.getRenderable2();
 			if (r instanceof DynamicObject)
 			{
 				DynamicObject d = (DynamicObject) r;
@@ -3477,7 +3503,9 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	@Subscribe
 	private void onPlayerChanged(PlayerChanged event)
 	{
-		if (ticksSincePluginLoad <= 1) { return; }
+		PlayerSpawned playerSpawnedEvent = new PlayerSpawned(event.getPlayer());
+		onPlayerSpawned(playerSpawnedEvent);
+/*		if (ticksSincePluginLoad <= 1) { return; }
 		if (!config.spawnPlayers())
 		{
 			return;
@@ -3512,7 +3540,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 		actorSpawnPacket.writeInt(player.getPlayerComposition().getTransformedNpcId()); //npcTransformID
 
-		sharedmem_rm.backBuffer.writePacket(actorSpawnPacket, "ActorSpawn");
+		sharedmem_rm.backBuffer.writePacket(actorSpawnPacket, "ActorSpawn");*/
 	}
 
 
