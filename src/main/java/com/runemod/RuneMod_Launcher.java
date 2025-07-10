@@ -238,7 +238,7 @@ class RuneMod_Launcher
 			BufferedInputStream bis = new BufferedInputStream(url.openStream());
 			FileOutputStream fis = new FileOutputStream(filePath);
 
-			byte[] buffer = new byte[32768];
+			byte[] buffer = new byte[8192];
 			int count = 0;
 
 			while ((count = bis.read(buffer, 0, buffer.length)) != -1)

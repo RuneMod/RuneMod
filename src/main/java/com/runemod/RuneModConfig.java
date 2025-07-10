@@ -153,6 +153,18 @@ public interface RuneModConfig extends Config
 	}
 
 	@ConfigItem(
+		keyName = "DebugSwitch",
+		name = "DebugSwitch",
+		description = "DebugSwitch. For RuneFace only",
+		position = 6,
+		section = Developer
+	)
+	default boolean DebugSwitch()
+	{
+		return false;
+	}
+
+	@ConfigItem(
 		keyName = "startRuneModOnStart",
 		name = "Auto start RuneMod.exe",
 		description = "should generally be enabled",

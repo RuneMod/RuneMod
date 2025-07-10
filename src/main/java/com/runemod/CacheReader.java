@@ -84,6 +84,7 @@ public class CacheReader
 
 	public boolean checkIfCacheFullyLoaded()
 	{
+		log.debug("checkIfCacheFullyLoaded()");
 			try
 			{
 				if (cacheFullyLoaded == true) {
@@ -134,6 +135,7 @@ public class CacheReader
 									if(archiveFiles.getFiles().size() > 0) {
 										loadedArchives.add(key);
 									} else {
+										//log.debug("no files in archive");
 										missing++;
 										cacheFullyLoaded = false;
 										return false;
@@ -146,6 +148,7 @@ public class CacheReader
 							}
 							else
 							{
+								//log.debug("no data in archive");
 								missing++;
 								cacheFullyLoaded = false;
 								return false;
@@ -153,6 +156,7 @@ public class CacheReader
 						}
 						catch (IOException e)
 						{
+							//log.debug("IOException");
 							missing++;
 							cacheFullyLoaded = false;
 							return false;
@@ -168,6 +172,7 @@ public class CacheReader
 				}
 				else
 				{
+					log.debug("archives are missing/not yet downloaded");
 					cacheFullyLoaded = false;
 					return false;
 				}
@@ -689,6 +694,11 @@ public class CacheReader
 
 			if (bytes == null)
 			{
+				return;
+			}
+
+			if(bytes.length < 2) { //added for alora
+				System.out.println("insufficient bytes for region "+regionId);
 				return;
 			}
 

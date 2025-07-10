@@ -56,7 +56,15 @@ public class MapLoader
 					Tile tile = tiles[z][x][y] = new Tile();
 					while (true)
 					{
-						int attribute = in.readUnsignedShort();
+						int attribute = 0;
+						try {
+							attribute = in.readUnsignedShort();
+						} catch (BufferUnderflowException e) {
+							System.err.println("unable to send region "+map.getRegionX() +"_" + map.getRegionY()+ ". Caught BufferUnderflowException: " + e.getMessage());
+							//e.printStackTrace(); // or handle however is appropriate
+							break;
+						}
+
 						if (attribute == 0)
 						{
 							break;

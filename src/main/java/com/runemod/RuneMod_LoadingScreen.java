@@ -117,10 +117,8 @@ public class RuneMod_LoadingScreen extends JPanel
 			}
 		}).start();
 
-		this.setBackground(Color.BLACK);
 		this.setOpaque(true);
-		this.setBackground(Color.BLACK);
-		this.setOpaque(true);
+		this.setBackground(new Color(0,0,0,0));
 
 		SetStatus_HeadingText("RuneMod: ");
 		SetStatus_DetailText("...", false);

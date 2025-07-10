@@ -39,9 +39,7 @@ import java.awt.Dimension;
 import java.awt.DisplayMode;
 import java.awt.GraphicsDevice;
 import java.awt.GraphicsEnvironment;
-import java.awt.Toolkit;
 import java.awt.Window;
-import javax.swing.JFrame;
 import javax.swing.SwingUtilities;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
@@ -121,7 +119,7 @@ public class SharedMemoryManager
 			case "RsCacheDataProvided":
 				dataTypeByte = 3;
 				break;
-			case "TileHeights":
+			case "Modifier":
 				dataTypeByte = 4;
 				break;
 			case "ObjectDefinition":
@@ -370,7 +368,11 @@ public class SharedMemoryManager
 		if (visibility)
 		{
 			User32.INSTANCE.ShowWindow(RuneModHandle, WinUser.SW_SHOWNOACTIVATE);
+			//User32.INSTANCE.SetWindowPos(RuneModHandle, null, 0, 0, 0, 0, User32.SWP_NOMOVE | User32.SWP_NOSIZE | User32.SWP_NOACTIVATE | User32.SWP_NOREDRAW | User32.SWP_NOCOPYBITS); //forces window to front. need in Alora because of canvas replacement.
+
 			User32.INSTANCE.ShowWindow(findRsUiDisplayerWindow(), WinUser.SW_SHOWNOACTIVATE);
+			//User32.INSTANCE.SetWindowPos(findRsUiDisplayerWindow(), null, 0, 0, 0, 0, User32.SWP_NOMOVE | User32.SWP_NOSIZE | User32.SWP_NOACTIVATE | User32.SWP_NOREDRAW | User32.SWP_NOCOPYBITS); //forces window to front. need in Alora because of canvas replacement.
+			bringRuneModToFront();
 		}
 		else
 		{
@@ -379,6 +381,15 @@ public class SharedMemoryManager
 		}
 	}
 
+	void bringRuneModToFront() {
+		log.debug("bringing runemod to front");
+		runeModPlugin.canvas_prevFrame = runeModPlugin.client.getCanvas(); //prevent unnesesary extra bringRuneModToFront calls.
+		//User32.INSTANCE.ShowWindow(RuneModHandle, WinUser.SW_SHOWNOACTIVATE);
+		User32.INSTANCE.SetWindowPos(RuneModHandle, null, 0, 0, 0, 0, User32.SWP_NOMOVE | User32.SWP_NOSIZE | User32.SWP_NOACTIVATE | User32.SWP_NOREDRAW | User32.SWP_NOCOPYBITS); //forces window to front. need in Alora because of canvas replacement.
+
+		//User32.INSTANCE.ShowWindow(findRsUiDisplayerWindow(), WinUser.SW_SHOWNOACTIVATE);
+		User32.INSTANCE.SetWindowPos(findRsUiDisplayerWindow(), null, 0, 0, 0, 0, User32.SWP_NOMOVE | User32.SWP_NOSIZE | User32.SWP_NOACTIVATE | User32.SWP_NOREDRAW | User32.SWP_NOCOPYBITS); //forces window to front. need in Alora because of canvas replacement.
+	}
 	public boolean isRuneModHandleValid()
 	{
 		return User32.INSTANCE.IsWindow(RuneModHandle);
@@ -500,7 +511,8 @@ public class SharedMemoryManager
 		log.debug("ChildingRuneModWindowToRL ...");
 		User32.INSTANCE.SetParent(RuneModHandle, rlWinHandle);
 		Dimension screenSize = getLargestMonitorResolution();
-		User32.INSTANCE.SetWindowPos(RuneModHandle, null, 0, 0, screenSize.width, screenSize.height, User32.SWP_NOACTIVATE/* | User32.SWP_NOREDRAW | User32.SWP_NOCOPYBITS*/);
+		User32.INSTANCE.SetWindowPos(RuneModHandle, null, 0, 0, screenSize.width, screenSize.height, User32.SWP_NOACTIVATE | User32.SWP_NOREDRAW | User32.SWP_NOCOPYBITS);
+		User32.INSTANCE.SetWindowPos(findRsUiDisplayerWindow(), null, 0, 0, screenSize.width, screenSize.height, User32.SWP_NOACTIVATE | User32.SWP_NOREDRAW | User32.SWP_NOCOPYBITS);
 		RmWinIsChilded = true;
 
 		RuneModPlugin.toggleRuneModLoadingScreen(false);
@@ -571,30 +583,41 @@ public class SharedMemoryManager
 			return;
 		}
 
-/*		Container parent = runeModPlugin.client.getCanvas().getParent();
-		int canvasPosX = parent.getLocationOnScreen().x;
-		int canvasPosY = parent.getLocationOnScreen().y;
-		int canvasSizeX = parent.getWidth();
-		int canvasSizeY = parent.getHeight();
 
-		float dpiScalingFactor = runeModPlugin.getDpiScalingFactor(); // 96 DPI is the standard
+		if (runeModPlugin.client.getCanvas() == null)
+		{
+			log.debug("Null canvas, wont update rmWindow");
+			return;
+		}
+		if (!runeModPlugin.client.getCanvas().isShowing())
+		{
+			log.debug("Cant Update RmWindow because rl canvas isnt showing");
+			return;
+		}
 
-		canvasSizeX = Math.round(canvasSizeX * dpiScalingFactor);
-		canvasSizeY = Math.round(canvasSizeY * dpiScalingFactor);*/
+		if (runeModPlugin.baseOffsetX != runeModPlugin.lastBaseOffsetX || runeModPlugin.baseOffsetY != runeModPlugin.lastBaseOffsetY/* || canvas2DSizeX != lastCanvas2DSizeX || canvas2DSizeY != lastCanvas2DSizeY || View3dOffsetX != lastView3DX || View3dOffsetY != lastView3dY || View3dSizeX != lastView3dSizeX || View3dSizeY != lastView3dSizeY*/)
+		{
+			/*
+			lastView3DX = View3dOffsetX;
+			lastView3dY = View3dOffsetY;
+			lastView3dSizeX = View3dSizeX;
+			lastView3dSizeY = View3dSizeY;
+			lastCanvas2DSizeX = canvas2DSizeX;
+			lastCanvas2DSizeY = canvas2DSizeY;
+			*/
 
-/*		int canvas3DSizeX = (int)runeModPlugin.View3dSizeX;
-		int canvas3DSizeY = (int)runeModPlugin.View3dSizeY;
-		int canvas3DPosX = (int)runeModPlugin.View3dOffsetX+runeModPlugin.baseOffsetX;
-		int canvas3DPosY = (int)runeModPlugin.View3dOffsetY+runeModPlugin.baseOffsetY;
+			RsUiDisplayerHandle = findRsUiDisplayerWindow();
+			if(RsUiDisplayerHandle!=null) {
+				System.out.println("updating rsuidisplayer pos");
+				User32.INSTANCE.SetWindowPos(RsUiDisplayerHandle, null, runeModPlugin.baseOffsetX, runeModPlugin.baseOffsetY, runeModPlugin.canvas2DSizeX, runeModPlugin.canvas2DSizeY, User32.SWP_NOSIZE | User32.SWP_NOACTIVATE | User32.SWP_NOREDRAW | User32.SWP_NOCOPYBITS);
 
-		log.debug("Updating RuneMod windows. PosX: " + canvas3DPosX + " posY: " + canvas3DPosY + " sizeX: " + canvas3DSizeX + " sizeY: " + canvas3DSizeY);*/
+				runeModPlugin.lastBaseOffsetX = runeModPlugin.baseOffsetX;
+				runeModPlugin.lastBaseOffsetY = runeModPlugin.baseOffsetY;
+			} else {
+				System.out.println("null rsuidisplayer handle");
+			}
 
-		//User32.INSTANCE.SetWindowPos(RuneModHandle, null, canvas3DPosX, canvas3DPosY, canvas3DSizeX, canvas3DSizeY, User32.SWP_NOACTIVATE | User32.SWP_NOREDRAW | User32.SWP_NOCOPYBITS);
-
-		//also maintain rsUi overlay
-		RsUiDisplayerHandle = findRsUiDisplayerWindow();
-		if(RsUiDisplayerHandle!=null) {
-			User32.INSTANCE.SetWindowPos(RsUiDisplayerHandle, null, runeModPlugin.baseOffsetX, runeModPlugin.baseOffsetY, runeModPlugin.canvas2DSizeX, runeModPlugin.canvas2DSizeY, User32.SWP_NOACTIVATE/* | User32.SWP_NOREDRAW | User32.SWP_NOCOPYBITS*/);
+			return;
 		}
 	}
 
