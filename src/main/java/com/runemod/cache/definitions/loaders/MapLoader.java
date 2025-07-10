@@ -24,6 +24,7 @@
  */
 package com.runemod.cache.definitions.loaders;
 
+import java.nio.BufferUnderflowException;
 import com.runemod.cache.definitions.MapDefinition;
 import com.runemod.cache.definitions.MapDefinition.Tile;
 import com.runemod.cache.io.InputStream;

@@ -235,6 +235,7 @@ public class RuneMod_LoadingScreen extends JPanel
 				{
 					//RuneModPlugin.toggleRuneModLoadingScreen(false);
 					RuneModPlugin.unrealIsReady = true;
+					DivergentStuff.setupTransientMod();
 					runeModPlugin.appSettings = runeModPlugin.loadAppSettings();
 					runeModPlugin.resendGameStateChanged();
 				}

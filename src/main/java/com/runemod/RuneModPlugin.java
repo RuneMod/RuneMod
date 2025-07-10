@@ -848,7 +848,6 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 				log.debug("RSCache has finished downloading");
 				runeMod_loadingScreen.SetStatus_DetailText("Downloaded RS cache", true);
 				myCacheReader.initCacheStore(); //reload cache store, because new indexes may have been downloaded since it was initialized
-				//setupTransientMod();//kinda inefficient, adds a couple of seconds to start up time time.
 			}
 			else
 			{
@@ -864,13 +863,6 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 				myCacheReader.provideRsCacheHashes();
 			});
 		}
-
-/*		log_Timed_Heavy("_0");
-		JFrame window = (JFrame) SwingUtilities.getWindowAncestor(client.getCanvas());
-		if (!window.getTitle().equals("RuneLite - RuneLite"))
-		{
-			window.setTitle("RuneLite - RuneLite");
-		}*/
 
 		if(canvas_prevFrame!=client.getCanvas()) {
 			if(config.RuneModVisibility() == true) {
@@ -1805,6 +1797,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		((Logger) LoggerFactory.getLogger(SharedMemoryManager.class)).setLevel(level);
 		((Logger) LoggerFactory.getLogger(CacheReader.class)).setLevel(level);
 		((Logger) LoggerFactory.getLogger(RuneMod_Launcher.class)).setLevel(level);
+		((Logger) LoggerFactory.getLogger(DivergentStuff.class)).setLevel(level);
 	}
 
 	@SneakyThrows
@@ -4003,11 +3996,18 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 				short localX_target = 0;
 				short localY_target = 0;
 
-				LocalPoint targetPoint = projectile.getTargetPoint();
+				LocalPoint targetPoint = projectile.getTarget();
 				if(targetPoint!=null) {
 					localX_target = (short) targetPoint.getX();
 					localY_target = (short) targetPoint.getY();
 				}
+
+/*				WorldPoint targetPoint = projectile.getTargetPoint();
+				if(targetPoint!=null) {
+					localX_target = (short) (64+((projectile.getTargetPoint().getX()-baseX)*128));
+					localY_target = (short) (64+((projectile.getTargetPoint().getY()-baseY)*128));
+				}*/
+
 				perFramePacket.writeShort(localX_target);
 				perFramePacket.writeShort(localY_target);
 				short Z_target = (short) (projectile.getEndHeight());
