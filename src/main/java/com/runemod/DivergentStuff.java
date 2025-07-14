@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.WorldType;
 
 import static com.runemod.RuneModPlugin.myCacheReader;
+import static com.runemod.RuneModPlugin.runeModPlugin;
 import static net.runelite.client.RuneLite.RUNELITE_DIR;
 
 /**
@@ -14,12 +15,26 @@ import static net.runelite.client.RuneLite.RUNELITE_DIR;
 @Slf4j
 public class DivergentStuff
 {
+
+	static final String PreReqsFileUrl = "https://files.runemod.net/application/UEPrereqSetup_x64.exe"; //This file will probably never need to be updated.
+
+	static String getRuneModFiles_Url() {
+		switch (runeModPlugin.config.version()) {
+			case Stable:
+				return "https://files.runemod.net/application/"; //these files will likely be updated less than once per week.
+			case Latest:
+				return "https://files.runemod.net/application/"; //these files will be updated frequently. E.G more than once per week.
+			default:
+				return "nullUrl";
+		}
+	}
+
 	static final RuneModPlugin.ClientType clientType = RuneModPlugin.ClientType.RUNELITE; //osrs's version would be RuneModPlugin.ClientType.RUNELITE
 
 	public static String getCachePath() {
 		String cachePath = RUNELITE_DIR + "\\jagexcache\\oldschool\\LIVE";
 
-		if (RuneModPlugin.runeModPlugin.client.getWorldType().contains(WorldType.BETA_WORLD))
+		if (runeModPlugin.client.getWorldType().contains(WorldType.BETA_WORLD))
 		{ //incomplete. would need a system to detec when we have changed to a beta world and donwloaded beta cache
 			log.debug("isBetaWorld");
 			cachePath = RUNELITE_DIR + "\\jagexcache\\oldschool-beta\\LIVE";

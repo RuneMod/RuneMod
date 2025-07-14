@@ -1405,6 +1405,8 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	void setDefaults()
 	{
 		System.out.println("setting defaults");
+		lastBaseOffsetX = -1;
+		lastBaseOffsetY = -1;
 
 		activeChunks.clear();
 
@@ -4002,7 +4004,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 					localY_target = (short) targetPoint.getY();
 				}
 
-/*				WorldPoint targetPoint = projectile.getTargetPoint();
+				/*				WorldPoint targetPoint = projectile.getTargetPoint();
 				if(targetPoint!=null) {
 					localX_target = (short) (64+((projectile.getTargetPoint().getX()-baseX)*128));
 					localY_target = (short) (64+((projectile.getTargetPoint().getY()-baseY)*128));

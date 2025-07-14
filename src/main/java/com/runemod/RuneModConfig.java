@@ -80,28 +80,15 @@ public interface RuneModConfig extends Config
 	}
 
 	@ConfigItem(
-		keyName = "lockStep",
-		name = "LockStep",
-		description = "should generally be disabled. When enabled, input lag may occur",
-		position = 1,
+		keyName = "version",
+		name = "Version",
+		description = "Players should use the stable build. Latest build is intended for developers",
+		position = 0,
 		section = Developer
 	)
-
-	default boolean lockStep()
+	default VersionType version()
 	{
-		return false;
-	}
-
-	@ConfigItem(
-		keyName = "ExtraChunksLoadDistance",
-		name = "ExtraChunksLoadDistance",
-		description = "Do not touch unless you are Runeface",
-		position = 1,
-		section = Developer
-	)
-	default int ExtraChunksLoadDistance()
-	{
-		return 7; //6 would mean a 13X13 chunk square around player (6 is like radius. 6X2 = 12. +1 because its radius from centre tile. But this is all thrown off a bit because we actually use subregions, not chunks.
+		return VersionType.Stable;
 	}
 
 	@ConfigItem(
@@ -114,6 +101,31 @@ public interface RuneModConfig extends Config
 	default boolean RuneModVisibility()
 	{
 		return true;
+	}
+
+	@ConfigItem(
+		keyName = "lockStep",
+		name = "LockStep",
+		description = "should generally be disabled. When enabled, input lag may occur",
+		position = 2,
+		section = Developer
+	)
+
+	default boolean lockStep()
+	{
+		return false;
+	}
+
+	@ConfigItem(
+		keyName = "ExtraChunksLoadDistance",
+		name = "ExtraChunksLoadDistance",
+		description = "Do not touch unless you are Runeface",
+		position = 2,
+		section = Developer
+	)
+	default int ExtraChunksLoadDistance()
+	{
+		return 7; //6 would mean a 13X13 chunk square around player (6 is like radius. 6X2 = 12. +1 because its radius from centre tile. But this is all thrown off a bit because we actually use subregions, not chunks.
 	}
 
 	@ConfigItem(

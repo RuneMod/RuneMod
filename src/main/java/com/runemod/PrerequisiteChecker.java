@@ -94,7 +94,7 @@ public class PrerequisiteChecker {
 			@Override
 			public void actionPerformed(ActionEvent e) {
 				System.out.printf(e.getActionCommand());
-				openWebpage("https://files.runemod.net/application/UEPrereqSetup_x64.exe");
+				openWebpage(DivergentStuff.PreReqsFileUrl);
 			}
 		});
 

@@ -105,7 +105,7 @@ class RuneMod_Launcher
 	public int getLatestAppVersion()
 	{
 		HttpClient client = HttpClient.newHttpClient();
-		HttpRequest request = HttpRequest.newBuilder().uri(URI.create("https://files.runemod.net/application/version.txt")).build();
+		HttpRequest request = HttpRequest.newBuilder().uri(URI.create(DivergentStuff.getRuneModFiles_Url()+"version.txt")).build();
 		HttpResponse<String> response = null;
 		try
 		{
@@ -196,7 +196,7 @@ class RuneMod_Launcher
 			Files.createDirectories(Paths.get(rmAppLocation));
 
 			String zipFilePath = rmAppLocation + "Windows.zip";
-			if(downloadZip("https://files.runemod.net/application/windows.zip", zipFilePath)) {
+			if(downloadZip(DivergentStuff.getRuneModFiles_Url()+"windows.zip", zipFilePath)) {
 				UnzipFile(zipFilePath, rmAppLocation);
 				SetCurrentAppVersion(latestAppVersion);
 				try
