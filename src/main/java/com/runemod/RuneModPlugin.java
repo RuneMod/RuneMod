@@ -28,9 +28,8 @@ import com.google.inject.Provides;
 import java.awt.BorderLayout;
 import java.awt.Canvas;
 import java.awt.Color;
+import java.awt.Component;
 import java.awt.GraphicsConfiguration;
-import java.awt.LayoutManager;
-import java.awt.Window;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
 import java.awt.event.MouseAdapter;
@@ -41,6 +40,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import javax.sound.sampled.AudioSystem;
@@ -50,7 +50,7 @@ import javax.sound.sampled.LineUnavailableException;
 import javax.sound.sampled.Mixer;
 import javax.swing.JComponent;
 import javax.swing.JFrame;
-import javax.swing.JLayer;
+import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JRootPane;
@@ -101,7 +101,7 @@ import java.io.FileReader;
 @PluginDescriptor(
 	name = "RuneMod",
 	enabledByDefault = true,
-	description = "Graphics modifier",
+	description = "A graphics plugin",
 	tags = {"rm", "rune", "mod", "hd", "graphics", "high", "detail", "graphics", "shaders", "textures", "gpu", "shadows", "lights"},
 	conflicts = {"GPU", "117 HD"}
 )
@@ -176,7 +176,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 	public static RuneModConfig config_static;
 	public static boolean runemodLoadingScreenVisibility = false;
-	public static JPanel RuneModLoadingScreenPanel = new JPanel();
+	public static JPanel RuneModLoadingScreenPanel;
 	public static Container canvasAncestor;
 	public static boolean unrealIsReady = false;
 	static RuneModPlugin runeModPlugin;
@@ -214,6 +214,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	volatile int baseOffsetX = 0;
 	volatile int baseOffsetY = 0;
 
+	boolean isInstanced;
 	int baseX = 0;
 	int baseY = 0;
 
@@ -317,26 +318,37 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 				return;
 			}
 
+			JRootPane root = SwingUtilities.getRootPane(canvasAncestor);
+			JComponent glass = (JComponent) root.getGlassPane();
+
 			if (toggled)
 			{
+				RuneModLoadingScreenPanel = new JPanel();
 				BorderLayout ogLayout = (BorderLayout) canvasAncestor.getLayout();
 				BorderLayout copyLayout = new BorderLayout(ogLayout.getHgap(), ogLayout.getVgap());
 
 				RuneModLoadingScreenPanel.setBackground(Color.black);
 				RuneModLoadingScreenPanel.add(runeMod_loadingScreen);
 
-				JRootPane root = SwingUtilities.getRootPane(canvasAncestor);
-				JComponent glass = (JComponent) root.getGlassPane();
 				glass.setLayout(copyLayout);
 				glass.add(RuneModLoadingScreenPanel);
 				glass.setVisible(true);
+				glass.revalidate();
+				glass.repaint();
+				root.revalidate();
+				root.repaint();
+
+				client_static.resizeCanvas(); // optional if needed
 			}
 			else
 			{
-				JRootPane root = SwingUtilities.getRootPane(canvasAncestor);
-				JComponent glass = (JComponent) root.getGlassPane();
 				glass.setVisible(false);
 				glass.remove(RuneModLoadingScreenPanel);
+				RuneModLoadingScreenPanel = null;
+				glass.revalidate();
+				glass.repaint();
+				root.revalidate();
+				root.repaint();
 			}
 		});
 	}
@@ -787,15 +799,73 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 	boolean isCacheFullyLoaded = false;
 
+	private void collectVisibleJLabels(Component component, List<JLabel> labels)
+	{
+		if (!component.isVisible())
+		{
+			return;
+		}
+
+		if (component instanceof JLabel)
+		{
+			labels.add((JLabel)component);
+		} else {
+			if (component instanceof Container)
+			{
+				for (Component child : ((Container)component).getComponents())
+				{
+					collectVisibleJLabels(child, labels);
+				}
+			}
+		}
+	}
+
+	private boolean isRuneModSettingsVisible(Component component)
+	{
+		if (component == null || !component.isVisible())
+		{
+			return false;
+		}
+
+		// Check current component
+		if (component instanceof JLabel)
+		{
+			if ("Settings (RuneMod)".equals(((JLabel)component).getText()))
+			{
+				return true;
+			}
+		}
+
+		// Recurse into children
+		if (component instanceof Container)
+		{
+			for (Component child : ((Container)component).getComponents())
+			{
+				if (isRuneModSettingsVisible(child))
+				{
+					return true;
+				}
+			}
+		}
+
+		// Not found in this branch
+		return false;
+	}
+
+	void RmUiPacket_SettingsWindow() {
+		Buffer packet = new Buffer(new byte[8]);
+
+		packet.writeByte(1); //UiType: SettingsWindow
+		packet.writeBoolean(isRuneModSettingsOpen_PrevFrame); //isUiOpen
+
+		sharedmem_rm.backBuffer.writePacket(packet, "RmUi");
+	}
+
+	boolean isRuneModSettingsOpen_PrevFrame = false;
 	Canvas canvas_prevFrame;
 	@Subscribe
 	private void onBeforeRender(BeforeRender event)
 	{
-		/*		fps_avg = (fps_avg+client.getFPS())/2;
-		if(client.getGameCycle()%10 == 0) {
-			System.out.println(fps_avg + " fps");
-		}*/
-
 		log_Timed_Heavy("onBeforeRender");
 
 		alreadyCommunicatedUnreal = false;
@@ -906,12 +976,31 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 						processExtendedChunkSpawnTask();
 					}
 				}
-				if ((client.getGameCycle() + 4) % 10 == 0) //staggers despawn so it happens a few frames after spawn task
+				if ((client.getGameCycle()-4) % 10 == 0) //staggers despawn so it happens a few frames after spawn task
 				{
 					processExtendedChunkDespawnTask();
 				}
 			}
 		});
+
+		//check if settings panel is open for runemod. if yes, open the settings window in runemod.
+		if(ticksSincePluginLoad%2 == 0)
+		{
+			SwingUtilities.invokeLater(() ->
+			{
+				//long timeBefore = System.nanoTime();
+				boolean isRuneModSettingsOpen = isRuneModSettingsVisible(client.getCanvas().getParent().getParent().getParent());
+				//long timeAfter = System.nanoTime();
+				//System.out.println("timeTaken: "+(timeAfter-timeBefore));
+				if(isRuneModSettingsOpen_PrevFrame!=isRuneModSettingsOpen) {
+					log.debug("RmSettings Open = "+isRuneModSettingsOpen);
+					clientThread.invoke(() -> {
+						isRuneModSettingsOpen_PrevFrame = isRuneModSettingsOpen;
+						RmUiPacket_SettingsWindow();
+					});
+				}
+			});
+		}
 	}
 
 	void MaintainRuneModAttachment()
@@ -1274,34 +1363,8 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		//despawn any gameobjects spawned by server. This fixes the scenario where a player leaves an area with player lit fires, and then comes back to it to find fire still there when they should be despawned.
 
 
-		if(scene.isInstance()) {
-			//if the scene is instanced we have to destroy all old terrains, because the ones around the scene edges will have some blank tiles which were not included in the instance-map when those terrains were last generated.
-			System.out.println("despawning all terrains because is instanced area");
-			WorldPoint[] activeChunksArr = activeChunks.toArray(WorldPoint[]::new);
-			for(WorldPoint chunkBase : activeChunksArr) {
-				send_DespawnChunk_Packet(chunkBase);
-			}
-		}
-
 		if(config.nullifyDrawCallbacks()) {return;}
 		sendBaseCoordinatePacket(baseX, baseY, scene); //sends basecoordinate and instance map
-
-		for (int x = 0 - 1; x < (Constants.SCENE_SIZE / Constants.CHUNK_SIZE) + 1; ++x)
-		{
-			for (int y = 0 - 1; y < (Constants.SCENE_SIZE / Constants.CHUNK_SIZE) + 1; ++y)
-			{
-				int chunkBaseX = (x * Constants.CHUNK_SIZE) + baseX;
-				int chunkBaseY = (y * Constants.CHUNK_SIZE) + baseY;
-				WorldPoint chunkBase = new WorldPoint(chunkBaseX, chunkBaseY, 0);
-
-				if (chunkBase.getX() % 16 != 0 || chunkBase.getY() % 16 != 0)
-				{
-					continue;
-				}
-
-				send_SpawnChunk_Packet(chunkBase);
-			}
-		}
 	}
 
 	@Override
@@ -1405,8 +1468,14 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	void setDefaults()
 	{
 		System.out.println("setting defaults");
+
+		canvasAncestor = null;
+
 		lastBaseOffsetX = -1;
 		lastBaseOffsetY = -1;
+
+		FashionScape_EquipmentIds_PrevFrame = null;
+		FashionScape_Colors_PrevFrame = null;
 
 		activeChunks.clear();
 
@@ -2373,6 +2442,34 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		}
 		else if (curGamestate == GameState.LOGGED_IN)
 		{
+
+			//if the scene is instanced we have to destroy all old terrains. we do this because the ones around the scene edges will have some blank tiles which were not included in the instance-map when those terrains were last generated.
+			if(isInstanced) {
+				System.out.println("despawning all terrains because is instanced area");
+				WorldPoint[] activeChunksArr = activeChunks.toArray(WorldPoint[]::new);
+				for(WorldPoint chunkBase : activeChunksArr) {
+					send_DespawnChunk_Packet(chunkBase);
+				}
+			}
+
+			//spawn chunks in scene
+			for (int x = 0 - 1; x < (Constants.SCENE_SIZE / Constants.CHUNK_SIZE) + 1; ++x)
+			{
+				for (int y = 0 - 1; y < (Constants.SCENE_SIZE / Constants.CHUNK_SIZE) + 1; ++y)
+				{
+					int chunkBaseX = (x * Constants.CHUNK_SIZE) + baseX;
+					int chunkBaseY = (y * Constants.CHUNK_SIZE) + baseY;
+					WorldPoint chunkBase = new WorldPoint(chunkBaseX, chunkBaseY, 0);
+
+					if (chunkBase.getX() % 16 != 0 || chunkBase.getY() % 16 != 0)
+					{
+						continue;
+					}
+
+					send_SpawnChunk_Packet(chunkBase);
+				}
+			}
+
 			log.debug("logged in...");
 		}
 		else if (curGamestate == GameState.HOPPING)
@@ -3402,6 +3499,11 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 		log.debug("player spawn. id: " + InstanceId);
 		sharedmem_rm.backBuffer.writePacket(actorSpawnPacket, "ActorSpawn");
+
+		if(isLocalPlayer == 1) { //for fashionScapePlugin
+			FashionScape_EquipmentIds_PrevFrame = player.getPlayerComposition().getEquipmentIds().clone();
+			FashionScape_Colors_PrevFrame = player.getPlayerComposition().getColors().clone();
+		}
 	}
 
 	@Subscribe
@@ -3594,6 +3696,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		//clientThread.invoke(() -> {
 		sendInstancedAreaState(scene);
 
+		isInstanced = scene.isInstance();
 		baseX = baseX_;
 		baseY = baseY_;
 
@@ -3623,6 +3726,26 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		packet.writeByte(client.getTopLevelWorldView().getPlane());
 
 		sharedmem_rm.backBuffer.writePacket(packet, "BaseCoordinate");
+	}
+
+	int[] FashionScape_EquipmentIds_PrevFrame = null;
+	int[] FashionScape_Colors_PrevFrame = null;
+	void checkForFashionScapeChanges() {
+		 Player localPlayer = client.getLocalPlayer();
+		 if (localPlayer!=null && FashionScape_EquipmentIds_PrevFrame !=null){
+		 	PlayerComposition curComp = localPlayer.getPlayerComposition();
+		 	if(curComp!=null) {
+				if(!Arrays.equals(FashionScape_Colors_PrevFrame, curComp.getColors()) || !Arrays.equals(FashionScape_EquipmentIds_PrevFrame, curComp.getEquipmentIds())) {
+					log.debug("runemod detected player EquipmentIds altered by fashionScape Plugin");
+					PlayerChanged playerChangedEvent = new PlayerChanged(localPlayer);
+					onPlayerChanged(playerChangedEvent); //FashionScape_EquipmentIds_PrevFrame will be set/stored by the code in here
+				}
+			} else {
+			}
+		 }else {
+			 FashionScape_EquipmentIds_PrevFrame = null;
+			 FashionScape_Colors_PrevFrame = null;
+		 }
 	}
 
 	@SneakyThrows
@@ -4073,7 +4196,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 				{ //if lats frames entity is not present this frame, means it has despawned.
 					//log.debug("hashedEntityDespawned. Entity " + lastFrameHashedEntity);
 					hashedEntityDespawned(lastFrameHashedEntity);
-					hashedEntityDespawned(lastFrameHashedEntity);
+					//hashedEntityDespawned(lastFrameHashedEntity); //not sure why I had this line duplicated?
 				}
 			}
 		}
@@ -4082,6 +4205,8 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		sharedmem_rm.backBuffer.writePacket(perFramePacket, "PerFramePacket");
 
 		checkForActorColourOverrideChanges();
+
+		checkForFashionScapeChanges();
 	}
 
 	void hashedEntityDespawned(int SceneId)

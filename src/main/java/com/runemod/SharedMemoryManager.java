@@ -182,7 +182,7 @@ public class SharedMemoryManager
 			case "GameStateChanged":
 				dataTypeByte = 24;
 				break;
-			case "WindowUpdate":
+			case "RmUi":
 				dataTypeByte = 25;
 				break;
 			case "PlaneChanged":

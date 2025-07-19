@@ -33,22 +33,22 @@ import net.runelite.client.config.ConfigSection;
 public interface RuneModConfig extends Config
 {
 	@ConfigSection(
-		name = "Settings",
-		description = "Settings",
+		name = "Settings (RuneMod)",
+		description = "RuneMod Settings",
 		position = 1,
 		closedByDefault = false
 	)
-	String settings = "settings";
+	String RuneModSettings = "Settings (RuneMod)";
 	@ConfigSection(
 		name = "Developer",
-		description = "Developer",
+		description = "Note, using these tools can cause various bugs and issues",
 		position = 3,
 		closedByDefault = true
 	)
 	String Developer = "Developer";
 	@ConfigSection(
 		name = "Developer_Debug",
-		description = "Developer_Debug",
+		description = "Note, using these tools can cause various bugs and issues",
 		position = 10,
 		closedByDefault = true
 	)
@@ -71,7 +71,7 @@ public interface RuneModConfig extends Config
 		name = "MaxFps",
 		description = "Note, increasing the fps beyond 50 may produce a less responsive experience",
 		position = 0,
-		section = settings
+		section = RuneModSettings
 	)
 
 	default int MaxFps()
