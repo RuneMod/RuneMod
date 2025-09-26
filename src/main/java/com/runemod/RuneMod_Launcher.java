@@ -27,6 +27,7 @@ package com.runemod;
 import com.sun.jna.platform.win32.User32;
 import com.sun.jna.platform.win32.WinDef;
 import com.sun.jna.platform.win32.WinUser;
+import java.awt.Dimension;
 import java.io.BufferedInputStream;
 import java.io.File;
 import java.io.FileInputStream;
@@ -45,6 +46,8 @@ import java.nio.file.Paths;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import lombok.extern.slf4j.Slf4j;
+
+import static com.runemod.SharedMemoryManager.getLargestMonitorResolution;
 
 @Slf4j
 class RuneMod_Launcher
@@ -179,14 +182,14 @@ class RuneMod_Launcher
 		}
 		else
 		{
-			if (currentAppVersion < 0 || latestAppVersion > currentAppVersion)
+			if (currentAppVersion < 0 || latestAppVersion != currentAppVersion)
 			{
 				RuneModPlugin.runeMod_loadingScreen.SetStatus_DetailText("Runemod.exe exists, but local version is not up to date, so downloading rm app files", true);
 			}
 		}
 
 
-		if (currentAppVersion < 0 || latestAppVersion > currentAppVersion || !runeModExeExists)
+		if (currentAppVersion < 0 || latestAppVersion != currentAppVersion || !runeModExeExists)
 		{
 			//delete old app folder.
 			log.debug("Deleting old rm app at" + rmAppLocation + "Windows");
@@ -350,8 +353,16 @@ class RuneMod_Launcher
 
 		log.debug("Launch filePath:" + filePath);
 
+		Dimension screenSize = getLargestMonitorResolution();
 
-		String[] command = {filePath, "-windowed", "-nosplash", "-ResX=2", "-ResY=2", "-WinX=1", "-WinY=1"};
+		String[] command;
+		if(RuneModPlugin.runeModPlugin.config.version() == VersionType.Latest) {
+			command = new String[]{filePath,"-gpucrashdebugging", "-windowed", "-nosplash", "-ResX="+100, "-ResY="+100, "-WinX=1", "-WinY=1"};
+		}else {
+			command = new String[]{filePath, "-windowed", "-nosplash", "-ResX="+100, "-ResY="+100, "-WinX=1", "-WinY=1"};
+		}
+
+		//String[] command = {filePath};
 
 		ProcessBuilder processBuilder = new ProcessBuilder(command);
 		processBuilder.redirectErrorStream(true); // Combine error and output streams
@@ -366,7 +377,7 @@ class RuneMod_Launcher
 						WinDef.HWND handle = SharedMemoryManager.findWindowByPid(runemodApp.pid());
 						if (User32.INSTANCE.IsWindow(handle)) {
 							User32.INSTANCE.ShowWindow(handle, WinUser.SW_HIDE);
-							System.out.println("hiding window after launch");
+							log.debug("hiding window after launch");
 							break;
 						}
 

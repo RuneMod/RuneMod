@@ -32,7 +32,11 @@ public class ApplicationSettings
 	public boolean loaded = false;
 	public float volume = 0.5f;
 	public boolean highPerformanceMode = false;
-	public int resolutionScaling = 100;
+	public int resolutionOverride = 0;
 	public boolean animateLoginScreen = true;
 	public boolean autoRecord = false;
+	public boolean dLSS = false;
+	public boolean showFps = false;
+	public float contrast = 1.0f;
+	public boolean disableFog = false;
 }

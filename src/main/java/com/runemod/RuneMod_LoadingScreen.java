@@ -63,12 +63,9 @@ public class RuneMod_LoadingScreen extends JPanel
 		log.debug("Creating RuneMod loading screen");
 		runeModPlugin = plugin;
 
-		//this.setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
-
 		this.setLayout (new BorderLayout()) ;
 		JTextPane pane = new JTextPane();
-		pane.setBackground(this.getBackground());
-// or try making it opaque
+
 		pane.setText("long text here");
 
 		InputStream is = FontManager.class.getResourceAsStream("runescape.ttf");
@@ -88,18 +85,18 @@ public class RuneMod_LoadingScreen extends JPanel
 			e.printStackTrace();
 		}
 
+		StatusDetail.setOpaque(true);
+		StatusDetail.setBackground(Color.black);
+		StatusHeading.setOpaque(true);
+		StatusDetail.setBackground(Color.black);
+
 		StatusDetail.setFont(TITLEFONT);
 		StatusHeading.setFont(TITLEFONT);
 
-/*		JLabel iconHolder = new JLabel();
-		iconHolder.setOpaque(true); // Test value
-		iconHolder.setBackground(Color.BLACK); // Just to test, not needed in final
-		iconHolder.setIcon(new ImageIcon(getClass().getResource("/loading_shrimps_small.gif")));
-
-		this.add(progressIndicator);*/
 		this.add(StatusHeading);
 		this.add(StatusDetail);
 
+		//appends a "." to status text to show the program is doing something
 		new Thread(new Runnable() {
 			@SneakyThrows
 			public void run(){

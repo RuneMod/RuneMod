@@ -164,7 +164,7 @@ public class CacheReader
 					}
 				}
 
-				if (loadedArchives.size() == total && missing == 0)
+				if (loadedArchives.size() >= total && missing == 0)
 				{
 					log.debug("there are "+store.getIndexes().size() +"indexes");
 					cacheFullyLoaded = true;
@@ -698,7 +698,7 @@ public class CacheReader
 			}
 
 			if(bytes.length < 2) { //added for alora
-				System.out.println("insufficient bytes for region "+regionId);
+				log.debug("insufficient bytes for region "+regionId);
 				return;
 			}
 

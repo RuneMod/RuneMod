@@ -1,5 +1,6 @@
 package com.runemod;
 
+import net.runelite.api.Constants;
 import net.runelite.client.eventbus.Subscribe;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.WorldType;
@@ -23,13 +24,15 @@ public class DivergentStuff
 			case Stable:
 				return "https://files.runemod.net/application/"; //these files will likely be updated less than once per week.
 			case Latest:
-				return "https://files.runemod.net/application/"; //these files will be updated frequently. E.G more than once per week.
+				return "https://files.runemod.net/application/dev/"; //these files will be updated frequently. E.G more than once per week.
 			default:
 				return "nullUrl";
 		}
 	}
 
 	static final RuneModPlugin.ClientType clientType = RuneModPlugin.ClientType.RUNELITE; //osrs's version would be RuneModPlugin.ClientType.RUNELITE
+
+	public static final int SCENE_OFFSET = (Constants.EXTENDED_SCENE_SIZE - Constants.SCENE_SIZE) / 2;
 
 	public static String getCachePath() {
 		String cachePath = RUNELITE_DIR + "\\jagexcache\\oldschool\\LIVE";

@@ -32,27 +32,28 @@ import net.runelite.client.config.ConfigSection;
 @ConfigGroup("RuneMod")
 public interface RuneModConfig extends Config
 {
-	@ConfigSection(
+/*	@ConfigSection(
 		name = "Settings (RuneMod)",
 		description = "RuneMod Settings",
 		position = 1,
 		closedByDefault = false
 	)
-	String RuneModSettings = "Settings (RuneMod)";
+	String RuneModSettings = "Settings (RuneMod)";*/
 	@ConfigSection(
-		name = "Developer",
+		name = "Do Not Touch!",
 		description = "Note, using these tools can cause various bugs and issues",
 		position = 3,
 		closedByDefault = true
 	)
-	String Developer = "Developer";
+	String DoNotTouch = "DoNotTouch";
+
 	@ConfigSection(
-		name = "Developer_Debug",
+		name = "Do Not Touch! Debug",
 		description = "Note, using these tools can cause various bugs and issues",
 		position = 10,
 		closedByDefault = true
 	)
-	String Developer_Debug = "Developer_Debug";
+	String DoNotTouch_Debug = "DoNotTouch_Debug";
 
 /*	@ConfigItem(
 		keyName = "BetaTesterKey",
@@ -67,11 +68,21 @@ public interface RuneModConfig extends Config
 	}*/
 
 	@ConfigItem(
+		keyName = "sekp4",
+		name = "",
+		description = "",
+		position = 0
+	)
+	default String moreInfo()
+	{
+		return "For graphics settings, please use the spanner in Runelite's top-left corner";
+	}
+
+	@ConfigItem(
 		keyName = "MaxFps",
 		name = "MaxFps",
-		description = "Note, increasing the fps beyond 50 may produce a less responsive experience",
-		position = 0,
-		section = RuneModSettings
+		description = "I recommend 50, its up to you though",
+		position = 0
 	)
 
 	default int MaxFps()
@@ -82,9 +93,9 @@ public interface RuneModConfig extends Config
 	@ConfigItem(
 		keyName = "version",
 		name = "Version",
-		description = "Players should use the stable build. Latest build is intended for developers",
+		description = "Stable is Recommended. Latest is for developers, use at your own risk!",
 		position = 0,
-		section = Developer
+		section = DoNotTouch
 	)
 	default VersionType version()
 	{
@@ -96,19 +107,31 @@ public interface RuneModConfig extends Config
 		name = "RuneModVisibility",
 		description = "Toggles visibility of runemod",
 		position = 1,
-		section = Developer
+		section = DoNotTouch
 	)
 	default boolean RuneModVisibility()
 	{
 		return true;
 	}
 
+/*	@ConfigItem(
+		keyName = "actorOffsetDebug",
+		name = "actorOffsetDebug",
+		description = "actorOffsetDebug",
+		position = 1,
+		section = DoNotTouch
+	)
+	default int actorOffsetDebug()
+	{
+		return 50;
+	}*/
+
 	@ConfigItem(
 		keyName = "lockStep",
 		name = "LockStep",
 		description = "should generally be disabled. When enabled, input lag may occur",
 		position = 2,
-		section = Developer
+		section = DoNotTouch
 	)
 
 	default boolean lockStep()
@@ -117,11 +140,24 @@ public interface RuneModConfig extends Config
 	}
 
 	@ConfigItem(
+		keyName = "reduceFpsWhenIdle",
+		name = "Reduce Fps When Idle",
+		description = "Lowers fps after being idle for a while. Reduces unnecessary stress on your pc",
+		position = 2,
+		section = DoNotTouch
+	)
+
+	default boolean reduceFpsWhenIdle()
+	{
+		return true;
+	}
+
+	@ConfigItem(
 		keyName = "ExtraChunksLoadDistance",
 		name = "ExtraChunksLoadDistance",
 		description = "Do not touch unless you are Runeface",
 		position = 2,
-		section = Developer
+		section = DoNotTouch
 	)
 	default int ExtraChunksLoadDistance()
 	{
@@ -133,7 +169,7 @@ public interface RuneModConfig extends Config
 		name = "OrbitCamera",
 		description = "OrbitCamera",
 		position = 2,
-		section = Developer
+		section = DoNotTouch
 	)
 	default boolean OrbitCamera()
 	{
@@ -145,7 +181,7 @@ public interface RuneModConfig extends Config
 		name = "Debug Logging",
 		description = "enables debug logging for this plugin",
 		position = 5,
-		section = Developer
+		section = DoNotTouch
 	)
 	default boolean DebugLogging()
 	{
@@ -157,7 +193,7 @@ public interface RuneModConfig extends Config
 		name = "Heavy Logging",
 		description = "Enables heavy logging, can impact performance.",
 		position = 6,
-		section = Developer
+		section = DoNotTouch
 	)
 	default boolean HeavyLogging()
 	{
@@ -169,7 +205,7 @@ public interface RuneModConfig extends Config
 		name = "DebugSwitch",
 		description = "DebugSwitch. For RuneFace only",
 		position = 6,
-		section = Developer
+		section = DoNotTouch
 	)
 	default boolean DebugSwitch()
 	{
@@ -181,7 +217,7 @@ public interface RuneModConfig extends Config
 		name = "Auto start RuneMod.exe",
 		description = "should generally be enabled",
 		position = 7,
-		section = Developer
+		section = DoNotTouch
 	)
 	default boolean StartRuneModOnStart()
 	{
@@ -193,7 +229,7 @@ public interface RuneModConfig extends Config
 		name = "UseAltRuneModLocation",
 		description = "UseAltRuneModLocation",
 		position = 8,
-		section = Developer
+		section = DoNotTouch
 	)
 	default boolean UseAltRuneModLocation()
 	{
@@ -205,7 +241,7 @@ public interface RuneModConfig extends Config
 		keyName = "AltRuneModLocation",
 		name = "AltRuneModLocation",
 		description = "",
-		section = Developer
+		section = DoNotTouch
 	)
 	default String AltRuneModLocation()
 	{
@@ -217,7 +253,7 @@ public interface RuneModConfig extends Config
 		name = "Use Two Renderers",
 		description = "useful for debugging or comparing between runemod and vanilla. uncheck attach attachRmWindowToRL and move the rl window, to separate the two render views.",
 		position = 11,
-		section = Developer_Debug
+		section = DoNotTouch_Debug
 	)
 	default boolean useTwoRenderers()
 	{
@@ -229,7 +265,7 @@ public interface RuneModConfig extends Config
 		name = "Attach Rm Window To RL",
 		description = "attachRmWindowToRL",
 		position = 12,
-		section = Developer_Debug
+		section = DoNotTouch_Debug
 	)
 	default boolean attachRmWindowToRL()
 	{
@@ -241,7 +277,7 @@ public interface RuneModConfig extends Config
 		name = "SpawnAnimations",
 		description = "spawnAnimations",
 		position = 13,
-		section = Developer_Debug
+		section = DoNotTouch_Debug
 	)
 	default boolean spawnAnimations()
 	{
@@ -253,7 +289,7 @@ public interface RuneModConfig extends Config
 		name = "SpawnPlayerGFX",
 		description = "spawnPlayerGFX",
 		position = 14,
-		section = Developer_Debug
+		section = DoNotTouch_Debug
 	)
 	default boolean spawnPlayerGFX()
 	{
@@ -265,7 +301,7 @@ public interface RuneModConfig extends Config
 		name = "SpawnNpcGFX",
 		description = "spawnNpcGFX",
 		position = 15,
-		section = Developer_Debug
+		section = DoNotTouch_Debug
 	)
 	default boolean spawnNpcGFX()
 	{
@@ -277,7 +313,7 @@ public interface RuneModConfig extends Config
 		name = "SpawnStaticGFX",
 		description = "spawnStaticGFX",
 		position = 20,
-		section = Developer_Debug
+		section = DoNotTouch_Debug
 	)
 	default boolean spawnStaticGFX()
 	{
@@ -289,7 +325,7 @@ public interface RuneModConfig extends Config
 		name = "SpawnProjectiles",
 		description = "spawnProjectiles",
 		position = 30,
-		section = Developer_Debug
+		section = DoNotTouch_Debug
 	)
 	default boolean spawnProjectiles()
 	{
@@ -301,7 +337,7 @@ public interface RuneModConfig extends Config
 		name = "SpawnNPCs",
 		description = "spawnNPCs",
 		position = 40,
-		section = Developer_Debug
+		section = DoNotTouch_Debug
 	)
 	default boolean spawnNPCs()
 	{
@@ -313,7 +349,7 @@ public interface RuneModConfig extends Config
 		name = "SpawnGameObjects",
 		description = "spawnGameObjects",
 		position = 60,
-		section = Developer_Debug
+		section = DoNotTouch_Debug
 	)
 	default boolean spawnGameObjects()
 	{
@@ -325,7 +361,7 @@ public interface RuneModConfig extends Config
 		name = "SpawnPlayers",
 		description = "spawnPlayers",
 		position = 70,
-		section = Developer_Debug
+		section = DoNotTouch_Debug
 	)
 	default boolean spawnPlayers()
 	{
@@ -337,7 +373,7 @@ public interface RuneModConfig extends Config
 		name = "SpawnItems",
 		description = "spawnItems",
 		position = 90,
-		section = Developer_Debug
+		section = DoNotTouch_Debug
 	)
 	default boolean spawnItems()
 	{
@@ -349,7 +385,7 @@ public interface RuneModConfig extends Config
 		name = "enableUiPixelsUpdate",
 		description = "enableUiPixelsUpdate",
 		position = 91,
-		section = Developer_Debug
+		section = DoNotTouch_Debug
 	)
 	default boolean enableUiPixelsUpdate()
 	{
@@ -361,7 +397,7 @@ public interface RuneModConfig extends Config
 		name = "disableUeCom",
 		description = "disableUeCom",
 		position = 92,
-		section = Developer_Debug
+		section = DoNotTouch_Debug
 	)
 	default boolean disableUeCom()
 	{
@@ -373,7 +409,7 @@ public interface RuneModConfig extends Config
 		name = "disableFrustrumTileCulling",
 		description = "disableFrustrumTileCulling",
 		position = 92,
-		section = Developer_Debug
+		section = DoNotTouch_Debug
 	)
 	default boolean disableFrustrumTileCulling()
 	{
@@ -385,7 +421,7 @@ public interface RuneModConfig extends Config
 		name = "nullifyDrawCallbacks",
 		description = "nullifyDrawCallbacks",
 		position = 92,
-		section = Developer_Debug
+		section = DoNotTouch_Debug
 	)
 	default boolean nullifyDrawCallbacks()
 	{
@@ -397,8 +433,9 @@ public interface RuneModConfig extends Config
 		name = "enablePerFramePacket",
 		description = "enablePerFramePacket",
 		position = 92,
-		section = Developer_Debug
+		section = DoNotTouch_Debug
 	)
+
 	default boolean enablePerFramePacket()
 	{
 		return true;
@@ -409,7 +446,7 @@ public interface RuneModConfig extends Config
 		name = "increaseTimerResolution",
 		description = "increaseTimerResolution",
 		position = 93,
-		section = Developer_Debug
+		section = DoNotTouch_Debug
 	)
 	default boolean increaseTimerResolution()
 	{

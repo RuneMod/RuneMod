@@ -39,6 +39,7 @@ import java.awt.Dimension;
 import java.awt.DisplayMode;
 import java.awt.GraphicsDevice;
 import java.awt.GraphicsEnvironment;
+import java.awt.Point;
 import java.awt.Window;
 import javax.swing.SwingUtilities;
 import lombok.SneakyThrows;
@@ -59,7 +60,10 @@ public class SharedMemoryManager
 	public Pointer SharedMemoryData;
 	public WinDef.HWND RuneModHandle = null;
 	public WinDef.HWND RsUiDisplayerHandle = null;
-	public WinDef.HWND rlWinHandle = null;
+	public WinDef.HWND RuneLiteGameHandle = null;
+	public WinDef.HWND RuneLiteRootHandle = null;
+	Window rlRootWin = null;
+
 	public boolean RmWinIsChilded = false;
 	public int gameCycle_Unreal = -1;
 	String SharedMemoryName = "";
@@ -90,7 +94,7 @@ public class SharedMemoryManager
 				char[] title = new char[512];
 				User32.INSTANCE.GetWindowText(hWnd, title, 512);
 				String windowTitle = Native.toString(title);
-				System.out.println("Found window: " + windowTitle);
+				log.debug("Found window: " + windowTitle);
 				found[0] = hWnd;
 				return false; // stop
 			}
@@ -143,7 +147,7 @@ public class SharedMemoryManager
 			case "ItemDefinition":
 				dataTypeByte = 11;
 				break;
-			case "TerrainLoad":
+			case "RsOptions":
 				dataTypeByte = 12;
 				break;
 			case "KitDefinition":
@@ -211,6 +215,9 @@ public class SharedMemoryManager
 				break;
 			case "Varp":
 				dataTypeByte = 34;
+				break;
+			case "WorldVisibility":
+				dataTypeByte = 35;
 				break;
 			default:
 				log.debug("no opcode match for packet '"+dataType+"'");
@@ -345,11 +352,21 @@ public class SharedMemoryManager
 		SharedMemoryData.write(0, backBuffer.array, 0, backBufferLength);
 		Offset += backBufferLength;
 		clearBackBuffer();
+
+	}
+
+	public static boolean RuneModWinExists_ByName() {
+		WinDef.HWND handle = User32.INSTANCE.FindWindow(null, "RuneModWin");
+		return User32.INSTANCE.IsWindow(handle);
 	}
 
 	public void clearBackBuffer()
 	{
 		backBuffer.reset();
+	}
+
+	public void FocusRl() {
+		User32.INSTANCE.SetFocus(RuneLiteRootHandle);
 	}
 
 	public void setRuneModVisibility(boolean visibility)
@@ -368,28 +385,13 @@ public class SharedMemoryManager
 		if (visibility)
 		{
 			User32.INSTANCE.ShowWindow(RuneModHandle, WinUser.SW_SHOWNOACTIVATE);
-			//User32.INSTANCE.SetWindowPos(RuneModHandle, null, 0, 0, 0, 0, User32.SWP_NOMOVE | User32.SWP_NOSIZE | User32.SWP_NOACTIVATE | User32.SWP_NOREDRAW | User32.SWP_NOCOPYBITS); //forces window to front. need in Alora because of canvas replacement.
-
-			User32.INSTANCE.ShowWindow(findRsUiDisplayerWindow(), WinUser.SW_SHOWNOACTIVATE);
-			//User32.INSTANCE.SetWindowPos(findRsUiDisplayerWindow(), null, 0, 0, 0, 0, User32.SWP_NOMOVE | User32.SWP_NOSIZE | User32.SWP_NOACTIVATE | User32.SWP_NOREDRAW | User32.SWP_NOCOPYBITS); //forces window to front. need in Alora because of canvas replacement.
-			bringRuneModToFront();
 		}
 		else
 		{
 			User32.INSTANCE.ShowWindow(RuneModHandle, WinUser.SW_HIDE);
-			User32.INSTANCE.ShowWindow(findRsUiDisplayerWindow(), WinUser.SW_HIDE);
 		}
 	}
 
-	void bringRuneModToFront() {
-		log.debug("bringing runemod to front");
-		runeModPlugin.canvas_prevFrame = runeModPlugin.client.getCanvas(); //prevent unnesesary extra bringRuneModToFront calls.
-		//User32.INSTANCE.ShowWindow(RuneModHandle, WinUser.SW_SHOWNOACTIVATE);
-		User32.INSTANCE.SetWindowPos(RuneModHandle, null, 0, 0, 0, 0, User32.SWP_NOMOVE | User32.SWP_NOSIZE | User32.SWP_NOACTIVATE | User32.SWP_NOREDRAW | User32.SWP_NOCOPYBITS); //forces window to front. need in Alora because of canvas replacement.
-
-		//User32.INSTANCE.ShowWindow(findRsUiDisplayerWindow(), WinUser.SW_SHOWNOACTIVATE);
-		User32.INSTANCE.SetWindowPos(findRsUiDisplayerWindow(), null, 0, 0, 0, 0, User32.SWP_NOMOVE | User32.SWP_NOSIZE | User32.SWP_NOACTIVATE | User32.SWP_NOREDRAW | User32.SWP_NOCOPYBITS); //forces window to front. need in Alora because of canvas replacement.
-	}
 	public boolean isRuneModHandleValid()
 	{
 		return User32.INSTANCE.IsWindow(RuneModHandle);
@@ -434,8 +436,8 @@ public class SharedMemoryManager
 			//Component window = SwingUtilities.getWindowAncestor(runeModPlugin.client.getCanvas().getParent().getParent());
 
 			//rlWinHandle = new WinDef.HWND(Native.getComponentPointer(window));
-			rlWinHandle = new WinDef.HWND(Native.getComponentPointer(runeModPlugin.client.getCanvas().getParent()));
-			long hwndVal = Pointer.nativeValue(rlWinHandle.getPointer());
+			RuneLiteGameHandle = new WinDef.HWND(Native.getComponentPointer(runeModPlugin.client.getCanvas().getParent()));
+			long hwndVal = Pointer.nativeValue(RuneLiteGameHandle.getPointer());
 			setLongLE(30000070, hwndVal);
 		//}
 	}
@@ -503,19 +505,41 @@ public class SharedMemoryManager
 		{
 			RuneModHandle = findRuneModWindow();
 		}
+
 		if (RuneModHandle == null)
 		{
 			return false;
 		}
 
 		log.debug("ChildingRuneModWindowToRL ...");
-		User32.INSTANCE.SetParent(RuneModHandle, rlWinHandle);
+		rlRootWin = SwingUtilities.getWindowAncestor(runeModPlugin.client.getCanvas().getParent().getParent());
+		RuneLiteRootHandle = new WinDef.HWND(Native.getComponentPointer(rlRootWin));
+
+
+		{ //removes runemod icon from taskbar
+			int WS_EX_APPWINDOW = 0x00040000;
+			int WS_EX_TOOLWINDOW = 0x00000080;
+			int exStyle = User32.INSTANCE.GetWindowLong(RuneModHandle, WinUser.GWL_EXSTYLE);
+			exStyle &= ~WS_EX_APPWINDOW;
+			exStyle |= WS_EX_TOOLWINDOW;
+			User32.INSTANCE.SetWindowLong(RuneModHandle, WinUser.GWL_EXSTYLE, exStyle);
+		}
+
+		User32.INSTANCE.SetWindowLongPtr(RuneModHandle, User32.GWL_HWNDPARENT, RuneLiteRootHandle.getPointer());
+		//wndProc.installHook(RuneLiteRootHandle);
+
+
 		Dimension screenSize = getLargestMonitorResolution();
-		User32.INSTANCE.SetWindowPos(RuneModHandle, null, 0, 0, screenSize.width, screenSize.height, User32.SWP_NOACTIVATE | User32.SWP_NOREDRAW | User32.SWP_NOCOPYBITS);
-		User32.INSTANCE.SetWindowPos(findRsUiDisplayerWindow(), null, 0, 0, screenSize.width, screenSize.height, User32.SWP_NOACTIVATE | User32.SWP_NOREDRAW | User32.SWP_NOCOPYBITS);
+		User32.INSTANCE.SetWindowPos(findRsUiDisplayerWindow(), null, 0, 0, screenSize.width, screenSize.height, User32.SWP_NOACTIVATE | User32.SWP_NOZORDER | User32.SWP_NOREDRAW | User32.SWP_NOCOPYBITS);
+
+		//ensure runemod window is infront of rl window.
+		User32.INSTANCE.SetWindowPos(RuneModHandle, User32.INSTANCE.GetWindow(RuneLiteRootHandle, new WinDef.DWORD(WinUser.GW_HWNDPREV)), 0, 0, 0, 0, User32.SWP_NOMOVE | User32.SWP_NOSIZE | User32.SWP_NOACTIVATE);
+
+
 		RmWinIsChilded = true;
 
 		RuneModPlugin.toggleRuneModLoadingScreen(false);
+		//FocusRl(); //ensure runemod zorder is automatically correct by updating it.
 		return true;
 	}
 
@@ -568,6 +592,7 @@ public class SharedMemoryManager
 		return dataType == 2;
 	}
 
+	WinDef.RECT r_prevFrame = new WinDef.RECT();
 	public void updateRmWindowTransform()
 	{
 		if (!RuneModPlugin.unrealIsReady)
@@ -595,6 +620,33 @@ public class SharedMemoryManager
 			return;
 		}
 
+		//position and size runemod window.
+		SwingUtilities.invokeLater(() ->
+		{
+			WinDef.RECT r = new WinDef.RECT();
+			User32.INSTANCE.GetWindowRect(RuneLiteGameHandle, r);
+
+			Point sizePrevFrame = new Point(r_prevFrame.right-r_prevFrame.left, r_prevFrame.bottom-r_prevFrame.top);
+			Point sizeCureFrame = new Point(r.right-r.left, r.bottom-r.top);
+
+			if(r_prevFrame.bottom!=r.bottom || r_prevFrame.right!=r.right || r_prevFrame.top!=r.top || r_prevFrame.left!=r.left) { //if rect pos has changed, update unreal window
+				int flags = 0;
+				boolean sizeChanged = !sizePrevFrame.equals(sizeCureFrame);
+				if(sizeChanged) {
+					log.debug("viewport Size And Maybe Pos Changed");
+					flags = User32.SWP_NOACTIVATE | User32.SWP_NOZORDER;
+				} else {
+					log.debug("viewport Pos Changed");
+					flags  = User32.SWP_NOACTIVATE | User32.SWP_NOREDRAW | User32.SWP_NOCOPYBITS | User32.SWP_NOZORDER | User32.SWP_NOSENDCHANGING | User32.SWP_DEFERERASE;
+				}
+
+				User32.INSTANCE.SetWindowPos(RuneModHandle, null, r.left, r.top,
+					r.right - r.left, r.bottom - r.top,
+					flags);
+				r_prevFrame = r;
+			}
+		});
+
 		if (runeModPlugin.baseOffsetX != runeModPlugin.lastBaseOffsetX || runeModPlugin.baseOffsetY != runeModPlugin.lastBaseOffsetY/* || canvas2DSizeX != lastCanvas2DSizeX || canvas2DSizeY != lastCanvas2DSizeY || View3dOffsetX != lastView3DX || View3dOffsetY != lastView3dY || View3dSizeX != lastView3dSizeX || View3dSizeY != lastView3dSizeY*/)
 		{
 			/*
@@ -608,13 +660,13 @@ public class SharedMemoryManager
 
 			RsUiDisplayerHandle = findRsUiDisplayerWindow();
 			if(RsUiDisplayerHandle!=null) {
-				System.out.println("updating rsuidisplayer pos");
+				log.debug("updating rsuidisplayer pos");
 				User32.INSTANCE.SetWindowPos(RsUiDisplayerHandle, null, runeModPlugin.baseOffsetX, runeModPlugin.baseOffsetY, runeModPlugin.canvas2DSizeX, runeModPlugin.canvas2DSizeY, User32.SWP_NOSIZE | User32.SWP_NOACTIVATE | User32.SWP_NOREDRAW | User32.SWP_NOCOPYBITS);
 
 				runeModPlugin.lastBaseOffsetX = runeModPlugin.baseOffsetX;
 				runeModPlugin.lastBaseOffsetY = runeModPlugin.baseOffsetY;
 			} else {
-				System.out.println("null rsuidisplayer handle");
+				log.debug("null rsuidisplayer handle");
 			}
 
 			return;
