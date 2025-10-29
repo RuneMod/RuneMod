@@ -1,1 +1,0 @@
-java -jar -ea runemod-all.jar
