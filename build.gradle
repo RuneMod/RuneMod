@@ -43,3 +43,19 @@ tasks.withType(JavaCompile).configureEach {
 	options.encoding = 'UTF-8'
 	options.release.set(11)
 }
+
+// Utility task: prints the resolved RuneLite client version
+tasks.register('printRuneLiteVersion') {
+    doLast {
+        def dep = configurations.compileClasspath
+                .resolvedConfiguration
+                .resolvedArtifacts
+                .find { it.moduleVersion.id.group == 'net.runelite' && it.name == 'client' }
+
+        if (dep) {
+            println dep.moduleVersion.id.version
+        } else {
+            println "UNKNOWN"
+        }
+    }
+}

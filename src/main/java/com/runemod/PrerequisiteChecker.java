@@ -7,10 +7,15 @@ import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import javax.swing.*;
 import java.io.File;
 import java.io.IOException;
+import lombok.extern.slf4j.Slf4j;
 
+@Slf4j
 public class PrerequisiteChecker {
 
 	// Minimum required version: 14.38.33130.0
@@ -41,12 +46,22 @@ public class PrerequisiteChecker {
 	}
 
 	public static boolean canLoadDll(String name) {
-		try {
+		String systemRoot = System.getenv("SystemRoot");
+		Path system32 = Paths.get(systemRoot, "System32", name);
+		Path syswow64 = Paths.get(systemRoot, "SysWOW64", name);
+
+		boolean dllFound = Files.exists(system32) || Files.exists(syswow64);
+		if(!dllFound) {
+			log.debug(name + " not found");
+		}
+		return dllFound;
+
+/*		try {
 			System.loadLibrary(name.replace(".dll", ""));
 			return true;
 		} catch (UnsatisfiedLinkError e) {
 			return false;
-		}
+		}*/
 	}
 
 	public static VersionInfo getRedistVersionFromRegistry() {
@@ -58,6 +73,7 @@ public class PrerequisiteChecker {
 			int rev = Advapi32Util.registryGetIntValue(WinReg.HKEY_LOCAL_MACHINE, key, "Rbld");
 			return new VersionInfo(major, minor, build, rev);
 		} catch (Exception e) {
+			e.printStackTrace();
 			return null;
 		}
 	}

@@ -201,9 +201,8 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	public static boolean unrealIsReady = false;
 	static RuneModPlugin runeModPlugin;
 	static boolean isShutDown = false;
-	private final HashMap<NPC, NpcOverrides_Copy> npcsWithOverrides_LastFrame = new HashMap<NPC, NpcOverrides_Copy>();
 
-	private String[] disAllowedDynamicSpawns_Names = {"rail", "stile", "forest", "fence", "rocks", "shortcut", "low wall"};
+	private String[] disAllowedDynamicSpawns_Names = {"obstacle pipe", "rail", "stile", "forest", "fence", "rocks", "shortcut", "low wall", "sparkling pool"};
 	private Set<Integer> disAllowedDynamicSpawns = new HashSet<>(); //objdefs in here are not allowed to spawn/despawn except during loading. We have these in order to prevent things like stiles becoming invisible due to being incorporated into the player model. Its bodge, but its the best we can do as we cant tell whether a objdef has been put in a player model, in rl api.
 	boolean initedDisallowedDynamicSpawns = false;
 
@@ -514,7 +513,8 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 	int getAnimation_Unmasked(NPC npc)
 	{
-		try
+		return npc.getAnimation();
+/*		try
 		{
 			if (field_animation == null)
 			{
@@ -537,7 +537,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		{
 			e.printStackTrace();
 			return npc.getAnimation();
-		}
+		}*/
 	}
 
 	@SneakyThrows
@@ -1559,6 +1559,9 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 		taggedTileObjects.clear();
 
+		varbits = new int[30000];
+		varps = new int[10000];
+
 		client.setLoginScreen(null);
 		enableLoginFire(true);
 
@@ -1656,8 +1659,6 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		});
 
 		canvasAncestor = client.getCanvas().getParent().getParent(); //is "clientPannel" class
-
-		log.debug("added "+disAllowedDynamicSpawns.stream().count() +"  disAllowed Dynamic Spawns");
 
 		myCacheReader = new CacheReader(getCachePath());
 
@@ -2063,6 +2064,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		((Logger) LoggerFactory.getLogger(CacheReader.class)).setLevel(level);
 		((Logger) LoggerFactory.getLogger(RuneMod_Launcher.class)).setLevel(level);
 		((Logger) LoggerFactory.getLogger(DivergentStuff.class)).setLevel(level);
+		((Logger) LoggerFactory.getLogger(PrerequisiteChecker.class)).setLevel(level);
 	}
 
 	@SneakyThrows
@@ -2418,6 +2420,8 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		worldVisibilityCalcedTick = -1;
 		exteriorVisibility_Prev = -1;
 
+		reSendVarBits();
+
 		activeChunks.clear();
 		if(clientType == ClientType.ALORA) { //in Alora, setting gamestate to loading does not trigger loadRegion event.
 			Scene scene = client.getTopLevelWorldView().getScene();
@@ -2573,7 +2577,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 					{
 						if(action!=null)
 						{
-							if (action.equals("Squeeze-through") || action.equals("Climb-through ") || action.equals("Climb-over") || action.equals("Jump-over") || action.equals("Hop-over") || action.equals("Enter") || action.equals("Climb"))
+							if (action.equals("Squeeze-through") || action.equals("Climb-through ") || action.equals("Climb-over") || action.equals("Jump-over") || action.equals("Hop-over") || action.equals("Enter") || action.equals("Climb") || action.equals("Step-into"))
 							{
 								log.debug("disallowed dynamic spawn on obj: " + objDef.getName());
 								disAllowedDynamicSpawns.add(i);
@@ -2640,6 +2644,9 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	double exteriorVisibility_Prev = -1;
 
 	void calcWorldVisibility() { //calculate how much of the world visible to the player is outdoors/indoors. used for muffling sound.
+		if(client.getTopLevelWorldView() == null) {return;}
+		if(client.getTopLevelWorldView().getScene().getTiles() == null) { return; } //prevents an error that can happen on first tick of login
+
 		LocalPoint lp = client.getLocalPlayer().getLocalLocation();
 		int x_ = (lp.getX()) / 128;
 		int y_ = (lp.getY()) / 128;
@@ -3043,6 +3050,9 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		//});
 	}
 
+	int[] varbits;
+	int[] varps;
+
 	@Subscribe
 	private void onVarbitChanged(VarbitChanged event)
 	{
@@ -3055,6 +3065,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			//log.debug("varbit "+ event.getVarbitId()+"cahnged to "+event.getValue());
 			buffer.writeInt(event.getVarbitId());
 			buffer.writeInt(event.getValue());
+			varbits[event.getVarbitId()] = event.getValue();
 			sharedmem_rm.backBuffer.writePacket(buffer, "Varbit");
 		}
 		else
@@ -3062,7 +3073,29 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			//log.debug("varP "+ event.getVarbitId()+"cahnged to "+event.getValue());
 			buffer.writeInt(event.getVarpId());
 			buffer.writeInt(event.getValue());
+			varps[event.getVarpId()] = event.getValue();
 			sharedmem_rm.backBuffer.writePacket(buffer, "Varp");
+		}
+	}
+
+	void reSendVarBits() {
+		for(int i = 0; i < varbits.length; i++) {
+			if(varbits[i]!=0) {
+				VarbitChanged event = new VarbitChanged();
+				event.setVarbitId(i);
+				event.setValue(varbits[i]);
+				onVarbitChanged(event);
+			}
+		}
+		for(int i = 0; i < varps.length; i++) {
+			if(varps[i]!=0)
+			{
+				VarbitChanged event = new VarbitChanged();
+				event.setVarbitId(-1);
+				event.setVarpId(i);
+				event.setValue(varps[i]);
+				onVarbitChanged(event);
+			}
 		}
 	}
 
@@ -3708,6 +3741,20 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		actorSpawnPacket.writeByte(1); //write npc data type
 		actorSpawnPacket.writeShort(instanceId);
 		actorSpawnPacket.writeShort(definitionId);
+
+		if(event.getNpc().getModelOverrides()!=null) {
+			NpcOverrides npcOverrides = event.getNpc().getModelOverrides();
+			actorSpawnPacket.writeInt_Array(npcOverrides.getModelIds());
+			actorSpawnPacket.writeShort_Array(npcOverrides.getTextureToReplaceWith());
+			actorSpawnPacket.writeShort_Array(npcOverrides.getColorToReplaceWith());
+			actorSpawnPacket.writeBoolean(npcOverrides.useLocalPlayer());
+			System.out.println("npc overrides exist on npc at index: "+instanceId);
+			npcsWithOverrides_LastFrame.put(event.getNpc(), new NpcOverrides_Copy(npcOverrides));
+		}else {
+			if(npcsWithOverrides_LastFrame.containsKey(event.getNpc())) {
+				npcsWithOverrides_LastFrame.remove(event.getNpc());
+			}
+		}
 		sharedmem_rm.backBuffer.writePacket(actorSpawnPacket, "ActorSpawn");
 	}
 
@@ -3844,7 +3891,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 		actorSpawnPacket.writeInt(player.getPlayerComposition().getTransformedNpcId()); //npcTransformID //temp
 
-		log.debug("player spawn. id: " + InstanceId);
+		//log.debug("player spawn. id: " + InstanceId);
 		sharedmem_rm.backBuffer.writePacket(actorSpawnPacket, "ActorSpawn");
 
 		if(isLocalPlayer == 1) { //for fashionScapePlugin
@@ -4149,6 +4196,8 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			return;
 		}
 
+		checkFor_NpcModelOverride_Changes(); //iterates npcs to see if any of their overrides have changed. if overrides have changed, they will be re-spawned with the correct overrides.
+
 		if(config.useTwoRenderers()) { //makes actor height work when using two renderers. not quite so accurate but works enough for showcase
 			for(NPC npc : client.getNpcs()) {
 				//LocalPoint offsetCentre = new LocalPoint(npc.getLocalLocation().getX()+config.actorOffsetDebug(), npc.getLocalLocation().getY()+config.actorOffsetDebug());
@@ -4224,12 +4273,15 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 				int animationId_Action = (config.spawnAnimations() ? getAnimation_Unmasked(npc) : -1);
 				int animationId_Pose = (config.spawnAnimations() ? npc.getPoseAnimation() : -1);
 
-				//boolean enableActionSeq = player.getAnimation() != -1 && player.getSequenceDelay() == 0;
-				boolean disableMovementSeq = npc.getPoseAnimation() == -1 || /*player.isUnanimated || */npc.getPoseAnimation() == npc.getIdlePoseAnimation() && animationId_Action != -1;
-				if(disableMovementSeq) {animationId_Pose = -1;}
-
 				int animationFrameIdx_Action = npc.getAnimationFrame();
 				int animationFrameIdx_Pose = npc.getPoseAnimationFrame();
+
+				//boolean enableActionSeq = player.getAnimation() != -1 && player.getSequenceDelay() == 0;
+				boolean disableMovementSeq = npc.getPoseAnimation() == -1 || (npc.getPoseAnimation() == npc.getIdlePoseAnimation() && animationId_Action != -1);
+				if(disableMovementSeq) {
+					animationId_Pose = -1;
+					animationFrameIdx_Pose = -1;
+				}
 
 				boolean shouldDraw = visibleActors.contains(npc) && hooks.draw(npc, false);
 
@@ -4260,7 +4312,10 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 				{
 					for (ActorSpotAnim spotAnim : npc.getSpotAnims())
 					{
-						numActorSpotAnims++;
+						boolean spotAnimInactive = spotAnim.getFrame() == 0 && spotAnim.getCycle() == 0; //bodge way of preventing telling iof a spotanim is inactive
+						if(!spotAnimInactive) {
+							numActorSpotAnims++;
+						}
 					}
 					perFramePacket.writeByte(numActorSpotAnims);
 
@@ -4268,30 +4323,24 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 					{
 						for (ActorSpotAnim spotAnim : npc.getSpotAnims())
 						{
-							int spotAnimationFrame = spotAnim.getFrame();
-							int spotAnimationId = spotAnim.getId();
-							int spotAnimationHeight = spotAnim.getHeight();
-							int sceneId = spotAnim.hashCode();
+							boolean spotAnimInactive = spotAnim.getFrame() == 0 && spotAnim.getCycle() == 0;
+							if(!spotAnimInactive)
+							{
+								int spotAnimationFrame = spotAnim.getFrame();
+								int spotAnimationId = spotAnim.getId();
+								int spotAnimationHeight = spotAnim.getHeight();
+								int sceneId = spotAnim.hashCode();
 
-							perFramePacket.writeInt(spotAnimationId);
-							perFramePacket.writeShort(spotAnimationFrame);
-							perFramePacket.writeShort(spotAnimationHeight);
-							perFramePacket.writeInt(sceneId);
+								perFramePacket.writeInt(spotAnimationId);
+								perFramePacket.writeShort(spotAnimationFrame);
+								perFramePacket.writeShort(spotAnimationHeight);
+								perFramePacket.writeInt(sceneId);
 
-							hashedEntitys_ThisFrame.add(spotAnim.hashCode()); //We do this so that we can later detect when the spotanim is despawned.
+								hashedEntitys_ThisFrame.add(spotAnim.hashCode()); //We do this so that we can later detect when the spotanim is despawned.
+							}
 						}
 					}
 				}
-
-				//started writing npc overrides. maybe should make something to detect when overrides are changed and fire a npcOverridesChanged event?
-/*				boolean hasNpcOverrides = npc.getModelOverrides()!=null;
-				perFramePacket.writeBoolean(hasNpcOverrides);
-				if(npc.getModelOverrides() != null) {
-					perFramePacket.writeInt_Array(npc.getModelOverrides().getModelIds(), npc.getModelOverrides().getModelIds().length);
-					perFramePacket.writeShort_Array(npc.getModelOverrides().getColorToReplaceWith(), npc.getModelOverrides().getColorToReplaceWith().length);
-					perFramePacket.writeShort_Array(npc.getModelOverrides().getTextureToReplaceWith(), npc.getModelOverrides().getTextureToReplaceWith().length);
-					perFramePacket.writeBoolean(npc.getModelOverrides().useLocalPlayer());
-				}*/
 			}
 		}
 
@@ -4404,7 +4453,10 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 				{
 					for (ActorSpotAnim spotAnim : player.getSpotAnims())
 					{
-						numActorSpotAnims++;
+						boolean spotAnimInactive = spotAnim.getFrame() == 0 && spotAnim.getCycle() == 0; //bodge way of preventing telling iof a spotanim is inactive
+						if(!spotAnimInactive) {
+							numActorSpotAnims++;
+						}
 					}
 					perFramePacket.writeByte(numActorSpotAnims);
 
@@ -4412,17 +4464,21 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 					{
 						for (ActorSpotAnim spotAnim : player.getSpotAnims())
 						{
-							int spotAnimationFrame = spotAnim.getFrame();
-							int spotAnimationId = spotAnim.getId();
-							int spotAnimationHeight = spotAnim.getHeight();
-							int sceneId = spotAnim.hashCode();
+							boolean spotAnimInactive = spotAnim.getFrame() == 0 && spotAnim.getCycle() == 0; //bodge way of preventing telling iof a spotanim is inactive
+							if(!spotAnimInactive)
+							{
+								int spotAnimationFrame = spotAnim.getFrame();
+								int spotAnimationId = spotAnim.getId();
+								int spotAnimationHeight = spotAnim.getHeight();
+								int sceneId = spotAnim.hashCode();
 
-							perFramePacket.writeInt(spotAnimationId);
-							perFramePacket.writeShort(spotAnimationFrame);
-							perFramePacket.writeShort(spotAnimationHeight);
-							perFramePacket.writeInt(sceneId);
+								perFramePacket.writeInt(spotAnimationId);
+								perFramePacket.writeShort(spotAnimationFrame);
+								perFramePacket.writeShort(spotAnimationHeight);
+								perFramePacket.writeInt(sceneId);
 
-							hashedEntitys_ThisFrame.add(spotAnim.hashCode()); //We do this so that we can later detect when the spotanim is despawned.
+								hashedEntitys_ThisFrame.add(spotAnim.hashCode()); //We do this so that we can later detect when the spotanim is despawned.
+							}
 						}
 					}
 				}
@@ -4465,6 +4521,10 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 				if (clientCycle < graphicsObject.getStartCycle())
 				{ //graphicsObj should not draw before it's startCycle.
 					shouldDraw = false;
+				}else {
+					if(graphicsObject.getModel() == null) {
+						shouldDraw = false;
+					}
 				}
 
 				int sceneId = graphicsObject.hashCode();
@@ -4549,10 +4609,10 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 				}
 
 				perFramePacket.writeShort(animationFrameIdx);
-				short animimationFrameCycle = (short) -1;
-				perFramePacket.writeShort(animimationFrameCycle);
-				short remainingCycles = (short) projectile.getRemainingCycles();
-				perFramePacket.writeShort(remainingCycles);
+				//short animimationFrameCycle = (short) -1;
+				perFramePacket.writeShort(projectile.getOrientation()); //Yaw
+				//short remainingCycles = (short) projectile.getRemainingCycles();
+				perFramePacket.writeShort(0);
 			}
 		}
 		else
@@ -4602,7 +4662,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 		sharedmem_rm.backBuffer.writePacket(perFramePacket, "PerFramePacket");
 
-		checkForActorColourOverrideChanges();
+		checkFor_ActorColourOverride_Changes();
 
 		checkForFashionScapeChanges();
 
@@ -4669,34 +4729,48 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	//not currently used, is part of wip code to handle npcOverrides.
 	class NpcOverrides_Copy
 	{
-		int[] modelIds;
+		int[] modelIds = null;
 
-		short[] colorToReplaceWith;
+		short[] colorToReplaceWith = null;
 
-		short[] textureToReplaceWith;
+		short[] textureToReplaceWith = null;
 
-		boolean useLocalPlayer;
+		boolean useLocalPlayer = false;
 
 		public NpcOverrides_Copy(NpcOverrides overrides)
 		{
-			this.modelIds = overrides.getModelIds();
-			this.colorToReplaceWith = overrides.getColorToReplaceWith();
-			this.textureToReplaceWith = overrides.getTextureToReplaceWith();
+			if(overrides.getModelIds()!=null) {
+				this.modelIds = overrides.getModelIds().clone();
+			}
+
+			if(overrides.getColorToReplaceWith()!=null) {
+				this.colorToReplaceWith = overrides.getColorToReplaceWith().clone();
+			}
+
+			if(overrides.getTextureToReplaceWith()!=null){
+				this.textureToReplaceWith = overrides.getTextureToReplaceWith().clone();
+			}
+
 			this.useLocalPlayer = overrides.useLocalPlayer();
 		}
 
 		public boolean isIdenticalTo(NpcOverrides_Copy other)
 		{
-			boolean isEqual = Arrays.equals(other.modelIds, modelIds);
-			if (!Arrays.equals(other.colorToReplaceWith, colorToReplaceWith))
+			boolean isEqual = true;
+
+			if (!Arrays.equals(other.modelIds, this.modelIds))
 			{
 				isEqual = false;
 			}
-			if (!Arrays.equals(other.textureToReplaceWith, textureToReplaceWith))
+			if (!Arrays.equals(other.colorToReplaceWith, this.colorToReplaceWith))
 			{
 				isEqual = false;
 			}
-			if (!other.useLocalPlayer == useLocalPlayer)
+			if (!Arrays.equals(other.textureToReplaceWith, this.textureToReplaceWith))
+			{
+				isEqual = false;
+			}
+			if (!(other.useLocalPlayer == this.useLocalPlayer))
 			{
 				isEqual = false;
 			}
@@ -4705,8 +4779,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	}
 
 	Set<Actor> actorsWithColorOverrides_LastFrame = new HashSet<>();
-
-	private void checkForActorColourOverrideChanges() {
+	private void checkFor_ActorColourOverride_Changes() {
 		for (Actor actor : client.getPlayers()) {
 			if(actor == null) {
 				continue;
@@ -4716,13 +4789,13 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 				if(model == null) {continue;}
 				if(model.getOverrideAmount() != 0) { //if override is active
 					if(!actorsWithColorOverrides_LastFrame.contains(actor)) { //if override has changed to become active
-						actorColourOverrideChanged(actor);
+						actorOverrideChanged(actor, (byte) 0);
 						actorsWithColorOverrides_LastFrame.add(actor);
 						log.debug("col override has become active");
 					}
 				} else { //if override is inactive
 					if(actorsWithColorOverrides_LastFrame.contains(actor)) { //if override has changed to become inactive
-						actorColourOverrideChanged(actor);
+						actorOverrideChanged(actor, (byte) 0);
 						actorsWithColorOverrides_LastFrame.remove(actor);
 						log.debug("col override has become inactive");
 					}
@@ -4745,7 +4818,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 				{ //if override is active
 					if (!actorsWithColorOverrides_LastFrame.contains(actor))
 					{ //if override has changed to become active
-						actorColourOverrideChanged(actor);
+						actorOverrideChanged(actor, (byte) 0);
 						actorsWithColorOverrides_LastFrame.add(actor);
 						log.debug("col override has become active");
 					}
@@ -4754,7 +4827,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 				{ //if override is inactive
 					if (actorsWithColorOverrides_LastFrame.contains(actor))
 					{ //if override has changed to become inactive
-						actorColourOverrideChanged(actor);
+						actorOverrideChanged(actor, (byte) 0);
 						actorsWithColorOverrides_LastFrame.remove(actor);
 						log.debug("col override has become inactive");
 					}
@@ -4763,11 +4836,9 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		}
 	}
 
-	//not implemented yet
-	private void actorColourOverrideChanged(Actor actor)
-	{
-		byte overridesType = 0;//colourOverridesType. we might have other types later for playerCompOverrides/npccompOverriddes
 
+	private void actorOverrideChanged(Actor actor, byte overridesType) //overridesType 0 = colourOverrides //overrides 1 = NPCOverrides
+	{
 		int actorId = 0;
 		byte actorType = 0;
 		if(actor instanceof Player) {
@@ -4784,18 +4855,111 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			return;
 		}
 
-		Model model = actor.getModel();
-
-		Buffer packet = new Buffer(new byte[20]);
+		Buffer packet = new Buffer(new byte[200]);
 		packet.writeByte(overridesType);
 		packet.writeByte(actorType);
 		packet.writeShort(actorId);
-		packet.writeByte(model.getOverrideAmount());
-		packet.writeByte(model.getOverrideHue());
-		packet.writeByte(model.getOverrideLuminance());
-		packet.writeByte(model.getOverrideSaturation());
-		log.debug("ColourOverridesChanged on actor id "+ actorId + " hue:"+model.getOverrideHue() + " sat:"+model.getOverrideSaturation() + " Lum:"+model.getOverrideLuminance() + " amount:"+model.getOverrideAmount());
+
+		if(overridesType == 0) {
+			Model model = actor.getModel();
+			packet.writeByte(model.getOverrideAmount());
+			packet.writeByte(model.getOverrideHue());
+			packet.writeByte(model.getOverrideLuminance());
+			packet.writeByte(model.getOverrideSaturation());
+			log.debug("ColourOverridesChanged on actor id "+ actorId + " hue:"+model.getOverrideHue() + " sat:"+model.getOverrideSaturation() + " Lum:"+model.getOverrideLuminance() + " amount:"+model.getOverrideAmount());
+		}
+
+		if(overridesType == 1) {
+			NPC npc = (NPC)actor;
+			NpcOverrides npcOverrides = npc.getModelOverrides();
+			boolean hasNpcOverrides = npcOverrides!=null;
+			packet.writeBoolean(hasNpcOverrides);
+
+			if (hasNpcOverrides)
+			{
+				packet.writeInt_Array(npcOverrides.getModelIds());
+				packet.writeShort_Array(npcOverrides.getTextureToReplaceWith());
+				packet.writeShort_Array(npcOverrides.getColorToReplaceWith());
+				packet.writeBoolean(npcOverrides.useLocalPlayer());
+			}
+
+			log.debug("NPCModelOverridesChanged on actor id "+ actorId);
+		}
+
 		sharedmem_rm.backBuffer.writePacket(packet, "ActorOverridesChanged");
+	}
+
+	HashMap<NPC, NpcOverrides_Copy> npcsWithOverrides_LastFrame = new HashMap<NPC, NpcOverrides_Copy>();
+	private void checkFor_NpcModelOverride_Changes() {
+		for (NPC actor : client.getNpcs()) {
+			if(actor == null) {
+				continue;
+			}
+			if(visibleActors.contains(actor))
+			{
+				if (actor.getModelOverrides()!=null) //if NPCOverride exist on npc
+				{
+					if (!npcsWithOverrides_LastFrame.containsKey(actor)) //if override has only just become existant
+					{
+						//respawn the npc so new overrides can be activated
+						NpcSpawned event = new NpcSpawned(actor);
+						onNpcSpawned(event);
+						log.debug("NpcModelOverride  has become active");
+					}else {//if override already exists, check if it's contents have changed
+						boolean OverrideValsHaveChanged = !npcsWithOverrides_LastFrame.get(actor).isIdenticalTo(new NpcOverrides_Copy(actor.getModelOverrides()));
+						if(OverrideValsHaveChanged){
+							//respawn the npc so override alterations can take effect
+							NpcSpawned event = new NpcSpawned(actor);
+							onNpcSpawned(event);
+							log.debug("NpcOverideVals have changed");
+						}
+					}
+				}
+				else
+				{
+					if (npcsWithOverrides_LastFrame.containsKey(actor))
+					{
+						// override just became inactive
+						//respawn the npc so that overrides can be deactivated
+						NpcSpawned event = new NpcSpawned(actor);
+						onNpcSpawned(event);
+						log.debug("NpcModelOverride has become inactive");
+					}
+				}
+			}
+		}
+	}
+
+	void sendNpcOverridesIfNeeded(NPC actor) {
+		if(actor == null) {
+			return;
+		}
+		if(visibleActors.contains(actor))
+		{
+			if (actor.getModelOverrides()!=null) //if NPCOverride exist on npc
+			{
+				if (!npcsWithOverrides_LastFrame.containsKey(actor)) //if override has only just become existant
+				{
+					actorOverrideChanged(actor, (byte) 1);
+					npcsWithOverrides_LastFrame.put(actor, new NpcOverrides_Copy(actor.getModelOverrides()));
+					log.debug("NpcModelOverride  has become active");
+				}else {//if override already exists, check if it's contents have changed
+					boolean OverrideValsHaveChanged = !npcsWithOverrides_LastFrame.get(actor).isIdenticalTo(new NpcOverrides_Copy(actor.getModelOverrides()));
+					if(OverrideValsHaveChanged){
+						actorOverrideChanged(actor, (byte) 1);
+					}
+				}
+			}
+			else
+			{ //if override is inactive
+				if (npcsWithOverrides_LastFrame.containsKey(actor))
+				{ //if override has changed to become inactive
+					actorOverrideChanged(actor, (byte) 1);
+					npcsWithOverrides_LastFrame.remove(actor);
+					log.debug("NpcModelOverride has become inactive");
+				}
+			}
+		}
 	}
 
 	@Override

@@ -27,6 +27,7 @@ package com.runemod;
 import com.sun.jna.Library;
 import com.sun.jna.Native;
 import com.sun.jna.Pointer;
+import com.sun.jna.WString;
 import com.sun.jna.platform.win32.Kernel32;
 import com.sun.jna.platform.win32.User32;
 import com.sun.jna.platform.win32.WinDef;
@@ -41,6 +42,9 @@ import java.awt.GraphicsDevice;
 import java.awt.GraphicsEnvironment;
 import java.awt.Point;
 import java.awt.Window;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import javax.swing.SwingUtilities;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
@@ -104,6 +108,21 @@ public class SharedMemoryManager
 
 		return found[0];
 	}
+
+/*	public static boolean canLoadDll(String dllName) {
+		MyKernel32 kernel32 = MyKernel32.INSTANCE;
+
+		// Use the wide-character version (for proper Unicode handling)
+		WinDef.HMODULE handle = kernel32.LoadLibraryW(new WString(dllName));
+		if (handle != null) {
+			kernel32.FreeLibrary(handle);
+			return true;
+		} else {
+			int err = kernel32.GetLastError();
+			System.err.println("LoadLibrary failed for " + dllName + " (error code " + err + ")");
+			return false;
+		}
+	}*/
 
 	@SneakyThrows
 	static byte rsDataTypeToOpCode(String dataType)
