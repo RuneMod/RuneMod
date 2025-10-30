@@ -1551,6 +1551,8 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		FashionScape_EquipmentIds_PrevFrame = null;
 		FashionScape_Colors_PrevFrame = null;
 
+		npcsWithOverrides_LastFrame = new HashMap<NPC, NpcOverrides_Copy>();
+
 		playerLocation_prevTick = new WorldPoint(0,0,0);
 
 		window = (JFrame) SwingUtilities.getWindowAncestor(client.getCanvas());
