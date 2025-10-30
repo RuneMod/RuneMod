@@ -2419,6 +2419,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		playerLocation_prevTick = new WorldPoint(0,0,0);
 		worldVisibilityCalcedTick = -1;
 		exteriorVisibility_Prev = -1;
+		npcsWithOverrides_LastFrame.clear();;
 
 		reSendVarBits();
 
