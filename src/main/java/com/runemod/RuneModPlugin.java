@@ -45,6 +45,8 @@ import java.awt.event.MouseListener;
 import java.awt.image.BufferedImage;
 import java.io.InputStreamReader;
 import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -511,6 +513,125 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		}
 	}
 
+	boolean discovered_GetActionAnimIfValid = false;
+	private Method GetActionAnimIfValid_Meth = null;
+	public void discoverField_ActionAnimValid()
+	{
+		if(discovered_GetActionAnimIfValid) {return;}
+		Actor actor = client.getLocalPlayer();
+
+		int minFieldCount = 0;
+
+		if (actor == null)
+		{
+			System.out.println("Actor is null.");
+			return;
+		}
+
+		discovered_GetActionAnimIfValid = true;
+
+		Class<?> actorClass = actor.getClass().getSuperclass();
+		// We will gather declared methods at this level and test them.
+		Method[] declared = actorClass.getDeclaredMethods();
+		List<Method> candidates = new ArrayList<>();
+		for (Method m : declared)
+		{
+			// Filter: zero parameters and non-void return and return types who have Object as class (animationSequence class is toplevel so "Object" is it's superclass
+			if (m.getParameterCount() == 0 && m.getReturnType() != void.class && m.getReturnType().getSuperclass()==Object.class) //added m.getReturnType().getSuperclass()==Object.class but not 100% sure about it
+			{
+				candidates.add(m);
+			}
+		}
+
+		if (!candidates.isEmpty())
+		{
+			System.out.printf("Testing %d no-arg non-void methods on class %s%n", candidates.size(), actorClass.getName());
+		}
+
+		// Test each candidate method individually to avoid interference
+		for (Method m : candidates)
+		{
+			try
+			{
+				m.setAccessible(true);
+
+				// invoke before calling setAnimation(855)
+				Object before = null;
+				try
+				{
+					before = m.invoke(actor);
+				}
+				catch (InvocationTargetException ite)
+				{
+					// If the method throws, skip it (it likely isn't the one)
+					System.out.printf("Method %s threw before invocation: %s%n", m.getName(), ite.getCause());
+					continue;
+				}
+
+				// Call API to set animation. This is your known call that makes the AnimationSequence appear.
+				// This uses the RuneLite API method directly.
+				actor.setAnimation(855);
+
+				// invoke after
+				Object after = null;
+				try
+				{
+					after = m.invoke(actor);
+				}
+				catch (InvocationTargetException ite)
+				{
+					System.out.printf("Method %s threw after invocation: %s%n", m.getName(), ite.getCause());
+					// Optionally reset animation (actor.setAnimation(0)), then continue
+					try { actor.setAnimation(-1); } catch (Throwable t) {}
+					continue;
+				}
+
+				// Heuristic: before == null and after != null
+				if (before == null && after != null)
+				{
+					Class<?> retClass = after.getClass();
+
+					boolean topLevelSuperclass = retClass.getSuperclass() == Object.class;
+					int declaredFieldCount = retClass.getDeclaredFields().length;
+
+					System.out.printf("Candidate method %s matched null->non-null. Return type runtime: %s, declaredFields=%d, superclass=%s%n",
+						m.getName(), retClass.getName(), declaredFieldCount,
+						retClass.getSuperclass() == null ? "null" : retClass.getSuperclass().getName());
+
+					// Additional heuristic checks — tune as necessary
+					if (topLevelSuperclass && declaredFieldCount >= minFieldCount)
+					{
+						System.out.printf("Selected method %s from class %s as probable match.%n", m.getName(), actorClass.getName());
+						// Optionally reset animation to 0 (clean up)
+						try { actor.setAnimation(-1); } catch (Throwable t) {}
+						GetActionAnimIfValid_Meth = m;
+						return;
+					}
+					else
+					{
+						System.out.printf("Method %s passed null->non-null but failed extra heuristics (topLevel=%b, fields=%d >= %d).%n",
+							m.getName(), topLevelSuperclass, declaredFieldCount, minFieldCount);
+					}
+				}
+
+				// Reset animation after test to avoid leaving state changed. Tune as needed.
+				try { actor.setAnimation(-1); } catch (Throwable t) {}
+
+			}
+			catch (IllegalAccessException iae)
+			{
+				System.out.printf("IllegalAccess for method %s: %s%n", m.getName(), iae.getMessage());
+			}
+			catch (Exception ex)
+			{
+				System.out.printf("Unexpected exception testing method %s: %s%n", m.getName(), ex);
+			}
+		}
+
+		System.out.println("No matching method found using heuristics.");
+		return;
+	}
+
 	int getAnimation_Unmasked(NPC npc)
 	{
 		return npc.getAnimation();
@@ -675,9 +796,34 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		return true;
 	}
 
+	public boolean isActionAnimValid(Actor actorInstance) //checks if actior has a valid action anim using internal function that includes use of the sequenceDelay==0 check
+	{
+		if (GetActionAnimIfValid_Meth == null) //if the method field wasnt found, use to basic check.
+		{
+			log.debug("GetActionAnimIfValid_Meth is null");
+			return actorInstance.getAnimation()!=-1;
+		}
+
+		if(actorInstance == null) {
+			return false;
+		}
+
+		try
+		{
+			return GetActionAnimIfValid_Meth.invoke(actorInstance)!=null;
+		}
+		catch (InvocationTargetException | IllegalAccessException e)
+		{
+			System.err.printf("Invocation failed for %s: %s%n", actorInstance, e);
+			return false;
+		}
+	}
+
 	@Subscribe
 	private void onGameTick(GameTick event)
 	{
+		discoverField_ActionAnimValid();
+
 		if(config.reduceFpsWhenIdle()) {
 			if(storedMaxFps != 50 && client.getTickCount()%6 == 0) {
 				if(System.currentTimeMillis() - timeLastInteracted > 5000) { //reduce fps over time if window appears to be inactive/unused. Prevents overwoking pc when rs is idle.
@@ -1583,6 +1729,9 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 		runeModLauncher = null;
 		myCacheReader = null;
+
+		discovered_GetActionAnimIfValid = false;
+		GetActionAnimIfValid_Meth = null;
 
 		if (runeMod_loadingScreen != null)
 		{
@@ -4188,6 +4337,23 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		}
 	}
 
+	boolean isPoseAnimValid(Actor actor) {
+		boolean actionAnimIsValid = isActionAnimValid(actor);
+		// Check if the current pose animation sequence is valid
+		boolean ImvalidPoseAnim = actor.getPoseAnimation() == -1 /*|| !this.poseAnimationSequence.getSequenceDefinition().iValid()*/;
+
+		// Check if the current pose animation is the same as the idle animation
+		boolean isPoseSameAsIdle = (actor.getPoseAnimation() == actor.getIdlePoseAnimation());
+
+		// If any invalid conditions are met, return null
+		if (ImvalidPoseAnim || (isPoseSameAsIdle && actionAnimIsValid/*ActionAnim != null*/)) {
+			return false;
+		}
+
+		// Otherwise, return the valid pose animation sequence
+		return true;
+	}
+
 	int playerCount = 0; // playerCountThisFrame
 	@SneakyThrows
 	private void WritePerFramePacket()
@@ -4280,8 +4446,9 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 				int animationFrameIdx_Pose = npc.getPoseAnimationFrame();
 
 				//boolean enableActionSeq = player.getAnimation() != -1 && player.getSequenceDelay() == 0;
-				boolean disableMovementSeq = npc.getPoseAnimation() == -1 || (npc.getPoseAnimation() == npc.getIdlePoseAnimation() && animationId_Action != -1);
-				if(disableMovementSeq) {
+				boolean isPoseValid = isPoseAnimValid(npc);
+				//boolean disableMovementSeq = npc.getPoseAnimation() == -1 || (npc.getPoseAnimation() == npc.getIdlePoseAnimation() && animationId_Action != -1);
+				if(!isPoseValid) {
 					animationId_Pose = -1;
 					animationFrameIdx_Pose = -1;
 				}
