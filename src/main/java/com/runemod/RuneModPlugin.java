@@ -822,6 +822,27 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	@Subscribe
 	private void onGameTick(GameTick event)
 	{
+/*		WorldView mainWorldView = client.getTopLevelWorldView();
+		for(WorldEntity we : mainWorldView.worldEntities()) {
+			WorldView boatWorldView = we.getWorldView();
+			for(Player player : boatWorldView.players()) {
+				if(player.getName().equalsIgnoreCase("noodleeater")) {
+					System.out.println("nood is in wv idx "+boatWorldView.getId() );
+					System.out.println("noEntities in nood's' world: "+boatWorldView.worldEntities().stream().count());
+
+					LocalPoint playerLocalLocation = player.getLocalLocation();
+					System.out.println("nood loc: "+playerLocalLocation);
+
+					LocalPoint local_MainWv = we.transformToMainWorld(playerLocalLocation);
+					System.out.println("nood loc_MainWv: "+local_MainWv);
+
+					mainWorldView.getMainWorldProjection()
+					//LocalPoint locInWv = wv.
+					//System.out.println();
+				}
+			}
+		}*/
+
 		discoverField_ActionAnimValid();
 
 		if(config.reduceFpsWhenIdle()) {
