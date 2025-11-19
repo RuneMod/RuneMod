@@ -222,7 +222,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	int curGpuFlags = -1; //there is no client.setGpuFlags, so I use this to keep track of them myself.
 	//int GpuFlagsEnableNo = 17;//DrawCallbacks.GPU | DrawCallbacks.ZBUF
 	//int GpuFlagsEnableNo = 3;
-	int GpuFlagsEnableNo = 1;
+	int GpuFlagsEnableNo = DrawCallbacks.GPU|DrawCallbacks.ZBUF;//1;
 	Set<Renderable> visibleActors = new HashSet<Renderable>();
 	Set<WorldPoint> activeChunks = new HashSet<WorldPoint>();
 
@@ -1473,13 +1473,6 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		client.getTopLevelWorldView().getScene().setDrawDistance(90);
 
 		if(curGpuFlags == 17) {//code for zbuff gpu mode
-			for(Player obj: client.getTopLevelWorldView().players()) {
-				visibleActors.add(obj);
-				playerHeights[obj.getId()] = 0;
-			}
-			for(NPC obj: client.getTopLevelWorldView().npcs()) {
-				visibleActors.add(obj);
-			}
 			for(Projectile obj: client.getProjectiles()) {
 				visibleActors.add(obj);
 			}
@@ -1876,7 +1869,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		//int GpuFlags = DrawCallbacks.GPU | (computeMode == ComputeMode.NONE ? 0 : DrawCallbacks.HILLSKEW);
 		client.setExpandedMapLoading(2);
 
-		setMaxFps(config.MaxFps());
+		setMaxFps( config.MaxFps());
 
 		setGpuFlags(0);
 		setDrawCallbacks(this);
@@ -1885,6 +1878,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	int storedMaxFps = -1;
 	public void setMaxFps(int maxFps) {
 		if (maxFps < 50) { maxFps = 50; }
+		if(maxFps > 120) {maxFps = 120;}
 		if(storedMaxFps!=maxFps) {
 			if(maxFps > 50) {
 				client.setUnlockedFps(true);
@@ -3391,33 +3385,9 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	private Map<Long, DynamicObject> getAnimatedGameObjects() throws InterruptedException
 	{
 		Map<Long, DynamicObject> allGameObjects = new HashMap<>();
-		if(curGpuFlags != 17) {
-			for(Tile tile : tilesWithAnimateGameObjects) {
-				findAnimatedGameObjectsOnTile(allGameObjects, tile);
-			}
-			return allGameObjects;
-		}else {
-			for (TileObject tileObj : AnimatedTileObjects) {
-				Renderable r = null;
-				if(tileObj instanceof GameObject) {
-					r = ((GameObject)tileObj).getRenderable();
-				}
-				if(tileObj instanceof GroundObject) {
-					r = ((GroundObject)tileObj).getRenderable();
-				}
-				if(tileObj instanceof WallObject) {
-					r = ((WallObject)tileObj).getRenderable1();
-				}
-				if(tileObj instanceof DecorativeObject) {
-					r = ((DecorativeObject)tileObj).getRenderable();
-				}
-				if(r instanceof DynamicObject){
-					DynamicObject dynOb = (DynamicObject)r;
-					if(dynOb.getAnimation()!=null) {
-						allGameObjects.put(getTag_Unique(tileObj), (DynamicObject)r);
-					}
-				}
-			}
+
+		for(Tile tile : tilesWithAnimateGameObjects) {
+			findAnimatedGameObjectsOnTile(allGameObjects, tile);
 		}
 		return allGameObjects;
 	}
@@ -5153,6 +5123,86 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		}
 	}
 
+	@Override
+	public void drawDynamic(Projection worldProjection, Scene scene, TileObject tileObject, Renderable r, Model m, int orient, int x, int y, int z)
+	{
+		//boolean nullRenderable = r == null;
+		long tag = tileObject.getHash();
+		int entityType = (int) ((tag >>> 16) & 7);
+		//System.out.println("encountered tileObject id"+tileObject.getId()+ "entityType: "+entityType/*"r is null? "+(r==null) +" m is null?"+(m == null)*/);
+		if(tileObject!=null && entityType == 2) {
+			long plane = (long)(tag >> 14 & 3);
+			long sceneY = (long)(tag >> 7 & 127);
+			long sceneX = (long)(tag >> 0 & 127);
+
+			if(plane < 4 && sceneY < 104 && sceneX < 104 && plane >= 0 && sceneY >= 0 && sceneX >= 0) {
+				Tile tile = client.getTopLevelWorldView().getScene().getTiles()[(int)plane][(int)sceneX][(int)sceneY];
+				tilesWithAnimateGameObjects.add(tile);
+				if(plane > 0) {
+					tilesWithAnimateGameObjects.add(client.getTopLevelWorldView().getScene().getTiles()[(int)plane-1][(int)sceneX][(int)sceneY]); //required where tile uses linkedbellow stuff
+				}
+			}
+		}
+	}
+
+	@Override
+	public void drawTemp(Projection worldProjection, Scene scene, GameObject gameObject, Model m, int orient, int x, int y, int z)
+	{
+		if(gameObject!=null) {
+			long tag = gameObject.getHash();
+			// (entityType & 7) << 16
+			int entityType = (int)((tag >>> 16) & 7); //0 is player. 1 is npc
+
+			if (entityType == 0)
+			{
+				// index stored in bits [20..51] (32 bits)
+				int index = (int)((tag >> 20) & 0xffffffff);
+
+				// worldView stored in bits [52..63] (12 bits)
+				int worldView = (int)((tag >> 52) & 4095);
+				if(worldView == 4095) {
+					worldView = -1;
+				}
+
+				visibleActors.add(client.getWorldView(worldView).players().byIndex(index));
+				playerHeights[index] = y;
+			}
+			else
+			{
+				if (entityType == 1)
+				{
+					// index stored in bits [20..51] (32 bits)
+					int index = (int)((tag >> 20) & 0xffffffff);
+
+					// worldView stored in bits [52..63] (12 bits)
+					int worldView = (int)((tag >> 52) & 4095);
+					if(worldView == 4095) {
+						worldView = -1;
+					}
+
+					visibleActors.add(client.getWorldView(worldView).npcs().byIndex(index));
+					npcHeights[index] = y;
+				}
+			}
+
+			/*	if(entityType == 2) {
+					System.out.println("encountered tileObject (type 2) id: "+gameObject.getId());
+				}
+
+				if(entityType == 3) {
+					System.out.println("encountered tileItem (type 3) id: "+gameObject.getId());
+				}
+
+				if(entityType == 4) {
+					System.out.println("encountered worldEntity (type 4) id: "+gameObject.getId());
+				}
+				if(entityType == 5) {
+					System.out.println("encountered tileObject (type 5). id: "+gameObject.getId());
+				}*/
+		}
+	}
+
+	//legacy draw for alora. not called/used in modern runelite
 	@Override
 	public void draw(Projection projection, Scene scene, Renderable renderable, int orientation, int x, int y, int z, long hash)
 	{
