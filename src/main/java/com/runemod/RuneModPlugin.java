@@ -963,7 +963,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		}
 	}
 
-	WorldPoint getPlayerLocationInWorld() { //get playerLocation, accounting for conversion needed if player is in a boat
+	WorldPoint getPlayerLocationInWorld() { //get local playerLocation, accounting for conversion needed if player is in a boat
 		WorldPoint playerLoc = client.getLocalPlayer().getWorldLocation();
 
 		int wvId = client.getLocalPlayer().getWorldView().getId();
