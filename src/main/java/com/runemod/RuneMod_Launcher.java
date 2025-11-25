@@ -195,6 +195,8 @@ class RuneMod_Launcher
 			log.debug("Deleting old rm app at" + rmAppLocation + "Windows");
 			File directoryToDelete = new File(rmAppLocation + "Windows");
 			deleteDirectory(directoryToDelete);
+			directoryToDelete = new File(rmAppLocation + "login_screen_anims");
+			deleteDirectory(directoryToDelete);
 
 			Files.createDirectories(Paths.get(rmAppLocation));
 
