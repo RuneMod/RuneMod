@@ -238,6 +238,9 @@ public class SharedMemoryManager
 			case "WorldVisibility":
 				dataTypeByte = 35;
 				break;
+			case "WorldViewUpdate":
+				dataTypeByte = 36;
+				break;
 			default:
 				log.debug("no opcode match for packet '"+dataType+"'");
 				break;
