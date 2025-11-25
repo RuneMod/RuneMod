@@ -963,6 +963,18 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		}
 	}
 
+	WorldPoint getPlayerLocationInWorld() { //get playerLocation, accounting for conversion needed if player is in a boat
+		WorldPoint playerLoc = client.getLocalPlayer().getWorldLocation();
+
+		int wvId = client.getLocalPlayer().getWorldView().getId();
+		if(wvId!=-1) {
+			WorldEntity we = client.getTopLevelWorldView().worldEntities().byIndex(wvId);
+			LocalPoint localPos = we.transformToMainWorld(client.getLocalPlayer().getLocalLocation());
+			playerLoc = WorldPoint.fromLocal(client, localPos);
+		}
+		return playerLoc;
+	}
+
 	void processExtendedChunkSpawnTask()
 	{
 		if (client.getLocalPlayer() == null)
@@ -971,7 +983,16 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		}
 
 		//ArrayList<WorldPoint> spawnedChunks = new ArrayList();
-		WorldPoint playerLoc = client.getLocalPlayer().getWorldLocation();
+		//WorldEntity worldEntity
+		WorldPoint playerLoc = getPlayerLocationInWorld();
+
+		int wvId = client.getLocalPlayer().getWorldView().getId();
+		if(wvId!=-1) {
+			WorldEntity we = client.getTopLevelWorldView().worldEntities().byIndex(wvId);
+			LocalPoint localPos = we.transformToMainWorld(client.getLocalPlayer().getLocalLocation());
+			playerLoc = WorldPoint.fromLocal(client, localPos);
+		}
+		//getLocalLocation().getWorldView()
 
 		for (int dx = -config.ExtraChunksLoadDistance(); dx <= config.ExtraChunksLoadDistance(); dx++)
 		{
@@ -1021,7 +1042,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		{
 			return;
 		}
-		WorldPoint playerLoc = client.getLocalPlayer().getWorldLocation();
+		WorldPoint playerLoc = getPlayerLocationInWorld();
 
 		WorldPoint[] activeChunksArr = activeChunks.toArray(WorldPoint[]::new);
 		for (WorldPoint chunkBase : activeChunksArr)
@@ -4768,7 +4789,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 				int playerX = LocalLocation.getX();
 				int playerY = LocalLocation.getY();
-				int playerHeight = playerHeights[player.getId()]*-1; /*Perspective.getTileHeight(client, player.getLocalLocation(), client.getLocalPlayer().getWorldLocation().getPlane()) * -1*/;
+				int playerHeight = playerHeights[player.getId()]*-1;
 				int playerOrientation = player.getCurrentOrientation();
 
 				int animationId_Action = (config.spawnAnimations() ? player.getAnimation() : -1);
