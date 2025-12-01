@@ -3131,6 +3131,8 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 		if (curGamestate == GameState.LOGIN_SCREEN)
 		{
+			clientPlane_prevFrame = -1; //prevents issue where login svreen anim changes clientplane, and so when we login, out plane is wrong.
+
 			DespawnServerSpawnedObjs();
 
 			SwingUtilities.invokeLater(() ->
@@ -5392,13 +5394,15 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			long sceneY = (long)(tag >> 7 & 127);
 			long sceneX = (long)(tag >> 0 & 127);
 
+
 			int maxPlane = scene.getTiles().length;
 			int maxX = scene.getTiles()[0].length;
-			int maxY = scene.getTiles()[1].length;
+			int maxY = scene.getTiles()[0][0].length;
 
 			if(plane < maxPlane && sceneY < maxY && sceneX < maxX && plane >= 0 && sceneY >= 0 && sceneX >= 0) {
 				Tile tile = scene.getTiles()[(int)plane][(int)sceneX][(int)sceneY];
 				tilesWithAnimateGameObjects.add(tile);
+
 				if(plane > 0) {
 					tilesWithAnimateGameObjects.add(scene.getTiles()[(int)plane-1][(int)sceneX][(int)sceneY]); //required where tile uses linkedbellow stuff
 				}
