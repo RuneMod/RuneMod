@@ -1252,7 +1252,10 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 				log.debug("WindowIsMinimized, sleeping...");
 			}
 
-			Thread.sleep(60);
+			if(client.getGameCycle() % 3 != 0) //runemods recycle bin system only works on frames that have time to spare. We ponly limit framerate every other frame because wee don't want to constantly prevent the recycle bin from working while in the sleep state.
+			{
+				Thread.sleep(60);
+			}
 		}
 
 		clientThread.invokeAtTickEnd(() -> {
