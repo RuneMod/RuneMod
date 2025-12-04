@@ -1572,6 +1572,19 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	@Override
 	public void draw(int overlayColor)
 	{
+		if(client.getTopLevelWorldView()!=null) { //update all the worldviews
+			for(WorldView wv : client.getTopLevelWorldView().worldViews()) {
+					boolean shouldDraw = hooks.draw(wv.getScene(), false);
+					if(shouldDraw == false) {
+						worldViewUpdate(wv, 2); //2 means send visibility state of worldView
+					}/*else { //is done in preSceneDraw
+						if(wv.getMainWorldProjection()!=null) {
+							worldViewUpdate(wv, 1); //1 means update existing worldview
+						}
+					}*/
+			}
+		}
+
 		if(config.nullifyDrawCallbacks()) {return;}
 
 		if (overlayColor_LastFrame != overlayColor)
@@ -1603,8 +1616,8 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		Scene scene,
 		float cameraX, float cameraY, float cameraZ, float cameraPitch, float cameraYaw,
 		int minLevel, int level, int maxLevel, Set<Integer> hideRoofIds) {
-		int wvId = scene.getWorldViewId();
 
+		int wvId = scene.getWorldViewId();
 		worldViewUpdate(client.getWorldView(wvId), 1); //1 means update existing worldview
 	}
 
@@ -1718,6 +1731,10 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			//log.debug("updatingWorldViewTransform for wv "+wv.getId() + " baseX:"+wv.getBaseX()+ " baseY:"+wv.getBaseX() + " SceneX:"+wv.getScene().getBaseX() + " SceneY:"+wv.getScene().getBaseY());
 		}
 
+		if(updateType == 2) {
+			//log.debug("updatingWorldView visibility for wv "+wv.getId());
+		}
+
 		Buffer packet = new Buffer(new byte[200]);
 
 		packet.writeByte(updateType); //0 = spawn. 1 = update transform. 2 = de-spawn
@@ -1755,8 +1772,20 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			packet.writeByte(wv.getScene().getOverrideAmount());
 		}
 
+		if(updateType == 2) {
+			packet.writeBoolean(hooks.draw(wv.getScene(), false));
+			packet.writeByte(0);//unused
+			packet.writeByte(0);//unused
+		}
 
 		sharedmem_rm.backBuffer.writePacket(packet, "WorldViewUpdate");//WorldViewSpawned code not yet implemented
+	}
+
+	void despawnAllChunks(){ //despawns all chunks the plugin is aware of/sent spawn packets for
+		WorldPoint[] activeChunksArr = activeChunks.toArray(WorldPoint[]::new);
+		for(WorldPoint chunkBase : activeChunksArr) {
+			send_DespawnChunk_Packet(chunkBase);
+		}
 	}
 
 	void sendSceneBaseInfo(int baseX, int baseY, Scene scene) { //sends base coordinate and chunk spawn packets
@@ -1766,10 +1795,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 		if(isInstanced) {
 			log.debug("despawning all terrains because is instanced area");
-			WorldPoint[] activeChunksArr = activeChunks.toArray(WorldPoint[]::new);
-			for(WorldPoint chunkBase : activeChunksArr) {
-				send_DespawnChunk_Packet(chunkBase);
-			}
+			despawnAllChunks();
 		}
 
 		DespawnServerSpawnedObjs();
@@ -1874,7 +1900,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		log.debug("SwapScene. wv:"+scene.getWorldViewId());
 	}
 
-	void overlayColourChanged()
+/*	void overlayColourChanged()
 	{
 		Buffer packet = new Buffer(new byte[8]);
 
@@ -1886,7 +1912,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		sharedmem_rm.backBuffer.writePacket(packet, "OverlayColorChanged");
 
 		log.debug("overlayColourChanged");
-	}
+	}*/
 
 	void enableLoginFire(boolean enable) {
 		if(clientType == ClientType.RUNELITE) { //(Alora doesnt use login fire)
@@ -3135,6 +3161,8 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		if (curGamestate == GameState.LOGIN_SCREEN)
 		{
 			clientPlane_prevFrame = -1; //prevents issue where login svreen anim changes clientplane, and so when we login, out plane is wrong.
+
+			despawnAllChunks();
 
 			DespawnServerSpawnedObjs();
 
