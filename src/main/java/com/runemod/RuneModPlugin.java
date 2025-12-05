@@ -1045,7 +1045,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 					boolean spawnedChunk = send_SpawnChunk_Packet(chunkBase);
 					if (spawnedChunk)
 					{
-						simulateSpawnEventsForTile(chunkBase); //pre-spawns some objects. idea is to preload some things, but not too many so as to cause stutter
+						//simulateSpawnEventsForTile(chunkBase); //pre-spawns some objects. idea is to preload some things, but not too many so as to cause stutter
 						return;
 					}
 					else
