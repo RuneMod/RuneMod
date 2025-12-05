@@ -798,6 +798,12 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		return tiles[plane][sceneX_extended][sceneY_extended];
 	}
 
+	public void simulateSpawnEventsForTile(WorldPoint chunkBase)
+	{
+		Tile tile = getExtendedSceneTileFromWorldPoint(chunkBase);
+		simulateTilObjectSpawns(tile);
+	}
+
 	public void simulateSpawnEventsForChunk(WorldPoint chunkBase)
 	{
 		log.debug("spawning extended tiles for chunk:  " + chunkBase);
@@ -876,6 +882,26 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		}
 
 		if(chunkBase.getX()%16!=0 || chunkBase.getY()%16!=0) {return false;} //we only care about subregion, which are every 16 tiles
+
+		//for each chunk in subregion
+/*		for (int iX = 0; iX < 2 ; iX++) {
+			for (int iY = 0; iY < 2 ; iY++)
+			{
+				WorldPoint chunk = new WorldPoint(chunkBase.getX()+(iX*8), chunkBase.getX()+(iY*8), chunkBase.getPlane());
+
+				int sceneX = chunk.getX() - client.getBaseX();
+				int sceneY = chunk.getY() - client.getBaseY();
+
+				boolean isInMainScene = (sceneX >= 0*//* - 8*//* && sceneX < 104 && sceneY >= 0*//* - 8 *//*&& sceneY < 104);
+
+				if(!isInMainScene) {//if chunk is in extended scene, simulate spawn events on it.
+*//*					if(Math.abs(dx) <= config.ExtraObjectsLoadDistance() && Math.abs(dy) <= config.ExtraObjectsLoadDistance()) {
+
+					}*//*
+					simulateSpawnEventsForChunk(chunkBase);
+				}
+			}
+		}*/
 
 		//System.out.println("spawning chunk at:  " + chunkBase);
 		activeChunks.add(chunkBase);
@@ -1016,10 +1042,10 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 				if (!isInMainScene)
 				{
-					//simulateSpawnEventsForChunk(chunkBase);
 					boolean spawnedChunk = send_SpawnChunk_Packet(chunkBase);
 					if (spawnedChunk)
 					{
+						simulateSpawnEventsForTile(chunkBase); //pre-spawns some objects. idea is to preload some things, but not too many so as to cause stutter
 						return;
 					}
 					else
@@ -1815,10 +1841,10 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 				int chunkBaseY = (y * Constants.CHUNK_SIZE) + baseY;
 				WorldPoint chunkBase = new WorldPoint(chunkBaseX, chunkBaseY, 0);
 
-				if (chunkBase.getX() % 16 != 0 || chunkBase.getY() % 16 != 0)
+/*				if (chunkBase.getX() % 16 != 0 || chunkBase.getY() % 16 != 0)
 				{
 					continue;
-				}
+				}*/
 
 				send_SpawnChunk_Packet(chunkBase);
 			}
@@ -2114,7 +2140,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		}
 
 		//int GpuFlags = DrawCallbacks.GPU | (computeMode == ComputeMode.NONE ? 0 : DrawCallbacks.HILLSKEW);
-		client.setExpandedMapLoading(2);
+		client.setExpandedMapLoading(config.ExtraChunksLoadDistance());
 
 		setMaxFps( config.MaxFps());
 
@@ -2539,6 +2565,11 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 					{
 						sharedmem_rm.UnChildRuneModWinFromRl();
 					}
+				}
+
+				if (event.getKey().equalsIgnoreCase("ExtraChunksLoadDistance"))
+				{
+					client.setExpandedMapLoading(config.ExtraChunksLoadDistance());
 				}
 			}
 		});
@@ -3160,7 +3191,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 		if (curGamestate == GameState.LOGIN_SCREEN)
 		{
-			clientPlane_prevFrame = -1; //prevents issue where login svreen anim changes clientplane, and so when we login, out plane is wrong.
+			clientPlane_prevFrame = -1; //prevents issue where login screen anims change clientplane, and so when we login, out plane is wrong.
 
 			despawnAllChunks();
 

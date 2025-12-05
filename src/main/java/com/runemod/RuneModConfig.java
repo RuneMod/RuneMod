@@ -165,6 +165,18 @@ public interface RuneModConfig extends Config
 	}
 
 	@ConfigItem(
+		keyName = "ExtraObjectsLoadDistance",
+		name = "ExtraObjectsLoadDistance",
+		description = "Do not touch unless you are Runeface",
+		position = 2,
+		section = DoNotTouch
+	)
+	default int ExtraObjectsLoadDistance()
+	{
+		return 0; //6 would mean a 13X13 chunk square around player (6 is like radius. 6X2 = 12. +1 because its radius from centre tile. But this is all thrown off a bit because we actually use subregions, not chunks.
+	}
+
+	@ConfigItem(
 		keyName = "OrbitCamera",
 		name = "OrbitCamera",
 		description = "OrbitCamera",
