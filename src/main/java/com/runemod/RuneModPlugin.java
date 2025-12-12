@@ -204,7 +204,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	static RuneModPlugin runeModPlugin;
 	static boolean isShutDown = false;
 
-	private String[] disAllowedDynamicSpawns_Names = {"obstacle pipe", "rail", "stile", "forest", "fence", "rocks", "shortcut", "low wall", "sparkling pool"};
+	private String[] disAllowedDynamicSpawns_Names = {"obstacle pipe", "rail", "stile", "forest", "fence", "rocks", "shortcut", "low wall", "sparkling pool", "Crumbling wall"};
 	private Set<Integer> disAllowedDynamicSpawns = new HashSet<>(); //objdefs in here are not allowed to spawn/despawn except during loading. We have these in order to prevent things like stiles becoming invisible due to being incorporated into the player model. Its bodge, but its the best we can do as we cant tell whether a objdef has been put in a player model, in rl api.
 	boolean initedDisallowedDynamicSpawns = false;
 
@@ -1454,7 +1454,6 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		}
 
 		log_Timed_Heavy("communicateWithUnreal::" + funcLocation);
-
 
 		//if (client.getGameCycle() % 4 == 0)
 		//{
@@ -2992,7 +2991,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 					//only certain objects should be considered
 					boolean considerDisAllowingDynamicSpawn = false;
 					for(String name : disAllowedDynamicSpawns_Names) {
-						if(objDef.getName().toLowerCase().contains(name)) {
+						if(objDef.getName().toLowerCase().contains(name.toLowerCase())) {
 							considerDisAllowingDynamicSpawn = true;
 							break;
 						}
