@@ -1967,6 +1967,8 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 		storedMaxFps = -1;
 
+		prevVal = -1;
+
 		lastBaseOffsetX = -1;
 		lastBaseOffsetY = -1;
 
