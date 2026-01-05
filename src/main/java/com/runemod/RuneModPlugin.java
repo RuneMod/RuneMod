@@ -390,7 +390,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		if (config_static.HeavyLogging())
 		{
 			//log.debug("[" + getCurTimeSeconds() + "]	" + message);
-			log.debug("[" + (System.currentTimeMillis() - 1745838397221L) + "]	" + message);
+			log.debug("[" + (System.currentTimeMillis() - 1767376710035L) + "]	" + message);
 		}
 	}
 
@@ -1593,6 +1593,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	{
 	}*/
 
+	int prevVal = -1;
 	@SneakyThrows
 	@Override
 	public void draw(int overlayColor)
@@ -1619,8 +1620,33 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		}
 
 		log_Timed_Heavy("draw");
-		UpdateSharedMemoryUiPixels();
-		communicateWithUnreal("Draw");
+		int val = sharedmem_rm.myKernel32.WaitForSingleObject(sharedmem_rm.EventUeDataReady, 0);
+		if(val == 0 || prevVal == -1) {
+			prevVal = val;
+			UpdateSharedMemoryUiPixels();
+		}
+
+		if (!alreadyCommunicatedUnreal)
+		{
+			client.getTopLevelWorldView().getScene().setDrawDistance(90);
+
+			if(curGpuFlags == 17) {//bodge code for zbuff gpu mode. makes all projectiles visible aswell as all graphicsobjects
+				for(Projectile obj: client.getProjectiles()) {
+					visibleActors.add(obj);
+				}
+				for(WorldView wv : client.getTopLevelWorldView().worldViews()) {
+					for(GraphicsObject obj: wv.getGraphicsObjects()) {
+						visibleActors.add(obj);
+					}
+				}
+			}
+
+			communicateWithUnreal("drawScene");
+			visibleActors.clear();
+			tilesWithAnimateGameObjects.clear();
+			AnimatedTileObjects.clear();
+		}
+		//communicateWithUnreal("Draw");
 	}
 
 	private class intVec3
@@ -1662,26 +1688,6 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		{
 			log_Timed_Heavy("!client.isGpu()");
 			return;
-		}
-		if (!alreadyCommunicatedUnreal)
-		{
-			client.getTopLevelWorldView().getScene().setDrawDistance(90);
-
-			if(curGpuFlags == 17) {//bodge code for zbuff gpu mode. makes all projectiles visible aswell as all graphicsobjects
-				for(Projectile obj: client.getProjectiles()) {
-					visibleActors.add(obj);
-				}
-				for(WorldView wv : client.getTopLevelWorldView().worldViews()) {
-					for(GraphicsObject obj: wv.getGraphicsObjects()) {
-						visibleActors.add(obj);
-					}
-				}
-			}
-
-			communicateWithUnreal("drawScene");
-			visibleActors.clear();
-			tilesWithAnimateGameObjects.clear();
-			AnimatedTileObjects.clear();
 		}
 	}
 

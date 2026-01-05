@@ -551,8 +551,8 @@ public class SharedMemoryManager
 		//wndProc.installHook(RuneLiteRootHandle);
 
 
-		Dimension screenSize = getLargestMonitorResolution();
-		User32.INSTANCE.SetWindowPos(findRsUiDisplayerWindow(), null, 0, 0, screenSize.width, screenSize.height, User32.SWP_NOACTIVATE | User32.SWP_NOZORDER | User32.SWP_NOREDRAW | User32.SWP_NOCOPYBITS);
+		//Dimension screenSize = getLargestMonitorResolution();
+		//User32.INSTANCE.SetWindowPos(findRsUiDisplayerWindow(), null, 0, 0, screenSize.width, screenSize.height, User32.SWP_NOACTIVATE | User32.SWP_NOZORDER | User32.SWP_NOREDRAW | User32.SWP_NOCOPYBITS);
 
 		//ensure runemod window is infront of rl window.
 		User32.INSTANCE.SetWindowPos(RuneModHandle, User32.INSTANCE.GetWindow(RuneLiteRootHandle, new WinDef.DWORD(WinUser.GW_HWNDPREV)), 0, 0, 0, 0, User32.SWP_NOMOVE | User32.SWP_NOSIZE | User32.SWP_NOACTIVATE);
@@ -669,16 +669,16 @@ public class SharedMemoryManager
 			}
 		});
 
-		if (runeModPlugin.baseOffsetX != runeModPlugin.lastBaseOffsetX || runeModPlugin.baseOffsetY != runeModPlugin.lastBaseOffsetY/* || canvas2DSizeX != lastCanvas2DSizeX || canvas2DSizeY != lastCanvas2DSizeY || View3dOffsetX != lastView3DX || View3dOffsetY != lastView3dY || View3dSizeX != lastView3dSizeX || View3dSizeY != lastView3dSizeY*/)
+/*		if (runeModPlugin.baseOffsetX != runeModPlugin.lastBaseOffsetX || runeModPlugin.baseOffsetY != runeModPlugin.lastBaseOffsetY*//* || canvas2DSizeX != lastCanvas2DSizeX || canvas2DSizeY != lastCanvas2DSizeY || View3dOffsetX != lastView3DX || View3dOffsetY != lastView3dY || View3dSizeX != lastView3dSizeX || View3dSizeY != lastView3dSizeY*//*)
 		{
-			/*
+			*//*
 			lastView3DX = View3dOffsetX;
 			lastView3dY = View3dOffsetY;
 			lastView3dSizeX = View3dSizeX;
 			lastView3dSizeY = View3dSizeY;
 			lastCanvas2DSizeX = canvas2DSizeX;
 			lastCanvas2DSizeY = canvas2DSizeY;
-			*/
+			*//*
 
 			RsUiDisplayerHandle = findRsUiDisplayerWindow();
 			if(RsUiDisplayerHandle!=null) {
@@ -692,7 +692,7 @@ public class SharedMemoryManager
 			}
 
 			return;
-		}
+		}*/
 	}
 
 	public void handleUnrealData()

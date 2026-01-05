@@ -31,6 +31,7 @@ public class keyGen
 
 	public static void main(String[] args)
 	{
+		System.currentTimeMillis();
 		//print("hashed keys: ");
 		createKeyHashes(keys);
 	}
