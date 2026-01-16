@@ -5130,8 +5130,8 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		}
 		else
 		{
-			int NoGameObjects = 0;
-			perFramePacket.writeInt(NoGameObjects);
+			int NoTileObjects = 0;
+			perFramePacket.writeInt(NoTileObjects);
 		}
 
 		if (hashedEntitys_LastFrame != null)

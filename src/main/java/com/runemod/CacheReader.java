@@ -81,6 +81,44 @@ public class CacheReader
 
 	private final Set<String> loadedArchives = new HashSet<>();
 	public static boolean cacheFullyLoaded = false;
+	private boolean isArchiveFullyDownloaded(Index index, Archive archive)
+	{
+		byte[] data;
+
+		try
+		{
+			data = store.getStorage().load(index.getId(), archive.getArchiveId());
+		}
+		catch (IOException e)
+		{
+			return false;
+		}
+
+		if (data == null || data.length == 0)
+		{
+			return false;
+		}
+
+		try
+		{
+			// Try to validate as a container
+			archive.decompress(data);
+			return true;
+		}
+		catch (java.util.zip.ZipException zip)
+		{
+			// NOT an error: archive is not GZIP/container-compressed
+			// This is expected for some archives (e.g. index 0 archive 1)
+			return true;
+		}
+		catch (IOException e)
+		{
+			System.out.println("io exception on archive "+archive.getArchiveId());
+			e.printStackTrace();
+			// Real failure: partial download, bad CRC, etc
+			return false;
+		}
+	}
 
 	public boolean checkIfCacheFullyLoaded()
 	{
@@ -122,9 +160,18 @@ public class CacheReader
 
 						String key = index.getId() + ":" + archive.getArchiveId();
 
-						if (loadedArchives.contains(key))
+						if (loadedArchives.contains(key)){
 							continue;
-						try
+						}
+
+						if(isArchiveFullyDownloaded(index, archive)) {
+							loadedArchives.add(key);
+						}else {
+							cacheFullyLoaded = false;
+							return false;
+						}
+
+/*						try
 						{
 							byte[] data = store.getStorage().load(index.getId(), archive.getArchiveId());
 							if (data != null && data.length > 0)
@@ -160,7 +207,7 @@ public class CacheReader
 							missing++;
 							cacheFullyLoaded = false;
 							return false;
-						}
+						}*/
 					}
 				}
 
