@@ -4625,7 +4625,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 			float lerpVal = ((float)pow-0.5f)*2.0f;
 			log.debug("BrightnessLerpVal "+lerpVal);
-			double UeGamma = lerp(1.0f, 0.7f, lerpVal);
+			double UeGamma = lerp(1.0f, 0.8f, lerpVal);
 			rsOptionsPacket.writeByte((int)(UeGamma*100.0));
 			rsOptionsPacket.writeBoolean(removeRoofs);
 			rsOptionsPacket.writeBoolean(animSmoothing);
