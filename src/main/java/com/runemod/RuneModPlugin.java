@@ -1598,18 +1598,22 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	@Override
 	public void draw(int overlayColor)
 	{
-		if(client.getTopLevelWorldView()!=null) { //update all the worldviews
-			for(WorldView wv : client.getTopLevelWorldView().worldViews()) {
-					boolean shouldDraw = hooks.draw(wv.getScene(), false);
-					if(shouldDraw == false) {
-						worldViewUpdate(wv, 2); //2 means send visibility state of worldView
-					}/*else { //is done in preSceneDraw
-						if(wv.getMainWorldProjection()!=null) {
-							worldViewUpdate(wv, 1); //1 means update existing worldview
-						}
-					}*/
-			}
+		if(client.getTopLevelWorldView() == null) {
+			return;
 		}
+
+		//if(client.getTopLevelWorldView()!=null) { //update all the worldviews
+		for(WorldView wv : client.getTopLevelWorldView().worldViews()) {
+				boolean shouldDraw = hooks.draw(wv.getScene(), false);
+				if(shouldDraw == false) {
+					worldViewUpdate(wv, 2); //2 means send visibility state of worldView
+				}/*else { //is done in preSceneDraw
+					if(wv.getMainWorldProjection()!=null) {
+						worldViewUpdate(wv, 1); //1 means update existing worldview
+					}
+				}*/
+		}
+		//}
 
 		if(config.nullifyDrawCallbacks()) {return;}
 
