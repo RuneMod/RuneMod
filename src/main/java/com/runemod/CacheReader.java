@@ -47,6 +47,8 @@ import java.util.Arrays;
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;
 
+import static com.runemod.RuneModPlugin.myCacheReader;
+import static com.runemod.RuneModPlugin.runeModPlugin;
 import static net.runelite.client.RuneLite.RUNELITE_DIR;
 
 @Slf4j
@@ -144,10 +146,32 @@ public class CacheReader
 					}
 				}
 
+
+
 				if (!hasAnyArchives) {
 					log.debug("Cache indexes are present but contain no archives. Likely still initializing.");
 					return false;
 				}
+
+				{
+					//Early return/fast Checker
+					if (runeModPlugin.appSettings == null)
+					{
+						runeModPlugin.appSettings = runeModPlugin.loadAppSettings();
+					}
+					if (runeModPlugin.appSettings != null)
+					{
+						int[] currentRmCacheHashes = runeModPlugin.appSettings.rsCacheHashes;
+						int[] currentRsCacheHashes = getCurrentHashes();
+						if (Arrays.equals(currentRmCacheHashes, currentRsCacheHashes))
+						{ //if the revision numbers have not changed since last time, then we know cache has not changed so we dont have to wait for a full cache scan.
+							log.debug("Early return on checkIfCacheFullyLoaded");
+							cacheFullyLoaded = true;
+							return true;
+						}
+					}
+				}
+
 
 				int total = 0;
 				int missing = 0;
@@ -284,9 +308,7 @@ public class CacheReader
 
 	public static final int cacheExporterVersion = 1; //I increment this this to force a reexport of rscache. useful for forcing update when the cache exporter is altered.
 
-	public int[] provideRsCacheHashes()
-	{
-		log.debug("provideRsCacheHashes()");
+	public int[] getCurrentHashes() {
 		List<Index> indexes = store.getIndexes();
 		int[] hashes = new int[indexes.size()+1];
 		for (Index index : indexes)
@@ -298,6 +320,14 @@ public class CacheReader
 		}
 
 		hashes[hashes.length-1] = cacheExporterVersion;
+
+		return hashes;
+	}
+
+	public int[] provideRsCacheHashes()
+	{
+		log.debug("provideRsCacheHashes()");
+		int[] hashes = getCurrentHashes();
 
 		Buffer mainBuffer = new Buffer(new byte[(hashes.length * 4) + 12]);
 		mainBuffer.writeInt_Array(hashes, hashes.length);

@@ -39,4 +39,5 @@ public class ApplicationSettings
 	public boolean showFps = false;
 	public float contrast = 1.0f;
 	public boolean disableFog = false;
+	public float fogAmount = 1.0f;
 }
