@@ -5138,6 +5138,37 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			perFramePacket.writeInt(NoTileObjects);
 		}
 
+		//send info about every specialObject every frame
+		int NoSpecialObjects = SpecialObjects_CurFrame.size();
+		perFramePacket.writeShort(NoSpecialObjects);
+		for (Map.Entry<Integer, SpecialObj> entry : SpecialObjects_CurFrame.entrySet()) {
+			hashedEntitys_ThisFrame.add(entry.getKey());
+
+			SpecialObj specialObj = entry.getValue();
+			byte objectType = specialObj.ObjectType; //futureproofer. we can alter code path depending on type
+			int sceneId = specialObj.gameObject.hashCode();
+			short localX = (short) specialObj.gameObject.getX();
+			short localY = (short) specialObj.gameObject.getY();
+			long spotAnimId = specialObj.Id_Custom;
+			short animimationFrameIdx = (short) -1;
+			//if (!shouldDraw) { animimationFrameIdx = -2; }
+			int Z = specialObj.gameObject.getZ();
+			int Orientation = specialObj.gameObject.getOrientation();
+
+
+			perFramePacket.writeByte(objectType);
+			perFramePacket.writeInt(sceneId);
+			perFramePacket.writeShort(specialObj.gameObject.getWorldView().getId());
+			perFramePacket.writeShort(localX);
+			perFramePacket.writeShort(localY);
+			perFramePacket.writeLong(spotAnimId);
+			perFramePacket.writeShort(animimationFrameIdx);
+			perFramePacket.writeShort(Z);
+			perFramePacket.writeShort(Orientation);
+		}
+		SpecialObjects_CurFrame.clear(); //we are done with specialObjects so clear them so its fresh fro next frame
+
+
 		if (hashedEntitys_LastFrame != null)
 		{
 			for (Integer lastFrameHashedEntity : hashedEntitys_LastFrame)
@@ -5150,9 +5181,10 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 				}
 			}
 		}
-		hashedEntitys_LastFrame = hashedEntitys_ThisFrame;
 
 		sharedmem_rm.backBuffer.writePacket(perFramePacket, "PerFramePacket");
+
+		hashedEntitys_LastFrame = hashedEntitys_ThisFrame;
 
 		checkFor_ActorColourOverride_Changes();
 
@@ -5483,6 +5515,14 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		}
 	}
 
+	class SpecialObj {
+		GameObject gameObject;
+		long Id_Custom; //Custom data. Idea is this points to a custom definition we have setup in runemod
+		byte ObjectType;
+	}
+
+	HashMap<Integer, SpecialObj> SpecialObjects_CurFrame = new HashMap<>(); //key is java object hash, value is SpecialObject data
+
 	@Override
 	public void drawTemp(Projection worldProjection, Scene scene, GameObject gameObject, Model m, int orient, int x, int y, int z)
 	{
@@ -5522,9 +5562,44 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 					visibleActors.add(client.getWorldView(worldView).npcs().byIndex(index));
 					npcHeights[index] = y;
 				}
+				else
+				{
+					if(entityType == 5) {
+/*						// index stored in bits [20..51] (32 bits)
+						int index = (int)((tag >> 20) & 0xffffffff);
+
+						// worldView stored in bits [52..63] (12 bits)
+						int worldView = (int)((tag >> 52) & 4095);
+						if(worldView == 4095) {
+							worldView = -1;
+						}
+
+						int plane = (int)(tag >> 14 & 3);
+						int sceney = (int)(tag >> 7 & 127);
+						int scenex = (int)(tag >> 0 & 127);*/
+
+						if(m!=null && m.getVerticesCount() == 42) { //if seems to be heading arrow
+							SpecialObj specialObj = new SpecialObj();
+
+							specialObj.Id_Custom = 25769807520L; //default white arrow id for unhandled cases.
+
+							if(m.getFaceColors1()[60] == 10161) {
+								specialObj.Id_Custom = 25769807521L;//gold arrow spotAnimId
+							}
+							if(m.getFaceColors1()[60] == 92) {
+								specialObj.Id_Custom = 25769807520L;//white arrow spotAnimId
+							}
+
+							specialObj.gameObject = gameObject;
+							specialObj.ObjectType = 14;//14 means spotAnimDef in Runemod
+
+							SpecialObjects_CurFrame.put(gameObject.hashCode(), specialObj);
+						}
+					}
+				}
 			}
 
-				if(entityType == 2) {
+/*				if(entityType == 2) {
 					System.out.println("encountered tileObject (type 2) id: "+gameObject.getId());
 				}
 
@@ -5541,7 +5616,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 				if(entityType > 5) {
 					System.out.println("encountered unknownentitytype (type 5). id: "+gameObject.getId());
-				}
+				}*/
 		}
 	}
 
