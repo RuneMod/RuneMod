@@ -923,7 +923,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	{
 		if (GetActionAnimIfValid_Meth == null) //if the method field wasnt found, use to basic check.
 		{
-			log.debug("GetActionAnimIfValid_Meth is null");
+			log_Timed_Heavy("GetActionAnimIfValid_Meth is null");
 			return actorInstance.getAnimation()!=-1;
 		}
 
@@ -5524,7 +5524,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 				}
 			}
 
-/*				if(entityType == 2) {
+				if(entityType == 2) {
 					System.out.println("encountered tileObject (type 2) id: "+gameObject.getId());
 				}
 
@@ -5541,7 +5541,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 				if(entityType > 5) {
 					System.out.println("encountered unknownentitytype (type 5). id: "+gameObject.getId());
-				}*/
+				}
 		}
 	}
 
