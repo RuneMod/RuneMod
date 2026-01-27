@@ -1472,6 +1472,8 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		if (!sharedmem_rm.backBuffer.isOverFlowed)
 		{
 			WritePerFramePacket(); //we start writing the perframe apcket before unreal has indidcated its started a new frame, for a small performance optimization
+		}else {
+			log.debug("BackBuffer Is Overflowed, not sending perframe packet");
 		}
 
 		log_Timed_Heavy("0");
