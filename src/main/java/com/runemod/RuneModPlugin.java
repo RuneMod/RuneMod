@@ -204,7 +204,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	static RuneModPlugin runeModPlugin;
 	static boolean isShutDown = false;
 
-	private String[] disAllowedDynamicSpawns_Names = {"obstacle pipe", "rail", "stile", "forest", "fence", "rocks", "shortcut", "low wall", "sparkling pool", "Crumbling wall"};
+	private String[] disAllowedDynamicSpawns_Names = {"obstacle pipe", "rail", "stile", "forest", "fence", "rocks", "shortcut", "low wall", "sparkling pool", "Crumbling wall", "Glowing symbol"};
 	private Set<Integer> disAllowedDynamicSpawns = new HashSet<>(); //objdefs in here are not allowed to spawn/despawn except during loading. We have these in order to prevent things like stiles becoming invisible due to being incorporated into the player model. Its bodge, but its the best we can do as we cant tell whether a objdef has been put in a player model, in rl api.
 	boolean initedDisallowedDynamicSpawns = false;
 
@@ -875,11 +875,13 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	}
 
 	boolean send_SpawnChunk_Packet(WorldPoint chunkBase)
-	{ //generally just used to despawn extended chunks.
-		if (activeChunks.contains(chunkBase))
+	{
+
+		//disabled this check for now so that we can skip to chapter in rmrecs without missing out on terrains. Unreal will handle this check, it wont spawn a terrain if its already spawned.
+/*		if (activeChunks.contains(chunkBase))
 		{
 			return false;
-		}
+		}*/
 
 		if(chunkBase.getX()%16!=0 || chunkBase.getY()%16!=0) {return false;} //we only care about subregion, which are every 16 tiles
 
@@ -1045,6 +1047,8 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 					boolean spawnedChunk = send_SpawnChunk_Packet(chunkBase);
 					if (spawnedChunk)
 					{
+						//simulateSpawnEventsForSubRegion(chunkBase);
+						//simulateSpawnEventsForChunk(chunkBase);
 						//simulateSpawnEventsForTile(chunkBase); //pre-spawns some objects. idea is to preload some things, but not too many so as to cause stutter
 						return;
 					}
@@ -3019,7 +3023,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 					{
 						if(action!=null)
 						{
-							if (action.equals("Squeeze-through") || action.equals("Climb-through ") || action.equals("Climb-over") || action.equals("Jump-over") || action.equals("Hop-over") || action.equals("Enter") || action.equals("Climb") || action.equals("Step-into"))
+							if (action.equals("Escape") || action.equals("Touch") || action.equals("Squeeze-through") || action.equals("Climb-through ") || action.equals("Climb-over") || action.equals("Jump-over") || action.equals("Hop-over") || action.equals("Enter") || action.equals("Climb") || action.equals("Step-into"))
 							{
 								log.debug("disallowed dynamic spawn on obj: " + objDef.getName());
 								disAllowedDynamicSpawns.add(i);
