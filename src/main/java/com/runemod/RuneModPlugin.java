@@ -2310,12 +2310,27 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		}*/
 	}
 
+	boolean isKnownBadGpu(String n) { //list of unsupported gpus thant cant run dx12 shadermodel
+		return n.matches(".*\\br(7|9)\\b.*")
+			|| n.contains("m2")
+			|| n.contains("m3")
+			|| n.contains("m360")
+			|| n.contains("hd 7")
+			|| n.contains("hd 6")
+			|| n.contains("hd 5");
+	}
+
 	boolean hasDedicatedGpu() {
 		try
 		{
 			for(String GPU_name : getWindowsGpuNames()) {
 				log.debug("Has Gpu: "+GPU_name);
 				String gpuName_lowCase = GPU_name.toLowerCase();
+
+				if (isKnownBadGpu(gpuName_lowCase)) {
+					continue;
+				}
+
 				if(gpuName_lowCase.contains("amd") || gpuName_lowCase.contains("nvidia")) {
 					return true;
 				}
