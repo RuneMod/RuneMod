@@ -552,56 +552,11 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 	public void muteLoginScreenMusic(boolean mute)
 	{
-		//if(true) {
-			//return;
-		//}
-
-		javax.sound.sampled.Mixer.Info[] mixers = AudioSystem.getMixerInfo();
-
-		for (int i = 0; i < mixers.length; i++)
-		{
-			Mixer.Info mixerInfo = mixers[i];
-			// System.out.println("Mixer Name:" + mixerInfo.getName());
-			Mixer mixer = AudioSystem.getMixer(mixerInfo);
-			Line.Info[] lineinfos = mixer.getTargetLineInfo();
-			for (Line.Info lineinfo : lineinfos)
-			{
-				// System.out.println("line:" + lineinfo);
-				Line line = null;
-				try
-				{
-					line = mixer.getLine(lineinfo);
-					if (line != null)
-					{
-						line.open();
-						if (line.isControlSupported(BooleanControl.Type.MUTE))
-						{
-							BooleanControl bc = (BooleanControl) line.getControl(BooleanControl.Type.MUTE);
-							if (bc != null)
-							{
-								//System.out.println(line.getLineInfo().toString());
-								if (line.getLineInfo().toString().contains("SPEAKER target"))
-								{
-									bc.setValue(mute); // true to mute the line, false to unmute
-									// Implement logic to manage audio settings or mute state
-								}
-							}
-						}
-					}
-				}
-				catch (LineUnavailableException e)
-				{
-					// e.printStackTrace();
-				}
-				finally
-				{
-					if (line != null && line.isOpen())
-					{
-						line.close(); // Ensure the line is closed after use
-					}
-				}
-			}
+		int musicVolume = 255;
+		if(mute) {
+			musicVolume = 0;
 		}
+		client.setMusicVolume(musicVolume);
 	}
 
 	boolean discovered_GetActionAnimIfValid = false;
@@ -2111,11 +2066,13 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			startedWhileLoggedIn = false;
 		}
 
+		muteLoginScreenMusic(true);
 		SwingUtilities.invokeLater(() ->
 		{
+			muteLoginScreenMusic(true);
 			SwingUtilities.invokeLater(() ->
 			{
-				muteLoginScreenMusic(!unrealIsReady);
+				muteLoginScreenMusic(true);
 			});
 		});
 
