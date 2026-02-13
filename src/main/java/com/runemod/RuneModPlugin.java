@@ -204,7 +204,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	static RuneModPlugin runeModPlugin;
 	static boolean isShutDown = false;
 
-	private String[] disAllowedDynamicSpawns_Names = {"obstacle pipe", "rail", "stile", "forest", "fence", "rocks", "shortcut", "low wall", "sparkling pool", "Crumbling wall", "Glowing symbol"};
+	private String[] disAllowedDynamicSpawns_Names = {"obstacle pipe", "rail", "stile", "forest", "fence", "rocks", "shortcut", "low wall", "sparkling pool", "Crumbling wall"/*, "Glowing symbol"*/};
 	private Set<Integer> disAllowedDynamicSpawns = new HashSet<>(); //objdefs in here are not allowed to spawn/despawn except during loading. We have these in order to prevent things like stiles becoming invisible due to being incorporated into the player model. Its bodge, but its the best we can do as we cant tell whether a objdef has been put in a player model, in rl api.
 	boolean initedDisallowedDynamicSpawns = false;
 
@@ -874,14 +874,14 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		System.out.println("De-spawning chunk "+chunkBase);
 	}
 
-	boolean send_SpawnChunk_Packet(WorldPoint chunkBase)
+	boolean send_SpawnChunk_Packet(WorldPoint chunkBase, boolean skipIfInActiveCHunks)
 	{
-
-		//disabled this check for now so that we can skip to chapter in rmrecs without missing out on terrains. Unreal will handle this check, it wont spawn a terrain if its already spawned.
-/*		if (activeChunks.contains(chunkBase))
-		{
-			return false;
-		}*/
+		if(skipIfInActiveCHunks) { //this parameter allows us to force sending chunkspawn packets, even if they are already sent. help rmrec chapter system work properly. no performance impact because unreal only spawns chunks that dont already exist.
+			if (activeChunks.contains(chunkBase))
+			{
+				return false;
+			}
+		}
 
 		if(chunkBase.getX()%16!=0 || chunkBase.getY()%16!=0) {return false;} //we only care about subregion, which are every 16 tiles
 
@@ -1044,7 +1044,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 				if (!isInMainScene)
 				{
-					boolean spawnedChunk = send_SpawnChunk_Packet(chunkBase);
+					boolean spawnedChunk = send_SpawnChunk_Packet(chunkBase, true);
 					if (spawnedChunk)
 					{
 						//simulateSpawnEventsForSubRegion(chunkBase);
@@ -1731,16 +1731,22 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	}*/
 
 	void DespawnServerSpawnedObjs() {
-		for(GameObjectSpawned event: serverSpawnedGameObjects) {
+		for(int i = 0; i < serverSpawnedGameObjects.size(); i++) {
 /*			if(event.getGameObject()!=null) {
 				System.out.println("despawning serverSpawnedObj: "+event.getGameObject().getId());
 			}*/
+			GameObjectSpawned event = serverSpawnedGameObjects.get(i);
 			GameObjectDespawned despawnEvent = new GameObjectDespawned();
 			despawnEvent.setTile(event.getTile());
 			despawnEvent.setGameObject(event.getGameObject());
-			onGameObjectDespawned(despawnEvent);
+			onGameObjectDespawned(despawnEvent, serverSpawnedGameObjects_Tags.get(i));
+/*			if(event.getGameObject().getId() == 26185) {
+				System.out.println("serverSpawnClear for fire with tag: "+serverSpawnedGameObjects_Tags.get(i));
+			}*/
 		}
 		serverSpawnedGameObjects.clear();
+		serverSpawnedGameObjects_Tags.clear();
+		//System.out.println("ClearedServerSpawnedGameObjects");
 	}
 
 	@Override
@@ -1839,7 +1845,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			despawnAllChunks();
 		}
 
-		DespawnServerSpawnedObjs();
+		//DespawnServerSpawnedObjs();
 		//perhaps we need to do this for wall objects too?
 		//despawn any gameobjects spawned by server. This fixes the scenario where a player leaves an area with player lit fires, and then comes back to it to find fire still there when they should be despawned.
 
@@ -1861,7 +1867,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 					continue;
 				}*/
 
-				send_SpawnChunk_Packet(chunkBase);
+				send_SpawnChunk_Packet(chunkBase, false);
 			}
 		}
 	}
@@ -3268,10 +3274,10 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		else if (curGamestate == GameState.LOGGED_IN)
 		{
 			log.debug("logged in...");
+			DespawnServerSpawnedObjs(); //should really add a if was hopping
 		}
 		else if (curGamestate == GameState.HOPPING)
 		{
-			DespawnServerSpawnedObjs();
 			log.debug("hopping...");
 		}
 		else if (curGamestate == GameState.LOADING)
@@ -3802,6 +3808,8 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	boolean eventIsSimulation = false;
 
 	ArrayList<GameObjectSpawned> serverSpawnedGameObjects = new ArrayList<>();
+	ArrayList<Long> serverSpawnedGameObjects_Tags = new ArrayList<>(); //the original tags are stored here. after moving to a new area, old gameObject refs become messed up, so we have to rely on pre-calculated tags, made before the scene was reloaded/rebased.
+
 	@Subscribe
 	private void onGameObjectSpawned(GameObjectSpawned event)
 	{
@@ -3899,11 +3907,13 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 			sharedmem_rm.backBuffer.writePacket(actorSpawnPacket, "ActorSpawn");
 			taggedTileObjects.add(tag);
-			if(!eventIsSimulation && client.getGameState().ordinal()>=GameState.LOGGED_IN.ordinal()) {
-				if(loggedInForNoServerTicks > 1) {
-					if(worldView==-1) { //disabled the server spawned gameObjects restriction on boats, since boats are pretty much always spawned while gamestaste is >= GameState.LOGGED_IN
-						serverSpawnedGameObjects.add(event);
-					}
+			if(!eventIsSimulation && client.getGameState().ordinal()>=GameState.LOGGED_IN.ordinal()/* && loggedInForNoServerTicks > 1*/) {
+				if(worldView==-1) { //disabled the server spawned gameObjects restriction on boats, since boats are pretty much always spawned while gamestaste is >= GameState.LOGGED_IN
+					serverSpawnedGameObjects.add(event);
+					serverSpawnedGameObjects_Tags.add(tag);
+/*					if(event.getGameObject().getId() == 26185) {
+						System.out.println("serverSpawn Add for fire with tag: "+tag);
+					}*/
 				}
 			}
 		//});
@@ -3998,6 +4008,37 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		//});
 	}
 
+	private void onGameObjectDespawned(GameObjectDespawned event, long tag)
+	{
+		if (ticksSincePluginLoad <= 1) { return; }
+
+		if(loggedInForNoServerTicks > 1 && disAllowedDynamicSpawns.contains(event.getGameObject().getId())) {return;}
+		//clientThread.invokeAtTickEnd(() -> //invoking later because baslocation likely hasnt been sent to unreal yet
+		//{
+		Tile tile = event.getTile();
+
+		Buffer actorSpawnPacket = new Buffer(new byte[100]);
+
+		int tilePlane = tile.getRenderLevel();
+
+		int tileX = tile.getSceneLocation().getX();
+		int tileY = tile.getSceneLocation().getY();
+		//long tag = getTag_Unique(event.getGameObject());
+
+		int worldView = event.getGameObject().getWorldView().getId();
+
+		actorSpawnPacket.writeByte(4); //write tileObject data type
+		actorSpawnPacket.writeShort(worldView);
+		actorSpawnPacket.writeByte(tilePlane);
+		actorSpawnPacket.writeShort(tileX);
+		actorSpawnPacket.writeShort(tileY);
+		actorSpawnPacket.writeLong(tag);
+
+		sharedmem_rm.backBuffer.writePacket(actorSpawnPacket, "ActorDeSpawn");
+		taggedTileObjects.remove(tag);
+		//});
+	}
+
 	long Unique = 1000;
 	long getTag_Unique(TileObject tileObject)
 	{
@@ -4036,9 +4077,20 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			instConfig = ((WallObject) tileObject).getConfig();
 		}
 
+/*		int SceneX = (int)(tileObject.getHash() >> 0 & 127);
+		int SceneY = (int)(tileObject.getHash() >> 7 & 127);
+
+		int baseX_ = baseX;
+		int baseY_ = baseY;
+
+		if(!tileObject.getWorldView().isTopLevel()) {
+			baseX_ = tileObject.getWorldView().getScene().getBaseX();
+			baseY_ = tileObject.getWorldView().getScene().getBaseY();
+		}*/
 
 		int worldX = tileObject.getWorldLocation().getX();
 		int worldY = tileObject.getWorldLocation().getY();
+
 
 		int isWallB = 0; //is always 0 for spawn events, because wall b doesnt have its own spawn event. in UE we modify the last be so isWallB is true, when we spawn a wallB
 
@@ -4593,6 +4645,8 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		packet.writeShort(baseY);
 		packet.writeByte(client.getTopLevelWorldView().getPlane());
 		sharedmem_rm.backBuffer.writePacket(packet, "BaseCoordinate");
+
+		//DespawnServerSpawnedObjs();
 		//});
 	}
 
