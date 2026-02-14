@@ -4209,11 +4209,11 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			return;
 		}
 
-		boolean shouldDraw = hooks.draw(event.getNpc(), false);
+/*		boolean shouldDraw = hooks.draw(event.getNpc(), false);
 		if (!shouldDraw)
 		{
 			return;
-		}
+		}*/
 
 		if (!config.spawnNPCs())
 		{
