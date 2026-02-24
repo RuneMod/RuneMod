@@ -211,7 +211,7 @@ public class SharedMemoryManager
 			case "PlaneChanged":
 				dataTypeByte = 26;
 				break;
-			case "RmVisChanged":
+			case "HiddenChunks":
 				dataTypeByte = 27;
 				break;
 			case "BaseCoordinate":

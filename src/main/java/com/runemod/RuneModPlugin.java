@@ -379,6 +379,8 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	@Inject
 	public Gson gson;
 
+	public regionTxtParser regionTxtParser;
+
 	public static float getCurTimeSeconds()
 	{
 		float curT = (float) (((double) System.currentTimeMillis() / 1000.0D) - (1739538139D));
@@ -1807,6 +1809,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 		if(config.nullifyDrawCallbacks()) {return;}
 		sendBaseCoordinatePacket(baseX, baseY, scene); //sends basecoordinate and instance map
+		sendHiddenChunksPacket(scene);
 
 		//spawn chunks in scene
 		for (int x = 0 - 1; x < (Constants.SCENE_SIZE / Constants.CHUNK_SIZE) + 1; ++x)
@@ -1935,6 +1938,8 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		removeRoofsPrevFrame = false;
 
 		canvasAncestor = null;
+
+		regionTxtParser = null;
 
 		storedMaxFps = -1;
 
@@ -2075,6 +2080,8 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 				muteLoginScreenMusic(true);
 			});
 		});
+
+		regionTxtParser = new regionTxtParser();
 
 		canvasAncestor = client.getCanvas().getParent().getParent(); //is "clientPannel" class
 
@@ -3231,6 +3238,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		else if (curGamestate == GameState.LOGGED_IN)
 		{
 			log.debug("logged in...");
+
 			DespawnServerSpawnedObjs(); //should really add a if was hopping
 		}
 		else if (curGamestate == GameState.HOPPING)
@@ -4602,11 +4610,26 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		packet.writeShort(baseY);
 		packet.writeByte(client.getTopLevelWorldView().getPlane());
 		sharedmem_rm.backBuffer.writePacket(packet, "BaseCoordinate");
-
 		//DespawnServerSpawnedObjs();
 		//});
 	}
 
+	//send hidden chunks/chunks in unrelated areas
+	void sendHiddenChunksPacket(Scene scene) {
+		ArrayList<Integer> hiddenChunks = regionTxtParser.getHiddenChunks(scene);
+		Buffer packet = new Buffer(new byte[2000]);
+		packet.writeShort(hiddenChunks.size());
+		for(int i = 0; i < hiddenChunks.size(); i++) {
+			int packed = hiddenChunks.get(i);
+			int cx = packed >> 16;
+			int cy = packed & 0xFFFF;
+			int sceneX = (cx*8)-(baseX);
+			int sceneY = (cy*8)-(baseY);
+			packet.writeShort(sceneX);
+			packet.writeShort(sceneY);
+		}
+		sharedmem_rm.backBuffer.writePacket(packet, "HiddenChunks");
+	}
 /*	private void sendBaseCoordinatePacket()
 	{ //send Base Coordinate if needed
 		sendInstancedAreaState(client.getTopLevelWorldView().getScene());
