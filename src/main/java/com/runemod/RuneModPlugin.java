@@ -212,7 +212,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 	public int overlayColor_LastFrame = 0;
 	public ApplicationSettings appSettings;
-	int sharedMemPixelsUpdatedTick = -1; //used to prevent updating sharedMemory twice in the same tick.
+	//int sharedMemPixelsUpdatedTick = -1; //used to prevent updating sharedMemory twice in the same tick.
 
 	int ticksSincePluginLoad = 0;
 
@@ -1036,9 +1036,9 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		{
 			//if(chunkBase.getX()%16!=0 || chunkBase.getY()%16!=0) {continue;}
 
-			int sceneX = chunkBase.getX() - client.getBaseX();
-			int sceneY = chunkBase.getY() - client.getBaseY();
-			boolean isInMainScene = (sceneX >= 0 - 8 && sceneX < 104 && sceneY >= 0 - 8 && sceneY < 104);
+			int sceneX = chunkBase.getX() - baseX;
+			int sceneY = chunkBase.getY() - baseY;
+			boolean isInMainScene = (sceneX >= 0 - 8 && sceneX <= 104+8 && sceneY >= 0 - 8 && sceneY <= 104+8);
 
 			int playerChunkX = playerLoc.getX() / CHUNK_SIZE;
 			int playerChunkY = playerLoc.getY() / CHUNK_SIZE;
@@ -1259,11 +1259,6 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 				}
 			}
 		});
-
-
-		if(client.getLocalPlayer()!=null){
-			calcWorldVisibility();
-		}
 
 		//}
 
@@ -1608,7 +1603,11 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 				}
 			}
 
-			communicateWithUnreal("drawScene");
+			communicateWithUnreal("draw");
+
+			if(client.getLocalPlayer()!=null){ //we do this on next fram
+				calcWorldVisibility();
+			}
 			visibleActors.clear();
 			tilesWithAnimateGameObjects.clear();
 			AnimatedTileObjects.clear();
@@ -1689,14 +1688,15 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 	void DespawnServerSpawnedObjs() {
 		for(int i = 0; i < serverSpawnedGameObjects.size(); i++) {
-/*			if(event.getGameObject()!=null) {
-				System.out.println("despawning serverSpawnedObj: "+event.getGameObject().getId());
-			}*/
 			GameObjectSpawned event = serverSpawnedGameObjects.get(i);
 			GameObjectDespawned despawnEvent = new GameObjectDespawned();
 			despawnEvent.setTile(event.getTile());
 			despawnEvent.setGameObject(event.getGameObject());
+
 			onGameObjectDespawned(despawnEvent, serverSpawnedGameObjects_Tags.get(i));
+
+			System.out.println("despawning serverSpawnedObj: "+event.getGameObject().getId());
+
 /*			if(event.getGameObject().getId() == 26185) {
 				System.out.println("serverSpawnClear for fire with tag: "+serverSpawnedGameObjects_Tags.get(i));
 			}*/
@@ -2138,7 +2138,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	int storedMaxFps = -1;
 	public void setMaxFps(int maxFps) {
 		if (maxFps < 50) { maxFps = 50; }
-		if(maxFps > 120) {maxFps = 120;}
+		if(maxFps > 90) {maxFps = 90;}
 		if(storedMaxFps!=maxFps) {
 			if(maxFps > 50) {
 				client.setUnlockedFps(true);
@@ -3083,17 +3083,17 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		}
 
 		LocalPoint lp = client.getLocalPlayer().getLocalLocation();
-		int x_ = (lp.getX()) / 128;
-		int y_ = (lp.getY()) / 128;
-		WorldPoint playerLocation = WorldPoint.fromScene(client, x_, y_, client.getPlane());
+		int sceneX = (lp.getX()) / 128;
+		int sceneY = (lp.getY()) / 128;
+		WorldPoint playerLocation = WorldPoint.fromScene(client, sceneX, sceneY, client.getPlane());
+
+		boolean isInMainScene = (sceneX >= 0 && sceneX < 104 && sceneY >= 0 && sceneY < 104); //prevents weird crash when logging into sailing
+		if(!isInMainScene) {
+			return;
+		}
 
 		//WorldPoint playerLocation = WorldPoint.fromLocal(client, client.getLocalPlayer().getLocalLocation());
 		boolean playerHasMoved = !playerLocation.equals(playerLocation_prevTick);
-
-		if(playerHasMoved) {
-			//System.out.println("playerHasMoved");
-			playerLocation_prevTick = playerLocation;
-		}
 
 		if(!playerHasMoved && worldVisibilityCalcedTick==client.getTickCount()) { //we only calc visibility if the player has moved tile or the server has ticked.
 			return;
@@ -3150,6 +3150,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		if(exteriorVisibility_Prev != exteriorVisibility) { //we dont send the visibility packet if the visibility hasnt changed
 			exteriorVisibility_Prev = exteriorVisibility;
 		}else {
+			playerLocation_prevTick = playerLocation;
 			return;
 		}
 
@@ -3172,6 +3173,8 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			visibilityBlendTime = 0;
 		}
 		packet.writeShort((short)visibilityBlendTime);
+
+		playerLocation_prevTick = playerLocation;
 
 		//log.debug("visibilityBlendTime: " + visibilityBlendTime);
 
@@ -3970,6 +3973,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 			sharedmem_rm.backBuffer.writePacket(actorSpawnPacket, "ActorDeSpawn");
 			taggedTileObjects.remove(tag);
+			//System.out.println("gameObjDespawned");
 		//});
 	}
 
@@ -4001,6 +4005,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 		sharedmem_rm.backBuffer.writePacket(actorSpawnPacket, "ActorDeSpawn");
 		taggedTileObjects.remove(tag);
+		//System.out.println("gameObjDespawned_ExplicitTag");
 		//});
 	}
 
@@ -4514,10 +4519,12 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		{
 			return;
 		}
-		if (sharedMemPixelsUpdatedTick == client.getGameCycle())
+/*		if (sharedMemPixelsUpdatedTick == client.getGameCycle())
 		{
 			return;
 		}
+		sharedMemPixelsUpdatedTick = client.getGameCycle();*/
+
 		if (!client.getCanvas().isShowing())
 		{
 			return;
@@ -4529,7 +4536,6 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			UpdateUiPosOffsets();
 		//});
 
-		sharedMemPixelsUpdatedTick = client.getGameCycle();
 		final BufferProvider bufferProvider = client.getBufferProvider();
 
 		int bufferWidth = bufferProvider.getWidth();
