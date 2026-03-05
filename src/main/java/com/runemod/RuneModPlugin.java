@@ -968,7 +968,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 		try
 		{
-			return GetActionAnimIfValid_Meth.invoke(actorInstance,-382482659)!=null;
+			return GetActionAnimIfValid_Meth.invoke(actorInstance,garbageVal)!=null;
 		}
 		catch (InvocationTargetException | IllegalAccessException e)
 		{
