@@ -47,6 +47,7 @@ import java.io.InputStreamReader;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -90,6 +91,11 @@ import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.plugins.PluginInstantiationException;
 import net.runelite.client.plugins.PluginManager;
 import net.runelite.client.ui.ClientUI;
+import org.objectweb.asm.*;
+import org.objectweb.asm.tree.*;
+
+import java.io.InputStream;
+import java.lang.reflect.Method;
 
 import javax.inject.Inject;
 import java.awt.Container;
@@ -563,6 +569,74 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 	boolean discovered_GetActionAnimIfValid = false;
 	private Method GetActionAnimIfValid_Meth = null;
+	int garbageVal = 0;
+
+	public static Integer findGarbageParam(Class<?> clazz, String methodName) throws Exception
+	{
+		String resource = clazz.getName().replace('.', '/') + ".class";
+		InputStream in = clazz.getClassLoader().getResourceAsStream(resource);
+
+		ClassReader reader = new ClassReader(in);
+		ClassNode node = new ClassNode();
+		reader.accept(node, 0);
+
+		for (MethodNode m : node.methods)
+		{
+			if (!m.name.equals(methodName))
+				continue;
+
+			AbstractInsnNode insn = m.instructions.getFirst();
+
+			while (insn != null)
+			{
+				if (insn.getOpcode() == Opcodes.ILOAD)
+				{
+					AbstractInsnNode ldcNode = insn.getNext();
+
+					if (ldcNode instanceof LdcInsnNode)
+					{
+						LdcInsnNode ldc = (LdcInsnNode) ldcNode;
+
+						if (ldc.cst instanceof Integer)
+						{
+							AbstractInsnNode cmp = ldcNode.getNext();
+
+							if (cmp != null &&
+								(cmp.getOpcode() == Opcodes.IF_ICMPNE ||
+									cmp.getOpcode() == Opcodes.IF_ICMPEQ))
+							{
+								AbstractInsnNode next = cmp.getNext();
+
+								if (next != null && next.getOpcode() == Opcodes.NEW)
+								{
+									AbstractInsnNode afterNew = next.getNext();
+
+									if (afterNew != null && afterNew.getOpcode() == Opcodes.DUP)
+									{
+										AbstractInsnNode throwNode = afterNew.getNext();
+
+										while (throwNode != null)
+										{
+											if (throwNode.getOpcode() == Opcodes.ATHROW)
+											{
+												return (Integer) ldc.cst;
+											}
+											throwNode = throwNode.getNext();
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+
+				insn = insn.getNext();
+			}
+		}
+
+		return null;
+	}
+
 	public void discoverField_ActionAnimValid()
 	{
 		if(discovered_GetActionAnimIfValid) {return;}
@@ -572,7 +646,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 		if (actor == null)
 		{
-			System.out.println("Actor is null.");
+			System.out.println("Actor is null, cant discover field");
 			return;
 		}
 
@@ -584,9 +658,10 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		List<Method> candidates = new ArrayList<>();
 		for (Method m : declared)
 		{
-			// Filter: zero parameters and non-void return and return types who have Object as class (animationSequence class is toplevel so "Object" is it's superclass
-			if (m.getParameterCount() == 0 && m.getReturnType() != void.class && m.getReturnType().getSuperclass()==Object.class) //added m.getReturnType().getSuperclass()==Object.class but not 100% sure about it
+			// Filter: the sequence does not define itself as public zero parameters and non-void return and return types who have Object as class (AnimationSequence class is toplevel so "Object" is it's superclass)
+			if (!Modifier.isPublic(m.getModifiers()) && !Modifier.isStatic(m.getModifiers()) && m.getParameterCount() == 1 && m.getReturnType() != void.class && m.getReturnType().getSuperclass()==Object.class) //added m.getReturnType().getSuperclass()==Object.class but not 100% sure about it
 			{
+				System.out.println("adding candidate who returns object of type: "+m.getReturnType().getName()+" funcName: "+m.getName());
 				candidates.add(m);
 			}
 		}
@@ -596,35 +671,35 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			System.out.printf("Testing %d no-arg non-void methods on class %s%n", candidates.size(), actorClass.getName());
 		}
 
-		// Test each candidate method individually to avoid interference
+		// Test each candidate method individually
 		for (Method m : candidates)
 		{
 			try
 			{
 				m.setAccessible(true);
 
-				// invoke before calling setAnimation(855)
+				garbageVal = findGarbageParam(actorClass, m.getName());
+				System.out.println("testing method + "+m.getName() + " with garbage val: "+garbageVal);
+				// see if func return null when anim is set to null
 				Object before = null;
 				try
 				{
-					before = m.invoke(actor);
+					before = m.invoke(actor, garbageVal);
 				}
 				catch (InvocationTargetException ite)
 				{
-					// If the method throws, skip it (it likely isn't the one)
+					// If the method throws, skip it
 					System.out.printf("Method %s threw before invocation: %s%n", m.getName(), ite.getCause());
 					continue;
 				}
 
-				// Call API to set animation. This is your known call that makes the AnimationSequence appear.
-				// This uses the RuneLite API method directly.
-				actor.setAnimation(855);
+				// Set animation to a non-null anim
+				actor.setAnimation(442);
 
-				// invoke after
 				Object after = null;
 				try
 				{
-					after = m.invoke(actor);
+					after = m.invoke(actor, garbageVal);
 				}
 				catch (InvocationTargetException ite)
 				{
@@ -634,31 +709,29 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 					continue;
 				}
 
-				// Heuristic: before == null and after != null
+				// condition for picking a candidate: before setting valid anim = Null and after setting valid anim = Not Null
 				if (before == null && after != null)
 				{
 					Class<?> retClass = after.getClass();
 
-					boolean topLevelSuperclass = retClass.getSuperclass() == Object.class;
-					int declaredFieldCount = retClass.getDeclaredFields().length;
+					boolean superclassIsObject = retClass.getSuperclass() == Object.class;
+					//int declaredFieldCount = retClass.getDeclaredFields().length;
 
-					System.out.printf("Candidate method %s matched null->non-null. Return type runtime: %s, declaredFields=%d, superclass=%s%n",
-						m.getName(), retClass.getName(), declaredFieldCount,
-						retClass.getSuperclass() == null ? "null" : retClass.getSuperclass().getName());
+					System.out.printf("Candidate method %s matched null->non-null. Return type runtime: %s, superclass=%s%n",
+						m.getName(), retClass.getName(), retClass.getSuperclass() == null ? "null" : retClass.getSuperclass().getName());
 
-					// Additional heuristic checks — tune as necessary
-					if (topLevelSuperclass && declaredFieldCount >= minFieldCount)
+					if (superclassIsObject)
 					{
-						System.out.printf("Selected method %s from class %s as probable match.%n", m.getName(), actorClass.getName());
+						System.out.printf("Selected method %s from class %s as probable match. ReturnType: %s%n", m.getName(), actorClass.getName(), m.getReturnType().getName());
 						// Optionally reset animation to 0 (clean up)
 						try { actor.setAnimation(-1); } catch (Throwable t) {}
 						GetActionAnimIfValid_Meth = m;
-						return;
+						//return;
 					}
 					else
 					{
-						System.out.printf("Method %s passed null->non-null but failed extra heuristics (topLevel=%b, fields=%d >= %d).%n",
-							m.getName(), topLevelSuperclass, declaredFieldCount, minFieldCount);
+						System.out.printf("Method %s passed null->non-null but failed extra heuristics (topLevel=%b).%n",
+							m.getName(), superclassIsObject, minFieldCount);
 					}
 				}
 
@@ -676,7 +749,10 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			}
 		}
 
-		System.out.println("No matching method found using heuristics.");
+		if(GetActionAnimIfValid_Meth == null) {
+			System.out.println("No matching method found.");
+		}
+
 		return;
 	}
 
@@ -892,7 +968,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 		try
 		{
-			return GetActionAnimIfValid_Meth.invoke(actorInstance)!=null;
+			return GetActionAnimIfValid_Meth.invoke(actorInstance,-382482659)!=null;
 		}
 		catch (InvocationTargetException | IllegalAccessException e)
 		{
@@ -926,6 +1002,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		}*/
 
 		discoverField_ActionAnimValid();
+
 
 		if(config.reduceFpsWhenIdle()) {
 			if(storedMaxFps != 50 && client.getTickCount()%6 == 0) {
