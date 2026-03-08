@@ -30,6 +30,7 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import javax.inject.Singleton;
@@ -52,7 +53,7 @@ class regionTxtParser
 	}
 
 	public static class ChunkGroup { //groups of chunks that should be visible when we are located inside the group
-		ArrayList<Integer> chunks = new ArrayList<>(); //perhaps should be A set, for fast contains() calls.
+		HashSet<Integer> chunks = new HashSet<>(); //perhaps should be A set, for fast contains() calls.
 	}
 
 	public static final ArrayList<ChunkGroup> chunkGroups = new ArrayList<>();
@@ -156,39 +157,36 @@ class regionTxtParser
 					case 'c':
 					case 'C':
 					{
-						int baseChunkX = rx1;
-						int baseChunkY = ry1;
+						int regionChunkX = rx1 * 8;
+						int regionChunkY = ry1 * 8;
 
-						int tileX = baseChunkX * 64;
-						int tileY = baseChunkY * 64;
-
-						int tx1, ty1, tx2, ty2;
+						int cx1, cy1, cx2, cy2;
 
 						if (ch == 'c')
 						{
-							tx1 = tx2 = tileX + Integer.parseInt(matcher.group("cx"));
-							ty1 = ty2 = tileY + Integer.parseInt(matcher.group("cy"));
+							cx1 = cx2 = Integer.parseInt(matcher.group("cx"));
+							cy1 = cy2 = Integer.parseInt(matcher.group("cy"));
 						}
 						else
 						{
-							tx1 = tileX + Integer.parseInt(matcher.group("cx1"));
-							ty1 = tileY + Integer.parseInt(matcher.group("cy1"));
-							tx2 = tileX + Integer.parseInt(matcher.group("cx2"));
-							ty2 = tileY + Integer.parseInt(matcher.group("cy2"));
+							cx1 = Integer.parseInt(matcher.group("cx1"));
+							cy1 = Integer.parseInt(matcher.group("cy1"));
+							cx2 = Integer.parseInt(matcher.group("cx2"));
+							cy2 = Integer.parseInt(matcher.group("cy2"));
 						}
 
-						int chunkX1 = tx1 / 8;
-						int chunkY1 = ty1 / 8;
-						int chunkX2 = tx2 / 8;
-						int chunkY2 = ty2 / 8;
-
-						for (int cx = chunkX1; cx <= chunkX2; cx++)
+						for (int dx = cx1; dx <= cx2; dx++)
 						{
-							for (int cy = chunkY1; cy <= chunkY2; cy++)
+							for (int dy = cy1; dy <= cy2; dy++)
 							{
-								AddChunkToGroup(cx, cy, currentGroupIdx);
+								AddChunkToGroup(
+									regionChunkX + dx,
+									regionChunkY + dy,
+									currentGroupIdx
+								);
 							}
 						}
+
 						break;
 					}
 				}
