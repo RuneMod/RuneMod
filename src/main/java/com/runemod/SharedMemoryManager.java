@@ -241,6 +241,9 @@ public class SharedMemoryManager
 			case "WorldViewUpdate":
 				dataTypeByte = 36;
 				break;
+			case "SpawnModel":
+				dataTypeByte = 37;
+				break;
 			default:
 				log.debug("no opcode match for packet '"+dataType+"'");
 				break;
@@ -338,8 +341,9 @@ public class SharedMemoryManager
 		SharedMemoryName = sharedMemoryName;
 		SharedMemoryDataSize = sharedMemorySize;
 
-		backBuffer = new Buffer(new byte[10000000]); //10mb backbuffer.
-		log.debug("Created backbuffer with Size: " + (float) 10000000 / 1000000.0 + "MB");
+
+		backBuffer = new Buffer(new byte[20000000]); //20mb backbuffer.
+		log.debug("Created backbuffer with Size: " + (float) 20000000 / 1000000.0 + "MB");
 	}
 
 	public boolean CreateNamedEvents()

@@ -58,11 +58,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import javax.sound.sampled.AudioSystem;
-import javax.sound.sampled.BooleanControl;
-import javax.sound.sampled.Line;
-import javax.sound.sampled.LineUnavailableException;
-import javax.sound.sampled.Mixer;
 import javax.swing.JComponent;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
@@ -95,7 +90,6 @@ import org.objectweb.asm.*;
 import org.objectweb.asm.tree.*;
 
 import java.io.InputStream;
-import java.lang.reflect.Method;
 
 import javax.inject.Inject;
 import java.awt.Container;
@@ -569,7 +563,169 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 	boolean discovered_GetActionAnimIfValid = false;
 	private Method GetActionAnimIfValid_Meth = null;
-	int garbageVal = 0;
+	int GetActionAnimIfValid_GarbageVal = 1;
+
+
+
+	public Field pitchField;
+	public int pitch_GarbageVal = 1;
+
+	@SneakyThrows
+	public int discoverField_ProjectilePitch(Projectile projectile)
+	{
+		Class<?> clazz = projectile.getClass();
+		ClassNode projectileClass = getClassNode(clazz);
+
+		for (MethodNode method : projectileClass.methods)
+		{
+			//System.out.println("testing method "+method.name);
+			for (AbstractInsnNode insn : method.instructions)
+			{
+				if (!(insn instanceof MethodInsnNode))
+					continue;
+
+				MethodInsnNode call = (MethodInsnNode) insn;
+
+				// Look for Math.atan2(double,double)
+				if (!call.owner.equals("java/lang/Math") ||
+					!call.name.equals("atan2") ||
+					!call.desc.equals("(DD)D"))
+					continue;
+
+				AbstractInsnNode cursor = insn.getNext();
+
+				while (cursor != null)
+				{
+					if (cursor instanceof FieldInsnNode)
+					{
+						FieldInsnNode f = (FieldInsnNode) cursor;
+
+						if (f.getOpcode() == Opcodes.PUTFIELD &&
+							f.owner.equals(projectileClass.name) &&
+							f.desc.equals("I"))
+						{
+							String fieldName = f.name;
+
+							pitchField = clazz.getDeclaredField(fieldName);
+							pitchField.setAccessible(true);
+
+							int stored = pitchField.getInt(projectile);
+
+							FieldNode fieldNode = null;
+							for (FieldNode fn : projectileClass.fields)
+							{
+								if (fn.name.equals(fieldName))
+								{
+									fieldNode = fn;
+									break;
+								}
+							}
+
+							Integer multiplier = discoverMultiplier(projectileClass, fieldName);
+
+							pitch_GarbageVal = multiplier;
+
+							int pitch = (stored * pitch_GarbageVal);
+
+							System.out.println("Found projectile pitch field: " + fieldName + " pitchVal=" + pitch +" garbageVal: "+ pitch_GarbageVal);
+
+							return pitch;
+						}
+					}
+
+					cursor = cursor.getNext();
+				}
+			}
+		}
+
+		System.out.println("Error - Projectile pitch field not found");
+		return -1;
+	}
+
+	@SneakyThrows
+	public static ClassNode getClassNode(Class<?> clazz)
+	{
+		String classFile = clazz.getName().replace('.', '/') + ".class";
+
+		InputStream in = clazz.getClassLoader().getResourceAsStream(classFile);
+
+		if (in == null)
+		{
+			throw new RuntimeException("Could not load class bytes for " + clazz.getName());
+		}
+
+		ClassReader reader = new ClassReader(in);
+
+		ClassNode node = new ClassNode();
+		reader.accept(node, ClassReader.SKIP_DEBUG);
+
+		return node;
+	}
+
+	public static Integer discoverMultiplier(ClassNode clazz, String fieldName)
+	{
+		for (MethodNode method : clazz.methods)
+		{
+			for (AbstractInsnNode insn = method.instructions.getFirst();
+				 insn != null;
+				 insn = insn.getNext())
+			{
+				if (insn instanceof FieldInsnNode)
+				{
+					FieldInsnNode field = (FieldInsnNode) insn;
+
+					if (field.getOpcode() == Opcodes.GETFIELD && field.name.equals(fieldName))
+					{
+						AbstractInsnNode cursor = insn.getNext();
+
+						while (cursor != null)
+						{
+							if (cursor.getOpcode() == Opcodes.IMUL)
+							{
+								AbstractInsnNode prev = cursor.getPrevious();
+
+								while (prev != null)
+								{
+									if (prev instanceof LdcInsnNode)
+									{
+										Object cst = ((LdcInsnNode) prev).cst;
+										if (cst instanceof Integer)
+										{
+											return (Integer) cst;
+										}
+									}
+
+									if (prev instanceof IntInsnNode)
+									{
+										return ((IntInsnNode) prev).operand;
+									}
+
+									prev = prev.getPrevious();
+								}
+							}
+
+							if (cursor instanceof FieldInsnNode || cursor instanceof MethodInsnNode)
+								break;
+
+							cursor = cursor.getNext();
+						}
+					}
+				}
+			}
+		}
+
+		return null;
+	}
+
+	@SneakyThrows
+	public int getProjectilePitch(Projectile p)
+	{
+		if(pitchField == null) {
+			discoverField_ProjectilePitch(p);
+		}
+
+		return (pitchField.getInt(p) * pitch_GarbageVal);
+	}
 
 	public static Integer findGarbageParam(Class<?> clazz, String methodName) throws Exception
 	{
@@ -678,13 +834,13 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			{
 				m.setAccessible(true);
 
-				garbageVal = findGarbageParam(actorClass, m.getName());
-				System.out.println("testing method + "+m.getName() + " with garbage val: "+garbageVal);
+				GetActionAnimIfValid_GarbageVal = findGarbageParam(actorClass, m.getName());
+				System.out.println("testing method + "+m.getName() + " with garbage val: "+ GetActionAnimIfValid_GarbageVal);
 				// see if func return null when anim is set to null
 				Object before = null;
 				try
 				{
-					before = m.invoke(actor, garbageVal);
+					before = m.invoke(actor, GetActionAnimIfValid_GarbageVal);
 				}
 				catch (InvocationTargetException ite)
 				{
@@ -699,7 +855,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 				Object after = null;
 				try
 				{
-					after = m.invoke(actor, garbageVal);
+					after = m.invoke(actor, GetActionAnimIfValid_GarbageVal);
 				}
 				catch (InvocationTargetException ite)
 				{
@@ -722,7 +878,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 					if (superclassIsObject)
 					{
-						System.out.printf("Selected method %s from class %s as probable match. ReturnType: %s%n", m.getName(), actorClass.getName(), m.getReturnType().getName());
+						System.out.printf("discovered and Selected method %s from class %s as probable match. ReturnType: %s%n", m.getName(), actorClass.getName(), m.getReturnType().getName());
 						// Optionally reset animation to 0 (clean up)
 						try { actor.setAnimation(-1); } catch (Throwable t) {}
 						GetActionAnimIfValid_Meth = m;
@@ -750,7 +906,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		}
 
 		if(GetActionAnimIfValid_Meth == null) {
-			System.out.println("No matching method found.");
+			System.out.println("unable to discover GetActionAnimIfValid_Meth");
 		}
 
 		return;
@@ -785,14 +941,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		}*/
 	}
 
-	@SneakyThrows
-	void mapObfuscatedAnimValues()
-	{
-
-	}
-
 	int loggedInForNoServerTicks = 0; //used to disallow certain dynamic spawns while logged in, which we do as a way to prevent objects such as stiles despawning when you hop them.
-
 
 	private static final int CHUNK_SIZE = Constants.CHUNK_SIZE; //8
 
@@ -865,7 +1014,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 	public void simulateSpawnEventsForSubRegion(WorldPoint subRegionBase)
 	{
-		log.debug("spawning extended tile objects for chunk:  " + subRegionBase);
+		log.debug("spawning extended tile objects for subRegion:  " + subRegionBase);
 
 		int baseX = subRegionBase.getX();
 		int baseY = subRegionBase.getY();
@@ -880,7 +1029,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 				{
 					WorldPoint tileWorldPoint = new WorldPoint(baseX + dx, baseY + dy, plane);
 					Tile tile = getExtendedSceneTileFromWorldPoint(tileWorldPoint);
-					simulateTilObjectSpawns(tile);
+					simulateSomeTilObjectSpawns(tile);
 				}
 			}
 		}
@@ -951,6 +1100,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 		sharedmem_rm.backBuffer.writePacket(actorSpawnPacket, "ActorSpawn");
 		System.out.println("spawning chunk "+chunkBase);
+
 		return true;
 	}
 
@@ -968,7 +1118,13 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 		try
 		{
-			return GetActionAnimIfValid_Meth.invoke(actorInstance,garbageVal)!=null;
+			boolean valid = GetActionAnimIfValid_Meth.invoke(actorInstance, GetActionAnimIfValid_GarbageVal)!=null;
+/*			if(actorInstance.getName().contains("dorvis")) {
+				if(valid == false) {
+					System.out.println("vard action anim valid = false");
+				}
+			}*/
+			return valid;
 		}
 		catch (InvocationTargetException | IllegalAccessException e)
 		{
@@ -1000,6 +1156,12 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 				}
 			}
 		}*/
+
+		String typed = client.getVarcStrValue(VarClientStr.CHATBOX_TYPED_TEXT);
+		if(typed.equalsIgnoreCase("send")) {
+			client.setVarcStrValue(VarClientStr.CHATBOX_TYPED_TEXT,"");
+			spawn_All_SubRegionModels();
+		}
 
 		discoverField_ActionAnimValid();
 
@@ -1252,8 +1414,6 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			client.setCameraYawTarget(client.getCameraYaw() + 1);
 		}
 
-		mapObfuscatedAnimValues();
-
 		//check if rscache is currently being updated.
 		if (!isCacheFullyLoaded && client.getGameState().ordinal() >= GameState.LOGIN_SCREEN.ordinal() && client.getGameCycle() % 20 == 0)
 		{
@@ -1325,12 +1485,12 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		clientThread.invokeAtTickEnd(() -> {
 			if (ticksSinceLoadScene > 300 && !isInstanced)
 			{
-				if (gameCycle_50fps % 10 == 0)
+				if (gameCycle_50fps % 8 == 0)
 				{
 					processExtendedChunkSpawnTask();
 
 				}
-				if ((gameCycle_50fps-4) % 10 == 0) //staggers despawn so it happens a few frames after spawn task
+				if ((gameCycle_50fps-4) % 8 == 0) //staggers despawn so it happens a few frames after spawn task
 				{
 					processExtendedChunkDespawnTask();
 				}
@@ -2392,6 +2552,267 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		return false;
 	}
 
+	void spawn_All_SubRegionModels() {
+		for(int dx = -36; dx < (104+36); dx+=16) {
+			for(int dy = -36; dy < (104+36); dy+=16) {
+				int chunkX = baseX+dx;
+				int chunkY = baseY+dy;
+
+				boolean isInMainScene = (dx >= 0 && dx < 104 && dy >= 0 && dy < 104); //prevents weird crash when logging into sailing
+
+				if(!isInMainScene) {
+					WorldPoint chunkBase = new WorldPoint(chunkX, chunkY, 0);
+					spawn_A_SubRegionModels(chunkBase);
+				}
+			}
+		}
+	}
+
+	void spawn_A_SubRegionModels(WorldPoint chunkBase) {
+		SwingUtilities.invokeLater(() -> {
+			Tile[][][] tiles = client.getScene().getExtendedTiles();
+			FastModel fastModel = new FastModel();
+			int chunkBaseX = chunkBase.getX();
+			int chunkBaseY = chunkBase.getY();
+
+			int chunkLocalX = (chunkBaseX-baseX)*128;
+			int chunkLocalY = (chunkBaseY-baseY)*128;
+
+			for (int z = 0; z < 4; z++)
+			{
+				for (int x = 0; x < 16; x++)
+				{
+					for (int y = 0; y < 16; y++)
+					{
+						//WorldPoint tileWorldPoint = new WorldPoint(chunkBaseX+x, chunkBaseY+y, z);
+
+						// Convert world coordinates to extended scene coordinates
+
+						int sceneX_extended = ((chunkBaseX+x) - baseX) + SCENE_OFFSET;
+						int sceneY_extended = ((chunkBaseY+y) - baseY) + SCENE_OFFSET;
+
+						int arrXLen = tiles[0].length;
+						int arrYLen = tiles[0][0].length;
+						if (sceneX_extended < 0 || sceneX_extended >= arrXLen || sceneY_extended < 0 || sceneY_extended >= arrYLen)
+						{
+							continue;
+						}
+
+						Tile tile = tiles[z][sceneX_extended][sceneY_extended];
+
+						if(tile==null) {
+							continue;
+						}
+
+		/*				if(tile.getSceneTilePaint()!=null || tile.getSceneTileModel()!=null) {
+							intVec3[] tilePoints = new intVec3[6];
+							intVec3 pointA = intVec3(0,tile.)
+							fastModel.AddPoints()
+						}*/
+
+						{
+							WallObject object = tile.getWallObject();
+							if (object != null)
+							{
+								if (object.getRenderable1() != null)
+								{
+									fastModel.AddRenderable(object.getRenderable1(), object.getX() - 64 - chunkLocalX, object.getY() - 64 - chunkLocalY, object.getZ(), 0);
+								}
+								if (object.getRenderable2() != null)
+								{
+									fastModel.AddRenderable(object.getRenderable2(), object.getX() - 64 - chunkLocalX, object.getY() - 64 - chunkLocalY, object.getZ(), 0);
+								}
+							}
+						}
+
+						{
+							GameObject[] gameObjects = tile.getGameObjects();
+							for (GameObject object : gameObjects)
+							{
+								if(object!= null && object.getRenderable()!=null) {
+									fastModel.AddRenderable(object.getRenderable(), object.getX() - 64 - chunkLocalX, object.getY() - 64 - chunkLocalY, object.getZ(), 0);
+								}
+							}
+						}
+					}
+				}
+			}
+
+			fastModel.BuildMerged();
+
+			send_SpawnModel_Packet(fastModel, 0,chunkBase.getX(), chunkBase.getY(),0);
+		});
+	}
+
+	class FastModelPart {
+		float[] verticesX;
+		float[] verticesY;
+		float[] verticesZ;
+		int[] faceIndices1;
+		int[] faceIndices2;
+		int[] faceIndices3;
+
+		int x;
+		int y;
+		int Height;
+		int Orientation;
+
+		FastModelPart(Model model, int x_, int y_, int Height_, int Orientation_) {
+			verticesX = model.getVerticesX();
+			verticesY = model.getVerticesY();
+			verticesZ = model.getVerticesZ();
+			faceIndices1 = model.getFaceIndices1();
+			faceIndices2 = model.getFaceIndices2();
+			faceIndices3 = model.getFaceIndices3();
+
+			x = x_;
+			y = y_;
+			Height = Height_;
+			Orientation = Orientation_;
+		}
+
+		FastModelPart(intVec3[] points, int x_, int y_, int Height_, int Orientation_)
+		{
+			int noVerts = points.length;
+			verticesX = new float[noVerts];
+			verticesY = new float[noVerts];
+			verticesZ = new float[noVerts];
+
+			for(int vertIdx = 0; vertIdx < noVerts; vertIdx++) {
+				verticesX[vertIdx] = points[vertIdx].x;
+				verticesY[vertIdx] = points[vertIdx].y;
+				verticesZ[vertIdx] = points[vertIdx].z;
+			}
+
+			x = x_; //localX
+			y = y_; //local
+			Height = Height_;
+			Orientation = Orientation_;
+		}
+	}
+
+	class FastModel{ //a type of model with a simple structure. every triangle is separate, and correctly ordered. As such, the indices are simply 1,2,3,4,5,6,7,8 etc....
+		ArrayList<FastModelPart> models = new ArrayList<>();
+
+		short[] VerticesX;
+		short[] VerticesY;
+		short[] VerticesZ;
+
+		int VerticesCount;
+		int FaceCount;
+
+		void AddPoints(intVec3[] points, int x, int y, int heightPos, int orient) {
+			FastModelPart fastModelPart = new FastModelPart(points, x, y, heightPos, orient);
+			models.add(fastModelPart);
+		}
+
+		void AddRenderable(Renderable renderable, int x, int y, int heightPos, int orient) {
+			if (renderable instanceof Model)
+			{
+				Model model = (Model) renderable;
+				if(model!=null)
+				{
+					FastModelPart fastModelPart = new FastModelPart(model, x, y, heightPos, orient);
+					models.add(fastModelPart);
+				}
+			}
+			else if (renderable instanceof DynamicObject)
+			{
+				Model model = ((DynamicObject) renderable).getModelZbuf();
+				if(model!=null) {
+					FastModelPart fastModelPart = new FastModelPart(model, x, y, heightPos, orient);
+					models.add(fastModelPart);
+				}
+			}
+		}
+
+		void BuildMerged() {
+			FaceCount = 0;
+			int noModels = 0;
+			for(FastModelPart model : models) {
+				if(model==null) {continue;}
+				FaceCount+=model.faceIndices1.length;
+				noModels++;
+			}
+			System.out.println("making FastModel with "+FaceCount+" faces, made from "+noModels+ " models");
+			VerticesCount=FaceCount*3;
+
+			VerticesX = new short[VerticesCount];
+			VerticesY = new short[VerticesCount];
+			VerticesZ = new short[VerticesCount];
+
+			int vertIndex = -1;
+
+			int i = -1;
+			for(FastModelPart model : models) {
+				i++;
+				if(model==null) {continue;}
+				float[] verticesX_ = model.verticesX;
+				float[] verticesY_ = model.verticesY;
+				float[] verticesZ_ = model.verticesZ;
+
+
+				//models_y and  models_Height should perhaps be swapped
+				int offsetX = model.x;
+				int offsetY = model.Height;
+				int offsetZ = model.y;
+
+				if(model.faceIndices1 != null) {
+					for (int face_i = 0; face_i < model.faceIndices1.length; face_i++) { //for each face
+						//index of each point on face
+						int Indice1 = model.faceIndices1[face_i];
+						int Indice2 = model.faceIndices2[face_i];
+						int Indice3 = model.faceIndices3[face_i];
+
+						vertIndex++;
+						VerticesX[vertIndex] = (short)(verticesX_[Indice1]+offsetX);
+						VerticesY[vertIndex] = (short)(verticesY_[Indice1]+offsetY);
+						VerticesZ[vertIndex] = (short)(verticesZ_[Indice1]+offsetZ);
+
+						vertIndex++;
+						VerticesX[vertIndex] = (short)(verticesX_[Indice2]+offsetX);
+						VerticesY[vertIndex] = (short)(verticesY_[Indice2]+offsetY);
+						VerticesZ[vertIndex] = (short)(verticesZ_[Indice2]+offsetZ);
+
+						vertIndex++;
+						VerticesX[vertIndex] = (short)(verticesX_[Indice3]+offsetX);
+						VerticesY[vertIndex] = (short)(verticesY_[Indice3]+offsetY);
+						VerticesZ[vertIndex] = (short)(verticesZ_[Indice3]+offsetZ);
+					}
+				}else { //if no indices defined, assume each verts are already correctly ordered
+					for (int vertIndexOnPart = 0; vertIndexOnPart < model.verticesX.length; vertIndexOnPart++)
+					{
+						vertIndex++;
+						VerticesX[vertIndex] = (short)(verticesX_[vertIndexOnPart]+offsetX);
+						VerticesY[vertIndex] = (short)(verticesY_[vertIndexOnPart]+offsetY);
+						VerticesZ[vertIndex] = (short)(verticesZ_[vertIndexOnPart]+offsetZ);
+					}
+				}
+			}
+		}
+	}
+
+	void send_SpawnModel_Packet(FastModel MergedModel, int id, int x, int y, int z) {
+		Buffer actorSpawnPacket = new Buffer(new byte[(MergedModel.VerticesCount*3*2)+10000]);
+		actorSpawnPacket.writeLong(id);
+		actorSpawnPacket.writeInt(x);
+		actorSpawnPacket.writeInt(y);
+		actorSpawnPacket.writeInt(z);
+		actorSpawnPacket.writeShort(0);//rotation
+		actorSpawnPacket.writeShort(128);//size
+		actorSpawnPacket.writeInt(0);//options
+
+		actorSpawnPacket.writeShort_Array(MergedModel.VerticesX);
+		actorSpawnPacket.writeShort_Array(MergedModel.VerticesY);
+		actorSpawnPacket.writeShort_Array(MergedModel.VerticesZ);
+
+		System.out.println("spawning model with " + MergedModel.VerticesX.length+" verts");
+
+		clientThread.invoke(() -> {
+			sharedmem_rm.backBuffer.writePacket(actorSpawnPacket, "SpawnModel");
+		});
+	}
+
 	@SneakyThrows
 	@Override
 	protected void startUp() throws IOException
@@ -2725,6 +3146,67 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	}
 
 	void simulateTilObjectSpawns(Tile tile) {
+		if(tile == null) {return;}
+		WallObject wallObject = tile.getWallObject();
+		if (wallObject != null)
+		{
+			final WallObjectSpawned objectSpawned = new WallObjectSpawned();
+			objectSpawned.setTile(tile);
+			objectSpawned.setWallObject(wallObject);
+			onWallObjectSpawned(objectSpawned);
+		}
+
+		DecorativeObject decorativeObject = tile.getDecorativeObject();
+		if (decorativeObject != null)
+		{
+			final DecorativeObjectSpawned objectSpawned = new DecorativeObjectSpawned();
+			objectSpawned.setTile(tile);
+			objectSpawned.setDecorativeObject(decorativeObject);
+			onDecorativeObjectSpawned(objectSpawned);
+		}
+
+		GroundObject groundObject = tile.getGroundObject();
+		if (groundObject != null)
+		{
+			final GroundObjectSpawned objectSpawned = new GroundObjectSpawned();
+			objectSpawned.setTile(tile);
+			objectSpawned.setGroundObject(groundObject);
+			onGroundObjectSpawned(objectSpawned);
+		}
+
+		for (GameObject object : tile.getGameObjects())
+		{
+			if (object != null)
+			{
+				//if (object.getSceneMinLocation().equals(tile.getSceneLocation()))
+				//{
+				if (object instanceof TileObject)
+				{
+					if (object.getRenderable() != null)
+					{
+						if (object.getRenderable() instanceof DynamicObject || object.getRenderable() instanceof Model || object.getRenderable() instanceof ModelData)
+						{
+							Point min = object.getSceneMinLocation(), max = object.getSceneMaxLocation();
+
+							final GameObjectSpawned objectSpawned = new GameObjectSpawned();
+							objectSpawned.setTile(tile);
+							objectSpawned.setGameObject(object);
+							onGameObjectSpawned(objectSpawned);
+						}
+						else
+						{
+/*									if(object.getRenderable() instanceof Actor) {
+										log.debug("unhandled renderableClass: Actor");
+									}*/
+						}
+					}
+				}
+				//}
+			}
+		}
+	}
+
+	void simulateSomeTilObjectSpawns(Tile tile) {
 			if(tile == null) {return;}
 			WallObject wallObject = tile.getWallObject();
 			if (wallObject != null)
@@ -2735,7 +3217,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 				onWallObjectSpawned(objectSpawned);
 			}
 
-			DecorativeObject decorativeObject = tile.getDecorativeObject();
+/*			DecorativeObject decorativeObject = tile.getDecorativeObject();
 			if (decorativeObject != null)
 			{
 				final DecorativeObjectSpawned objectSpawned = new DecorativeObjectSpawned();
@@ -2751,7 +3233,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 				objectSpawned.setTile(tile);
 				objectSpawned.setGroundObject(groundObject);
 				onGroundObjectSpawned(objectSpawned);
-			}
+			}*/
 
 			for (GameObject object : tile.getGameObjects())
 			{
@@ -2781,21 +3263,6 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 					//}
 				}
 			}
-
-/*			ItemLayer itemLayer = tile.getItemLayer();
-			if (itemLayer != null)
-			{
-				Node current = itemLayer.getTop();
-				while (current instanceof TileItem)
-				{
-					final TileItem item = (TileItem) current;
-
-					current = current.getNext();
-
-					final ItemSpawned itemSpawned = new ItemSpawned(tile, item);
-					onItemSpawned(itemSpawned);
-				}
-			}*/
 	}
 
 	void getTileObjectTagsOnTile(Tile tile, Set<Long> setToAddTo) {
@@ -4897,6 +5364,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 				int animationId_Pose = (config.spawnAnimations() ? npc.getPoseAnimation() : -1);
 
 				int animationFrameIdx_Action = npc.getAnimationFrame();
+
 				int animationFrameIdx_Pose = npc.getPoseAnimationFrame();
 
 				//boolean enableActionSeq = player.getAnimation() != -1 && player.getSequenceDelay() == 0;
@@ -5180,7 +5648,6 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			}
 		}
 
-
 		int noProjectiles = 0;
 		if (config.spawnProjectiles())
 		{
@@ -5242,7 +5709,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 				//short animimationFrameCycle = (short) -1;
 				perFramePacket.writeShort(projectile.getOrientation()); //Yaw
 				//short remainingCycles = (short) projectile.getRemainingCycles();
-				perFramePacket.writeShort(0);
+				perFramePacket.writeShort(getProjectilePitch(projectile));
 			}
 		}
 		else

@@ -113,6 +113,12 @@ public class Buffer
 		this.array[++this.offset - 1] = (byte) var1;
 	}
 
+	public void writeShort(short var1)
+	{
+		this.array[++this.offset - 1] = (byte) (var1 >> 8);
+		this.array[++this.offset - 1] = (byte) var1;
+	}
+
 	public void writeLong(long var1)
 	{
 		this.array[++this.offset - 1] = (byte) ((int) (var1 >> 56));
@@ -231,6 +237,16 @@ public class Buffer
 	{
 		if(var1 == null) { var1 = new short[0];}
 		writeShort_Array(var1, var1.length);
+	}
+
+	void writeShort_Array(float[] var1)
+	{
+		//if(var1 == null) {var1 = new short[0];}
+		writeInt(var1.length);
+		for (int i = 0; i < var1.length; i++)
+		{
+			writeShort((short)var1[i]);
+		}
 	}
 
 	public int readUnsignedByte()
