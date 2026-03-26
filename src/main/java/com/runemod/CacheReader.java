@@ -306,7 +306,7 @@ public class CacheReader
 		}
 	}*/
 
-	public static final int cacheExporterVersion = 1; //I increment this this to force a reexport of rscache. useful for forcing update when the cache exporter is altered.
+	public static final int cacheExporterVersion = 2; //I increment this this to force a reexport of rscache. useful for forcing update when the cache exporter is altered.
 
 	public int[] getCurrentHashes() {
 		List<Index> indexes = store.getIndexes();
