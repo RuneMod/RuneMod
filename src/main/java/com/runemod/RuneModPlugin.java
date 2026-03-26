@@ -224,7 +224,9 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	//int GpuFlagsEnableNo = 3;
 	int GpuFlagsEnableNo = DrawCallbacks.GPU|DrawCallbacks.ZBUF;//1;
 	Set<Renderable> visibleActors = new HashSet<Renderable>();
-	Set<WorldPoint> activeChunks = new HashSet<WorldPoint>();
+	Set<WorldPoint> activeSubRegions = new HashSet<>();//key is the subregion's corner tileCoord.
+	Set<WorldPoint> populatedObjsChunks = new HashSet<>();
+	Set<WorldPoint> populatedObjsTiles = new HashSet<>();
 
 	GameState curGamestate = GameState.STARTING;
 	GameState lastGameState = GameState.STARTING;
@@ -1003,6 +1005,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 				{
 					WorldPoint tileWorldPoint = new WorldPoint(baseX + dx, baseY + dy, plane);
 					Tile tile = getExtendedSceneTileFromWorldPoint(tileWorldPoint);
+					//simulateSomeTilObjectSpawns(tile);
 					simulateTilObjectSpawns(tile);
 				}
 			}
@@ -1029,7 +1032,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 				{
 					WorldPoint tileWorldPoint = new WorldPoint(baseX + dx, baseY + dy, plane);
 					Tile tile = getExtendedSceneTileFromWorldPoint(tileWorldPoint);
-					simulateSomeTilObjectSpawns(tile);
+					simulateTilObjectSpawns(tile);
 				}
 			}
 		}
@@ -1038,11 +1041,23 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 	void send_DespawnChunk_Packet(WorldPoint chunkBase) { //generally just used to despawn extended chunks.
 		//System.out.println("despawning chunk at:  " + chunkBase);
-		if (!activeChunks.contains(chunkBase))
+
+		if (!activeSubRegions.contains(chunkBase))
 		{
 			return;
 		}
-		activeChunks.remove(chunkBase);
+		activeSubRegions.remove(chunkBase);
+
+		//remove the 4 chunks in the subregion from populatedObjsChunks
+		WorldPoint populatedChunk = chunkBase;
+		populatedObjsChunks.remove(populatedChunk);
+		populatedChunk = new WorldPoint(chunkBase.getX()+8, chunkBase.getY(), 0);
+		populatedObjsChunks.remove(populatedChunk);
+		populatedChunk = new WorldPoint(chunkBase.getX()+8, chunkBase.getY()+8, 0);
+		populatedObjsChunks.remove(populatedChunk);
+		populatedChunk = new WorldPoint(chunkBase.getX(), chunkBase.getY()+8, 0);
+		populatedObjsChunks.remove(populatedChunk);
+
 		Buffer actorSpawnPacket = new Buffer(new byte[20]);
 		actorSpawnPacket.writeByte(7); //write chunk data type
 
@@ -1056,39 +1071,44 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		System.out.println("De-spawning chunk "+chunkBase);
 	}
 
-	boolean send_SpawnChunk_Packet(WorldPoint chunkBase, boolean skipIfInActiveCHunks)
+	boolean send_SpawnSubRegion_Packet(WorldPoint chunkBase, boolean skipIfInActiveCHunks)
 	{
-		if(skipIfInActiveCHunks) { //this parameter allows us to force sending chunkspawn packets, even if they are already sent. help rmrec chapter system work properly. no performance impact because unreal only spawns chunks that dont already exist.
-			if (activeChunks.contains(chunkBase))
+		if(chunkBase.getX()%16!=0 || chunkBase.getY()%16!=0) {return false;} //we only care about subregion, which are every 16 tiles
+
+		if(skipIfInActiveCHunks) { //when skipIfInActiveCHunks is false, the chunk spawn packet is sent regardless if it is already sent/in ActiveCHunks. For the sake of having terrain in rmrecs, we set this to false for chunks inside the main scene.
+			//spawn subregion's gameObjects if they are on a chunk in the extended scene
+/*			clientThread.invokeAtTickEnd(() -> {
+				for (int iX = 0; iX < 2 ; iX++) {
+					for (int iY = 0; iY < 2 ; iY++)
+					{
+						WorldPoint chunk = new WorldPoint(chunkBase.getX()+(iX*8), chunkBase.getY()+(iY*8), 0);
+
+						int sceneX = chunk.getX() - client.getBaseX();
+						int sceneY = chunk.getY() - client.getBaseY();
+
+						boolean isInMainScene = (sceneX >= 0 && sceneX < 104 && sceneY >= 0 && sceneY < 104);
+
+						if(!isInMainScene) {//if chunk is in extended scene, simulate spawn events on it.
+							if(!populatedObjsChunks.contains(chunk)) {
+								simulateSpawnEventsForChunk(chunk);
+								populatedObjsChunks.add(chunk);
+							}
+						}else
+						{
+							populatedObjsChunks.add(chunk);
+						}
+					}
+				}
+			});*/
+			if (activeSubRegions.contains(chunkBase))
 			{
 				return false;
 			}
 		}
 
-		if(chunkBase.getX()%16!=0 || chunkBase.getY()%16!=0) {return false;} //we only care about subregion, which are every 16 tiles
-
-		//for each chunk in subregion
-/*		for (int iX = 0; iX < 2 ; iX++) {
-			for (int iY = 0; iY < 2 ; iY++)
-			{
-				WorldPoint chunk = new WorldPoint(chunkBase.getX()+(iX*8), chunkBase.getX()+(iY*8), chunkBase.getPlane());
-
-				int sceneX = chunk.getX() - client.getBaseX();
-				int sceneY = chunk.getY() - client.getBaseY();
-
-				boolean isInMainScene = (sceneX >= 0*//* - 8*//* && sceneX < 104 && sceneY >= 0*//* - 8 *//*&& sceneY < 104);
-
-				if(!isInMainScene) {//if chunk is in extended scene, simulate spawn events on it.
-*//*					if(Math.abs(dx) <= config.ExtraObjectsLoadDistance() && Math.abs(dy) <= config.ExtraObjectsLoadDistance()) {
-
-					}*//*
-					simulateSpawnEventsForChunk(chunkBase);
-				}
-			}
-		}*/
 
 		//System.out.println("spawning chunk at:  " + chunkBase);
-		activeChunks.add(chunkBase);
+		activeSubRegions.add(chunkBase);
 		Buffer actorSpawnPacket = new Buffer(new byte[20]);
 		actorSpawnPacket.writeByte(7); //write chunk data type
 
@@ -1099,7 +1119,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		actorSpawnPacket.writeByte(0);
 
 		sharedmem_rm.backBuffer.writePacket(actorSpawnPacket, "ActorSpawn");
-		System.out.println("spawning chunk "+chunkBase);
+		System.out.println("spawning SubRegion at "+chunkBase);
 
 		return true;
 	}
@@ -1157,11 +1177,19 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			}
 		}*/
 
-		String typed = client.getVarcStrValue(VarClientStr.CHATBOX_TYPED_TEXT);
+/*		if(ticksSinceLoadScene > 100 && client.getTickCount()%10 == 0) {
+			WorldPoint playerTile = getPlayerLocationInWorld();
+			int softBaseX = ((playerTile.getX()/8)*8)-52;
+			int softBaseY = ((playerTile.getY()/8)*8)-52;
+			sendBaseCoordinatePacket(softBaseX, softBaseY, client.getScene());
+			resendGameStateChanged();
+		}*/
+
+/*		String typed = client.getVarcStrValue(VarClientStr.CHATBOX_TYPED_TEXT);
 		if(typed.equalsIgnoreCase("send")) {
 			client.setVarcStrValue(VarClientStr.CHATBOX_TYPED_TEXT,"");
 			spawn_All_SubRegionModels();
-		}
+		}*/
 
 		discoverField_ActionAnimValid();
 
@@ -1190,15 +1218,35 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	WorldPoint getPlayerLocationInWorld() { //get local playerLocation, accounting for conversion needed if player is in a boat
 		WorldPoint playerLoc = client.getLocalPlayer().getWorldLocation();
 
-		int wvId = client.getLocalPlayer().getWorldView().getId();
-		if(wvId!=-1) {
-			WorldEntity we = client.getTopLevelWorldView().worldEntities().byIndex(wvId);
+		WorldView wv = client.getLocalPlayer().getWorldView();
+		if(!wv.isTopLevel()) {
+			WorldEntity we = client.getTopLevelWorldView().worldEntities().byIndex(wv.getId());
 			LocalPoint localPos = we.transformToMainWorld(client.getLocalPlayer().getLocalLocation());
 			playerLoc = WorldPoint.fromLocal(client, localPos);
 		}
 		return playerLoc;
 	}
 
+	public static double getWorldPointDistance(WorldPoint a, WorldPoint b)
+	{
+		if (a == null || b == null)
+		{
+			throw new IllegalArgumentException("WorldPoints cannot be null");
+		}
+
+		// Different planes = effectively unreachable
+/*		if (a.getPlane() != b.getPlane())
+		{
+			return Double.MAX_VALUE;
+		}*/
+
+		int dx = a.getX() - b.getX();
+		int dy = a.getY() - b.getY();
+
+		return Math.sqrt((dx * dx) + (dy * dy));
+	}
+
+	int maxTileLoadDist = 52+8;
 	void processExtendedChunkSpawnTask()
 	{
 		if (client.getLocalPlayer() == null)
@@ -1210,13 +1258,14 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		//WorldEntity worldEntity
 		WorldPoint playerLoc = getPlayerLocationInWorld();
 
-		int wvId = client.getLocalPlayer().getWorldView().getId();
-		if(wvId!=-1) {
-			WorldEntity we = client.getTopLevelWorldView().worldEntities().byIndex(wvId);
+		WorldView wv = client.getLocalPlayer().getWorldView();
+		if(!wv.isTopLevel()) {
+			WorldEntity we = client.getTopLevelWorldView().worldEntities().byIndex(wv.getId());
 			LocalPoint localPos = we.transformToMainWorld(client.getLocalPlayer().getLocalLocation());
 			playerLoc = WorldPoint.fromLocal(client, localPos);
 		}
-		//getLocalLocation().getWorldView()
+
+		int noSubregionsSpawned = 0;
 
 		for (int dx = -config.ExtraChunksLoadDistance(); dx <= config.ExtraChunksLoadDistance(); dx++)
 		{
@@ -1230,33 +1279,45 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 				WorldPoint chunkBase = new WorldPoint(chunkX * CHUNK_SIZE, chunkY * CHUNK_SIZE, 0);
 
+				WorldPoint chunkCentre = new WorldPoint((chunkX * CHUNK_SIZE)+4, (chunkY * CHUNK_SIZE)+4, 0);
+				double distance = getWorldPointDistance(chunkCentre, playerLoc);
+				if(distance > maxTileLoadDist) {
+					continue;
+				}
+
 				int chunkBaseX = chunkBase.getX();
 				int chunkBaseY = chunkBase.getY();
 
 				int sceneX = chunkBaseX - client.getBaseX();
 				int sceneY = chunkBaseY - client.getBaseY();
 
-				boolean isInMainScene = (sceneX >= 0 - 8 && sceneX < 104 && sceneY >= 0 - 8 && sceneY < 104);
+				boolean isInMainScene = (sceneX >= 0 && sceneX < 104 && sceneY >= 0 && sceneY < 104);
 
-				if (!isInMainScene)
+				boolean spawnedSubRegion = send_SpawnSubRegion_Packet(chunkBase, true);
+				if (spawnedSubRegion)
 				{
-					boolean spawnedChunk = send_SpawnChunk_Packet(chunkBase, true);
-					if (spawnedChunk)
-					{
-						//simulateSpawnEventsForSubRegion(chunkBase);
-						//simulateSpawnEventsForChunk(chunkBase);
-						//simulateSpawnEventsForTile(chunkBase); //pre-spawns some objects. idea is to preload some things, but not too many so as to cause stutter
+					noSubregionsSpawned++;
+					//simulateSpawnEventsForSubRegion(chunkBase);
+					//simulateSpawnEventsForChunk(chunkBase);
+					//simulateSpawnEventsForTile(chunkBase); //pre-spawns some objects. idea is to preload some things, but not too many so as to cause stutter
+					if(noSubregionsSpawned == 1) {
 						return;
 					}
-					else
-					{
-						continue;
-					}
+					//return;
+				}
+				else
+				{
+					continue;
+				}
+
+				//if (!isInMainScene)
+				//{
+
 					//spawnedChunks.add(chunkBase);
 					//if(spawnedChunks.size() >= 4) {
 					//activeExtendedChunks.addAll(spawnedChunks);
 					//}
-				}
+				//}
 			}
 		}
 		//activeExtendedChunks.addAll(spawnedChunks);
@@ -1264,19 +1325,25 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 	void processExtendedChunkDespawnTask() //find chunks that need to be despawned and despawns them.
 	{
-		if (activeChunks.isEmpty())
+		if (activeSubRegions.isEmpty())
 		{
 			return;
 		}
+
+		if(client.getLocalPlayer() == null) {
+			return;
+		}
+
 		WorldPoint playerLoc = getPlayerLocationInWorld();
 
-		WorldPoint[] activeChunksArr = activeChunks.toArray(WorldPoint[]::new);
-		for (WorldPoint chunkBase : activeChunksArr)
+		int noSubregionsDeSpawned = 0;
+		WorldPoint[] activeSubRegionsArr = activeSubRegions.toArray(WorldPoint[]::new);
+		for (WorldPoint chunkBase : activeSubRegionsArr)
 		{
 			//if(chunkBase.getX()%16!=0 || chunkBase.getY()%16!=0) {continue;}
 
-			int sceneX = chunkBase.getX() - baseX;
-			int sceneY = chunkBase.getY() - baseY;
+			int sceneX = chunkBase.getX() - client.getBaseX();
+			int sceneY = chunkBase.getY() - client.getBaseY();
 			boolean isInMainScene = (sceneX >= 0 - 8 && sceneX <= 104+8 && sceneY >= 0 - 8 && sceneY <= 104+8);
 
 			int playerChunkX = playerLoc.getX() / CHUNK_SIZE;
@@ -1284,13 +1351,19 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 			int chunkX = chunkBase.getX() / CHUNK_SIZE;
 			int chunkY = chunkBase.getY() / CHUNK_SIZE;
-			boolean isInRange = Math.abs(playerChunkX - chunkX) <= config.ExtraChunksLoadDistance() && Math.abs(playerChunkY - chunkY) <= config.ExtraChunksLoadDistance();
+
+			WorldPoint chunkCentre = new WorldPoint((chunkX * CHUNK_SIZE)+4, (chunkY * CHUNK_SIZE)+4, 0);
+			double distance = getWorldPointDistance(chunkCentre, playerLoc);
+			boolean isInRange = distance < maxTileLoadDist+16;
+			//boolean isInRange = Math.abs(playerChunkX - chunkX) <= config.ExtraChunksLoadDistance() && Math.abs(playerChunkY - chunkY) <= config.ExtraChunksLoadDistance();
 
 			if (!isInRange && !isInMainScene)
 			{
 				send_DespawnChunk_Packet(chunkBase);
-				//DespawnedChunks.add(chunkBase);
-				return;
+				noSubregionsDeSpawned++;
+				if(noSubregionsDeSpawned == 40) {
+					return;
+				}
 			}
 		}
 
@@ -1300,59 +1373,6 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	int ticksSinceLoadScene = 0;
 
 	boolean isCacheFullyLoaded = false;
-
-	private void collectVisibleJLabels(Component component, List<JLabel> labels)
-	{
-		if (!component.isVisible())
-		{
-			return;
-		}
-
-		if (component instanceof JLabel)
-		{
-			labels.add((JLabel)component);
-		} else {
-			if (component instanceof Container)
-			{
-				for (Component child : ((Container)component).getComponents())
-				{
-					collectVisibleJLabels(child, labels);
-				}
-			}
-		}
-	}
-
-	private boolean isRuneModSettingsVisible(Component component)
-	{
-		if (component == null || !component.isVisible())
-		{
-			return false;
-		}
-
-		// Check current component
-		if (component instanceof JLabel)
-		{
-			if ("Settings (RuneMod)".equals(((JLabel)component).getText()))
-			{
-				return true;
-			}
-		}
-
-		// Recurse into children
-		if (component instanceof Container)
-		{
-			for (Component child : ((Container)component).getComponents())
-			{
-				if (isRuneModSettingsVisible(child))
-				{
-					return true;
-				}
-			}
-		}
-
-		// Not found in this branch
-		return false;
-	}
 
 	void RmUiPacket_SettingsWindow() {
 		Buffer packet = new Buffer(new byte[8]);
@@ -1483,21 +1503,73 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		}
 
 		clientThread.invokeAtTickEnd(() -> {
-			if (ticksSinceLoadScene > 300 && !isInstanced)
+			if (ticksSinceLoadScene > 50 && !isInstanced)
 			{
-				if (gameCycle_50fps % 8 == 0)
+				//spawn extended tiles
+				if ((gameCycle_50fps) % 8 == 0)
 				{
 					processExtendedChunkSpawnTask();
-
 				}
-				if ((gameCycle_50fps-4) % 8 == 0) //staggers despawn so it happens a few frames after spawn task
-				{
-					processExtendedChunkDespawnTask();
+
+				//spawn extended objects
+				if(config.enableExtendedObjectSpawns()) {
+					eventIsSimulation = true;
+					if(client.getLocalPlayer() != null && client.getScene().getExtendedTiles()[0][1].length == Constants.EXTENDED_SCENE_SIZE) {
+						boolean breakLoop = false;
+						Tile[][][] extendedTiles = client.getScene().getExtendedTiles();
+						int noTileSpawns = 0;
+						for (int z = 0; z < 4; z++)
+						{
+							for (int x = 0; x < Constants.EXTENDED_SCENE_SIZE; x++)
+							{
+								for (int y = 0; y < Constants.EXTENDED_SCENE_SIZE; y++)
+								{
+									Tile tile = extendedTiles[z][x][y];
+									if(tile == null) {continue;}
+
+									WorldPoint worldLocation = tile.getWorldLocation();
+									int worldX = worldLocation.getX();
+									int worldY = worldLocation.getY();
+
+									int sceneX = worldX-baseX;
+									int sceneY = worldY-baseY;
+
+									boolean isInMainScene = (sceneX >= 0 && sceneX < 104 && sceneY >= 0 && sceneY < 104);
+									int subRegionX = (worldLocation.getX()/16)*16;
+									int subRegionY = (worldLocation.getY()/16)*16;
+
+									if(!isInMainScene) {
+										WorldPoint subRegionBase = new WorldPoint(subRegionX, subRegionY, 0);
+										if(activeSubRegions.contains(subRegionBase)) {
+											double distance = getWorldPointDistance(worldLocation, client.getLocalPlayer().getWorldLocation());
+											if(distance < 52) {
+												if(!populatedObjsTiles.contains(worldLocation)) {
+													//simulateSomeTilObjectSpawns(tile);
+													simulateTilObjectSpawns(tile);
+													noTileSpawns++;
+													populatedObjsTiles.add(worldLocation);
+													if(noTileSpawns == 50) {
+														breakLoop = true;
+													}
+													break;
+												}
+											}
+										}
+									}
+								}
+								if(breakLoop) {
+									break;
+								}
+							}
+							if(breakLoop) {
+								break;
+							}
+						}
+					}
+					eventIsSimulation = false;
 				}
 			}
 		});
-
-		//}
 
 		drawManager.processDrawComplete(this::screenshot);
 
@@ -1961,7 +2033,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 	void worldViewUpdate(WorldView wv, int updateType)
 	{
-		if(wv.getId() == -1) {return;}//toplevel does have/need a worldView actor
+		if(wv.isTopLevel()) {return;}//toplevel does have/need a worldView actor
 
 
 		if(updateType == 0) {
@@ -2022,9 +2094,9 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		sharedmem_rm.backBuffer.writePacket(packet, "WorldViewUpdate");//WorldViewSpawned code not yet implemented
 	}
 
-	void despawnAllChunks(){ //despawns all chunks the plugin is aware of/sent spawn packets for
-		WorldPoint[] activeChunksArr = activeChunks.toArray(WorldPoint[]::new);
-		for(WorldPoint chunkBase : activeChunksArr) {
+	void despawnAllSubRegions(){ //despawns all chunks the plugin is aware of/sent spawn packets for
+		WorldPoint[] activeSubRegionssArr = activeSubRegions.toArray(WorldPoint[]::new);
+		for(WorldPoint chunkBase : activeSubRegionssArr) {
 			send_DespawnChunk_Packet(chunkBase);
 		}
 	}
@@ -2036,7 +2108,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 		if(isInstanced) {
 			log.debug("despawning all terrains because is instanced area");
-			despawnAllChunks();
+			despawnAllSubRegions();
 		}
 
 		//DespawnServerSpawnedObjs();
@@ -2062,7 +2134,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 					continue;
 				}*/
 
-				send_SpawnChunk_Packet(chunkBase, false);
+				send_SpawnSubRegion_Packet(chunkBase, false);
 			}
 		}
 	}
@@ -2194,7 +2266,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 		window = (JFrame) SwingUtilities.getWindowAncestor(client.getCanvas());
 
-		activeChunks.clear();
+		activeSubRegions.clear();
 
 		taggedTileObjects.clear();
 
@@ -2552,7 +2624,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		return false;
 	}
 
-	void spawn_All_SubRegionModels() {
+/*	void spawn_All_SubRegionModels() {
 		for(int dx = -36; dx < (104+36); dx+=16) {
 			for(int dy = -36; dy < (104+36); dy+=16) {
 				int chunkX = baseX+dx;
@@ -2566,7 +2638,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 				}
 			}
 		}
-	}
+	}*/
 
 	void spawn_A_SubRegionModels(WorldPoint chunkBase) {
 		SwingUtilities.invokeLater(() -> {
@@ -3413,7 +3485,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 		reSendVarBits();
 
-		activeChunks.clear();
+		activeSubRegions.clear();
 		if(clientType == ClientType.ALORA) { //in Alora, setting gamestate to loading does not trigger loadRegion event.
 			Scene scene = client.getTopLevelWorldView().getScene();
 			sendSceneBaseInfo(scene.getBaseX(), scene.getBaseY(), scene);
@@ -3742,7 +3814,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		{
 			clientPlane_prevFrame = -1; //prevents issue where login screen anims change clientplane, and so when we login, out plane is wrong.
 
-			despawnAllChunks();
+			despawnAllSubRegions();
 
 			DespawnServerSpawnedObjs();
 
@@ -4360,6 +4432,14 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			int tileX = tile.getSceneLocation().getX();
 			int tileY = tile.getSceneLocation().getY();
 
+
+/*			System.out.println("worldViewId: "+event.getGameObject().getWorldView().getId());
+			if(objectDefinitionId == 23769) {
+				Model model = (Model) event.getGameObject().getRenderable();
+				System.out.println("worldViewId: "+event.getGameObject().getWorldView().getId());
+				System.out.println("roof vertCount:"+model.getVerticesX().length);
+				System.out.println("model 25245 numverts:"+client.loadModel(25245).getVerticesX().length);
+			}*/
 /*			int settings = client.getTopLevelWorldView().getTileSettings()[tileX][tileY][plane];
 			int CalcedMinPlane = -1;
 		if ((settings & 8) != 0) {
@@ -4392,10 +4472,11 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			int cycleStart = 0;
 			int frame = 0;
 
-			int worldView = event.getGameObject().getWorldView().getId();
+			WorldView worldView = event.getGameObject().getWorldView();
+			int worldViewId = worldView.getId();
 
 			actorSpawnPacket.writeByte(4); //write tileObject data type
-			actorSpawnPacket.writeShort(worldView);
+			actorSpawnPacket.writeShort(worldViewId);
 			actorSpawnPacket.writeByte(tileObjectModelType);
 			actorSpawnPacket.writeByte(var4);
 			actorSpawnPacket.writeShort(objectOrientationA);
@@ -4420,7 +4501,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			sharedmem_rm.backBuffer.writePacket(actorSpawnPacket, "ActorSpawn");
 			taggedTileObjects.add(tag);
 			if(!eventIsSimulation && client.getGameState().ordinal()>=GameState.LOGGED_IN.ordinal()/* && loggedInForNoServerTicks > 1*/) {
-				if(worldView==-1) { //disabled the server spawned gameObjects restriction on boats, since boats are pretty much always spawned while gamestaste is >= GameState.LOGGED_IN
+				if(worldView.isTopLevel()) { //disabled the server spawned gameObjects restriction on boats, since boats are pretty much always spawned while gamestaste is >= GameState.LOGGED_IN
 					serverSpawnedGameObjects.add(event);
 					serverSpawnedGameObjects_Tags.add(tag);
 /*					if(event.getGameObject().getId() == 26185) {
@@ -5160,6 +5241,11 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		packet.writeShort(baseY);
 		packet.writeByte(client.getTopLevelWorldView().getPlane());
 		sharedmem_rm.backBuffer.writePacket(packet, "BaseCoordinate");
+
+		clientThread.invokeAtTickEnd(() ->
+		{
+			processExtendedChunkDespawnTask(); //despawns done at same time as loading new region. this avoids stutters during gameplay.
+		});
 		//DespawnServerSpawnedObjs();
 		//});
 	}
@@ -5277,6 +5363,8 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		{ //dont send perframe packet while on login screen because doing so would interfere with the animated login screen's camera.
 			return;
 		}
+
+		if(client.getLocalPlayer() == null) {return;}
 
 		if(config.useTwoRenderers()) { //makes actor height work when using two renderers. not quite so accurate but works enough for showcase
 			for(NPC npc : client.getNpcs()) {

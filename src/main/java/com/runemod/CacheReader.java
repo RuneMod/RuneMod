@@ -709,7 +709,6 @@ public class CacheReader
 		log.debug("sending tiles...");
 		for (int regionID = 0; regionID < Short.MAX_VALUE; regionID++)
 		{
-			//log.debug("sending region"+regionID);
 			sendTilesInRegion(regionID);
 		}
 		log.debug("sent tiles");
@@ -745,6 +744,41 @@ public class CacheReader
 		}
 	}
 
+/*	public MapDefinition loadMapDef(int i) throws IOException
+	{
+		Index index = store.getIndex(IndexType.MAPS);
+
+		int x = i >> 8;
+		int y = i & 0xFF;
+
+		Storage storage = store.getStorage();
+		byte[] data;
+		if (index.isNamed())
+		{
+			Archive map = index.findArchiveByName("m" + x + "_" + y);
+			if (map == null)
+			{
+				return null;
+			}
+
+			data = map.decompress(storage.loadArchive(map));
+		}
+		else
+		{
+			Archive archive = index.getArchive(i);
+			if (archive == null)
+			{
+				return null;
+			}
+
+			data = archive.getFiles(storage.loadArchive(archive))
+				.findFile(0)
+				.getContents();
+		}
+
+		return new MapLoader().load(x, y, data);
+	}*/
+
 	@SneakyThrows
 	public void sendTilesInRegion(int regionId)
 	{
@@ -758,19 +792,17 @@ public class CacheReader
 
 			Index index = store.getIndex(IndexType.MAPS);
 			Storage storage = store.getStorage();
-			Archive map = index.findArchiveByName("m" + regionX + "_" + regionY);
 
-			if (map == null)
-			{
-				return;
-			}
+			//Archive map = index.findArchiveByName("m" + regionX + "_" + regionY);
+			Archive archive = index.getArchive(regionId);
+			if (archive == null) { return; }
 
-			byte[] bytes = null;
+			byte[] bytes = archive.getFiles(storage.loadArchive(archive)).findFile(0).getContents();
 
-			bytes = map.decompress(storage.loadArchive(map));
 
 			if (bytes == null)
 			{
+				log.debug("null bytes for region "+regionId);
 				return;
 			}
 
@@ -826,6 +858,8 @@ public class CacheReader
 						}
 					}
 				}
+
+				log.debug("sending region"+regionId);
 				RuneModPlugin.sharedmem_rm.backBuffer.writePacket(mainBuffer, "RegionTiles");
 			}
 			else
