@@ -571,75 +571,137 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	public int pitch_GarbageVal = 1;
 
 	@SneakyThrows
-	public int discoverField_ProjectilePitch(Projectile projectile)
+	public void discoverField_ProjectilePitch(Projectile projectile)
 	{
+		pitch_GarbageVal = 254946999;
 		Class<?> clazz = projectile.getClass();
-		ClassNode projectileClass = getClassNode(clazz);
 
-		for (MethodNode method : projectileClass.methods)
+		pitchField = clazz.getDeclaredField("at");
+		pitchField.setAccessible(true); // allows access to private fields
+/*		try
 		{
-			//System.out.println("testing method "+method.name);
-			for (AbstractInsnNode insn : method.instructions)
+			Class<?> clazz = projectile.getClass();
+			ClassNode projectileClass = getClassNode(clazz);
+
+			for (MethodNode method : projectileClass.methods)
 			{
-				if (!(insn instanceof MethodInsnNode))
-					continue;
-
-				MethodInsnNode call = (MethodInsnNode) insn;
-
-				// Look for Math.atan2(double,double)
-				if (!call.owner.equals("java/lang/Math") ||
-					!call.name.equals("atan2") ||
-					!call.desc.equals("(DD)D"))
-					continue;
-
-				AbstractInsnNode cursor = insn.getNext();
-
-				while (cursor != null)
+				for (AbstractInsnNode insn : method.instructions)
 				{
-					if (cursor instanceof FieldInsnNode)
+					if (!(insn instanceof MethodInsnNode))
+						continue;
+
+					MethodInsnNode call = (MethodInsnNode) insn;
+
+					// Match Math.atan2(double,double)
+					if (!call.owner.equals("java/lang/Math") ||
+						!call.name.equals("atan2") ||
+						!call.desc.equals("(DD)D"))
 					{
-						FieldInsnNode f = (FieldInsnNode) cursor;
-
-						if (f.getOpcode() == Opcodes.PUTFIELD &&
-							f.owner.equals(projectileClass.name) &&
-							f.desc.equals("I"))
-						{
-							String fieldName = f.name;
-
-							pitchField = clazz.getDeclaredField(fieldName);
-							pitchField.setAccessible(true);
-
-							int stored = pitchField.getInt(projectile);
-
-							FieldNode fieldNode = null;
-							for (FieldNode fn : projectileClass.fields)
-							{
-								if (fn.name.equals(fieldName))
-								{
-									fieldNode = fn;
-									break;
-								}
-							}
-
-							Integer multiplier = discoverMultiplier(projectileClass, fieldName);
-
-							pitch_GarbageVal = multiplier;
-
-							int pitch = (stored * pitch_GarbageVal);
-
-							System.out.println("Found projectile pitch field: " + fieldName + " pitchVal=" + pitch +" garbageVal: "+ pitch_GarbageVal);
-
-							return pitch;
-						}
+						continue;
 					}
 
-					cursor = cursor.getNext();
+					// -----------------------------------------
+					// STEP 1: Ensure this is pitch (uses GETFIELD)
+					// -----------------------------------------
+					boolean usesField = false;
+
+					AbstractInsnNode back = insn.getPrevious();
+					int backSteps = 0;
+
+					while (back != null && backSteps++ < 10)
+					{
+						if (back instanceof FieldInsnNode)
+						{
+							FieldInsnNode f = (FieldInsnNode) back;
+
+							if (f.getOpcode() == Opcodes.GETFIELD &&
+								f.owner.equals(projectileClass.name))
+							{
+								usesField = true;
+								break;
+							}
+						}
+						back = back.getPrevious();
+					}
+
+					if (!usesField)
+						continue;
+
+					// -----------------------------------------
+					// STEP 2: Walk forward and validate pattern
+					// -----------------------------------------
+					AbstractInsnNode cursor = insn.getNext();
+
+					boolean seenIAND = false;
+					boolean seenIADD = false; // yaw has +1024
+					boolean seenIMUL = false;
+
+					int steps = 0;
+
+					while (cursor != null && steps++ < 20)
+					{
+						int op = cursor.getOpcode();
+
+						if (op == Opcodes.IADD)
+							seenIADD = true;
+
+						if (op == Opcodes.IAND)
+							seenIAND = true;
+
+						if (op == Opcodes.IMUL)
+							seenIMUL = true;
+
+						if (cursor instanceof FieldInsnNode)
+						{
+							FieldInsnNode f = (FieldInsnNode) cursor;
+
+							if (f.getOpcode() == Opcodes.PUTFIELD &&
+								f.owner.equals(projectileClass.name) &&
+								f.desc.equals("I"))
+							{
+								// -----------------------------------------
+								// FINAL FILTERS (THIS IS THE FIX)
+								// -----------------------------------------
+								if (!seenIAND) continue;   // must mask
+								if (seenIADD) continue;    // yaw has +1024
+								if (!seenIMUL) continue;   // new multiplier stage
+
+								String fieldName = f.name;
+
+								pitchField = clazz.getDeclaredField(fieldName);
+								pitchField.setAccessible(true);
+
+								int stored = pitchField.getInt(projectile);
+
+								Integer multiplier = discoverMultiplier(projectileClass, fieldName);
+								pitch_GarbageVal = multiplier != null ? multiplier : 1;
+
+								int pitch = stored * pitch_GarbageVal;
+
+								System.out.println(
+									"Found projectile pitch field: " + fieldName +
+										" raw=" + stored +
+										" pitch=" + pitch +
+										" multiplier=" + pitch_GarbageVal
+								);
+
+								return pitch;
+							}
+						}
+
+						cursor = cursor.getNext();
+					}
 				}
 			}
+
+			System.out.println("Error - Projectile pitch field not found");
+		}
+		catch (Exception e)
+		{
+			e.printStackTrace();
 		}
 
-		System.out.println("Error - Projectile pitch field not found");
-		return -1;
+		return -1;*/
 	}
 
 	@SneakyThrows
@@ -670,46 +732,62 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 				 insn != null;
 				 insn = insn.getNext())
 			{
-				if (insn instanceof FieldInsnNode)
+				if (!(insn instanceof FieldInsnNode))
+					continue;
+
+				FieldInsnNode field = (FieldInsnNode) insn;
+
+				// ✅ Look for where the field is WRITTEN
+				if (field.getOpcode() != Opcodes.PUTFIELD ||
+					!field.name.equals(fieldName))
 				{
-					FieldInsnNode field = (FieldInsnNode) insn;
+					continue;
+				}
 
-					if (field.getOpcode() == Opcodes.GETFIELD && field.name.equals(fieldName))
+				// -----------------------------------------
+				// Walk BACKWARDS to find IMUL constant
+				// -----------------------------------------
+				AbstractInsnNode cursor = insn.getPrevious();
+
+				int steps = 0;
+
+				while (cursor != null && steps++ < 10)
+				{
+					if (cursor.getOpcode() == Opcodes.IMUL)
 					{
-						AbstractInsnNode cursor = insn.getNext();
+						AbstractInsnNode prev = cursor.getPrevious();
 
-						while (cursor != null)
+						// Look for constant before IMUL
+						while (prev != null)
 						{
-							if (cursor.getOpcode() == Opcodes.IMUL)
+							if (prev instanceof LdcInsnNode)
 							{
-								AbstractInsnNode prev = cursor.getPrevious();
-
-								while (prev != null)
+								Object cst = ((LdcInsnNode) prev).cst;
+								if (cst instanceof Integer)
 								{
-									if (prev instanceof LdcInsnNode)
-									{
-										Object cst = ((LdcInsnNode) prev).cst;
-										if (cst instanceof Integer)
-										{
-											return (Integer) cst;
-										}
-									}
-
-									if (prev instanceof IntInsnNode)
-									{
-										return ((IntInsnNode) prev).operand;
-									}
-
-									prev = prev.getPrevious();
+									return (Integer) cst;
 								}
 							}
 
-							if (cursor instanceof FieldInsnNode || cursor instanceof MethodInsnNode)
-								break;
+							if (prev instanceof IntInsnNode)
+							{
+								return ((IntInsnNode) prev).operand;
+							}
 
-							cursor = cursor.getNext();
+							if (prev instanceof InsnNode)
+							{
+								int op = prev.getOpcode();
+								if (op >= Opcodes.ICONST_M1 && op <= Opcodes.ICONST_5)
+								{
+									return op - Opcodes.ICONST_0;
+								}
+							}
+
+							prev = prev.getPrevious();
 						}
 					}
+
+					cursor = cursor.getPrevious();
 				}
 			}
 		}
@@ -793,21 +871,38 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		return null;
 	}
 
+	Method getMethodByName(Class<?> clazz, String name) {
+		while (clazz != null) {
+			Method[] methods = clazz.getDeclaredMethods();
+			for (Method method : methods) {
+				// Test any other things about it beyond the name...
+				if (method.getName().equals(name)) {
+					return method;
+				}
+			}
+			clazz = clazz.getSuperclass();
+		}
+		return null;
+	}
+
 	public void discoverField_ActionAnimValid()
 	{
+		//if(true) {return;}
 		if(discovered_GetActionAnimIfValid) {return;}
 		Actor actor = client.getLocalPlayer();
-
 		int minFieldCount = 0;
-
 		if (actor == null)
 		{
 			System.out.println("Actor is null, cant discover field");
 			return;
 		}
 
+		GetActionAnimIfValid_GarbageVal = -2102997845;
+		Class<?> clazz = actor.getClass().getSuperclass();
+		GetActionAnimIfValid_Meth = getMethodByName(clazz, "dq");
+		GetActionAnimIfValid_Meth.setAccessible(true); // allows access to private fields
 		discovered_GetActionAnimIfValid = true;
-
+/*
 		Class<?> actorClass = actor.getClass().getSuperclass();
 		// We will gather declared methods at this level and test them.
 		Method[] declared = actorClass.getDeclaredMethods();
@@ -909,7 +1004,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			System.out.println("unable to discover GetActionAnimIfValid_Meth");
 		}
 
-		return;
+		return;*/
 	}
 
 	int getAnimation_Unmasked(NPC npc)
@@ -1349,9 +1444,9 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			{
 				send_DespawnSubRegion_Packet(chunkBase);
 				noSubregionsDeSpawned++;
-				if(noSubregionsDeSpawned == 40) {
+/*				if(noSubregionsDeSpawned == 40) {
 					return;
-				}
+				}*/
 			}
 		}
 
@@ -1983,10 +2078,23 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		System.out.println("preMapLoad. baseX:" +preMapLoad.getScene().getBaseX());
 	}*/
 
-	void DespawnServerSpawnedObjs() {
+	void DespawnServerSpawnedObjs(boolean outsideSceneOnly) { //outsideSceneOnly. set to true if you only want objs outside scene to be despawned. serverspawned tile objects may not recieve a despawn event, thus the spawn will persist until the chunk is despawned by unreal. to fix this, we always despawn server=spawned objects as soon as they are outside the main scene.
 		for(int i = 0; i < serverSpawnedGameObjects.size(); i++) {
 			GameObjectSpawned event = serverSpawnedGameObjects.get(i);
 			GameObjectDespawned despawnEvent = new GameObjectDespawned();
+			if(outsideSceneOnly) {
+				long tag = serverSpawnedGameObjects_Tags.get(i);
+				int worldY = (int)((tag >> 26) & 0x7FFFL);
+				int worldX = (int)((tag >> 11) & 0x7FFFL);
+				int sceneX = worldX-client.getBaseX();
+				int sceneY = worldY-client.getBaseY();
+				boolean isInMainScene = (sceneX >= 0 && sceneX < 104 && sceneY >= 0 && sceneY < 104);
+				if(isInMainScene) {
+					//System.out.println("not in scene so not despawning");
+					continue;
+				}
+			}
+
 			despawnEvent.setTile(event.getTile());
 			despawnEvent.setGameObject(event.getGameObject());
 
@@ -3788,7 +3896,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 			despawnAllSubRegions();
 
-			DespawnServerSpawnedObjs();
+			DespawnServerSpawnedObjs(false);
 
 			SwingUtilities.invokeLater(() ->
 			{
@@ -3830,10 +3938,14 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		{
 			log.debug("logged in...");
 
-			DespawnServerSpawnedObjs(); //should really add a if was hopping
+			DespawnServerSpawnedObjs(true);
+/*			if(lastGameState == GameState.HOPPING) {
+				DespawnServerSpawnedObjs(); //should really add a if was hopping
+			}*/
 		}
 		else if (curGamestate == GameState.HOPPING)
 		{
+			DespawnServerSpawnedObjs(false);
 			log.debug("hopping...");
 		}
 		else if (curGamestate == GameState.LOADING)
