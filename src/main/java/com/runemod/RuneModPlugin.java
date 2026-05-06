@@ -573,11 +573,19 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	@SneakyThrows
 	public void discoverField_ProjectilePitch(Projectile projectile)
 	{
-		pitch_GarbageVal = 254946999;
+		pitch_GarbageVal = -266919833;
 		Class<?> clazz = projectile.getClass();
 
-		pitchField = clazz.getDeclaredField("at");
-		pitchField.setAccessible(true); // allows access to private fields
+		try
+		{
+			pitchField = clazz.getDeclaredField("aw");
+			pitchField.setAccessible(true);
+		}
+		catch (NoSuchFieldException e)
+		{
+			pitchField = null;
+			log.warn("Field 'at' not found in class {}", clazz.getName());
+		}
 /*		try
 		{
 			Class<?> clazz = projectile.getClass();
@@ -802,7 +810,12 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			discoverField_ProjectilePitch(p);
 		}
 
-		return (pitchField.getInt(p) * pitch_GarbageVal);
+		if(pitchField != null)
+		{
+			return (pitchField.getInt(p) * pitch_GarbageVal);
+		}else {
+			return 0;
+		}
 	}
 
 	public static Integer findGarbageParam(Class<?> clazz, String methodName) throws Exception
@@ -897,11 +910,15 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			return;
 		}
 
-		GetActionAnimIfValid_GarbageVal = -2102997845;
+		GetActionAnimIfValid_GarbageVal = 0/*-2102997845*/;
 		Class<?> clazz = actor.getClass().getSuperclass();
-		GetActionAnimIfValid_Meth = getMethodByName(clazz, "dq");
+		GetActionAnimIfValid_Meth = getMethodByName(clazz, "lt");
 		GetActionAnimIfValid_Meth.setAccessible(true); // allows access to private fields
 		discovered_GetActionAnimIfValid = true;
+
+		if(GetActionAnimIfValid_Meth == null) {
+			System.out.println("Failed to discover GetActionAnimIfValid_Meth");
+		}
 /*
 		Class<?> actorClass = actor.getClass().getSuperclass();
 		// We will gather declared methods at this level and test them.
@@ -1221,7 +1238,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 		try
 		{
-			boolean valid = GetActionAnimIfValid_Meth.invoke(actorInstance, GetActionAnimIfValid_GarbageVal)!=null;
+			boolean valid = GetActionAnimIfValid_Meth.invoke(null, actorInstance,  (byte)4)!=null; //null is first param because is static func
 /*			if(actorInstance.getName().contains("dorvis")) {
 				if(valid == false) {
 					System.out.println("vard action anim valid = false");
