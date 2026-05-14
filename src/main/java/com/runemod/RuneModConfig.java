@@ -79,37 +79,6 @@ public interface RuneModConfig extends Config
 		return "For graphics settings, please use the spanner in Runelite's top-left corner";
 	}
 
-	@ConfigItem(
-		keyName = "MaxFps",
-		name = "MaxFps",
-		description = "I recommend setting this to 50, if you have a medium spec PC",
-		position = 0
-	)
-	@Range(
-		min = 50,
-		max = 90
-	)
-
-	default int MaxFps()
-	{
-		return 50;
-	}
-
-	@ConfigItem(
-		keyName = "drawDistance",
-		name = "DrawDistance",
-		description = "how mnay tiles you can see into the distance",
-		position = 2
-	)
-	@Range(
-		min = 24,
-		max = 68
-	)
-	default int drawDistance() //min:32, max:68?
-	{
-		return 46;
-	}
-
 
 	@ConfigItem(
 		keyName = "version",

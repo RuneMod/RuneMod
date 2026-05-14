@@ -208,7 +208,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	public Set<Long> taggedTileObjects = new HashSet<>();
 
 	public int overlayColor_LastFrame = 0;
-	public ApplicationSettings appSettings;
+	public ApplicationSettings appSettings = new ApplicationSettings();
 	//int sharedMemPixelsUpdatedTick = -1; //used to prevent updating sharedMemory twice in the same tick.
 
 	int ticksSincePluginLoad = 0;
@@ -488,7 +488,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		@Override
 		public void mousePressed(MouseEvent mouseEvent)
 		{
-			setMaxFps(config.MaxFps());
+			setMaxFps(appSettings.maxFps);
 			timeLastInteracted = System.currentTimeMillis();
 			//resizes canvas in order to force it to repaint. This prevents the loss of transparency on the loginscreens background pixels, caused by going to the world select screen.
 			if (client.getGameState() == GameState.LOGIN_SCREEN || curGamestate == GameState.LOGIN_SCREEN_AUTHENTICATOR)
@@ -504,7 +504,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		@Override
 		public void mouseEntered (MouseEvent mouseEvent)
 		{
-			setMaxFps(config.MaxFps());
+			setMaxFps(appSettings.maxFps);
 			timeLastInteracted = System.currentTimeMillis();
 		}
 	};
@@ -514,7 +514,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		@Override
 		public void keyPressed(KeyEvent KeyEvent)
 		{
-			setMaxFps(config.MaxFps());
+			setMaxFps(appSettings.maxFps);
 			timeLastInteracted = System.currentTimeMillis();
 		}
 	};
@@ -1799,8 +1799,8 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 				WorldPoint playerLoc = getPlayerLocationInWorld();
 				System.out.println("PlayerLoc: "+playerLoc);*/
 
-				int playerSceneX = playerLocation.getX() - baseX;
-				int playerSceneY = playerLocation.getY() - baseY;
+				int playerSceneX = playerLocation.getX() - client.getBaseX();
+				int playerSceneY = playerLocation.getY() - client.getBaseY();
 
 				int noTileSpawns = 0;
 				int noTileDespawns = 0;
@@ -1813,13 +1813,12 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 						int sceneX_Extended = sceneX+SCENE_OFFSET;
 						int sceneY_Extended = sceneY+SCENE_OFFSET;
-						if(sceneX_Extended >= Constants.EXTENDED_SCENE_SIZE || sceneY_Extended >= Constants.EXTENDED_SCENE_SIZE ) { //skip invalid range tiles
+						if(sceneX_Extended >= Constants.EXTENDED_SCENE_SIZE-1|| sceneY_Extended >= Constants.EXTENDED_SCENE_SIZE-1) { //skip invalid range tiles. extended tiles at max index aldo seem problematic/dont have objects, so I skip those
 							continue;
 						}
-						if(sceneX_Extended < 0 || sceneY_Extended < 0) {  //skip invalid range tiles
+						if(sceneX_Extended <=0 || sceneY_Extended <=0) {  //skip invalid range tiles. extended tiles at zero seem problematic/dont have objects, so I skip those
 							continue;
 						}
-
 
 						if(noTileSpawns > maxTileSpawnsPerFrame) {break;}//hacky way to spread out spawns over multiple frames when loading spawning on the fly.
 
@@ -1829,6 +1828,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 						if(isInMainScene) {
 							tile = Tiles[z][sceneX][sceneY];
 						}else {
+							//if(true) {continue;}
 							tile = extendedTiles[z][sceneX_Extended][sceneY_Extended];
 						}
 
@@ -2194,7 +2194,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 		if (!alreadyCommunicatedUnreal)
 		{
-			client.getTopLevelWorldView().getScene().setDrawDistance(config.drawDistance()+8);
+			client.getTopLevelWorldView().getScene().setDrawDistance(maxTileLoadDist+8);
 
 			if(curGpuFlags == 17) {//bodge code for zbuff gpu mode. makes all projectiles visible aswell as all graphicsobjects
 				for(Projectile obj: client.getProjectiles()) {
@@ -2665,7 +2665,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	}
 
 	void initDrawDistance() {
-		maxTileLoadDist = config.drawDistance();
+		maxTileLoadDist = appSettings.drawDistance;
 		maxChunkDist = (int)Math.ceil((float) maxTileLoadDist /8.0f);
 		maxPopulateDIst = maxTileLoadDist - 7;
 	}
@@ -2755,9 +2755,9 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		}
 
 		//int GpuFlags = DrawCallbacks.GPU | (computeMode == ComputeMode.NONE ? 0 : DrawCallbacks.HILLSKEW);
-		client.setExpandedMapLoading(5);
+		client.setExpandedMapLoading(6);
 
-		setMaxFps(config.MaxFps());
+		setMaxFps(appSettings.maxFps);
 
 		setGpuFlags(0);
 		setDrawCallbacks(this);
@@ -3425,10 +3425,10 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 					setupLoggingLevel();
 				}
 
-				if (event.getKey().equalsIgnoreCase("MaxFps"))
+/*				if (event.getKey().equalsIgnoreCase("MaxFps"))
 				{
 					setMaxFps(config.MaxFps());
-				}
+				}*/
 
 				if (event.getKey().equalsIgnoreCase("attachRmWindowToRL"))
 				{
@@ -3442,11 +3442,11 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 					}
 				}
 
-				if (event.getKey().equalsIgnoreCase("drawDistance"))
+/*				if (event.getKey().equalsIgnoreCase("drawDistance"))
 				{
 					initDrawDistance();
 					changedDrawDist = true;
-				}
+				}*/
 			}
 		});
 	}
@@ -4225,26 +4225,21 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 				});
 			});
 
-			appSettings = loadAppSettings(); //load appSettings file
+			loadAppSettings(); //load appSettings file
 
-			if (appSettings != null)
-			{ //makes login screen background transparent if animeLoginScreen appsetting is true
-				if (appSettings.animateLoginScreen)
-				{
-					SpritePixels spritePixels = client.createSpritePixels(new int[0], 0, 0);
-					client.setLoginScreen(spritePixels);
-					enableLoginFire(false);
-				}
-				else
-				{
-					client.setLoginScreen(null);
-					enableLoginFire(true);
-				}
+			if (appSettings.animateLoginScreen)
+			{
+				SpritePixels spritePixels = client.createSpritePixels(new int[0], 0, 0);
+				client.setLoginScreen(spritePixels);
+				enableLoginFire(false);
 			}
 			else
 			{
-				log.debug("appsettings is null");
+				client.setLoginScreen(null);
+				enableLoginFire(true);
 			}
+
+			client.resizeCanvas();
 		}
 		else if (curGamestate == GameState.LOGGING_IN)
 		{
@@ -4269,6 +4264,10 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		}
 		else if (curGamestate == GameState.LOADING)
 		{
+			if(lastGameState == GameState.LOGIN_SCREEN_AUTHENTICATOR || lastGameState == GameState.LOGIN_SCREEN) {
+				//we force send when moving away from loginscreen, because login screen anim will set it's own options, and those need to be refreshed when we moved off the loginscreen.
+				SendRsOptionsPacket(true);
+			}
 			log.debug("loading...");
 		}
 		else if (curGamestate == GameState.LOGIN_SCREEN_AUTHENTICATOR)
@@ -5726,11 +5725,11 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	{
 		return a * (1.0f - f) + (b * f);
 	}
-	void SendRsOptionsPacket() {
+	void SendRsOptionsPacket(boolean forceSend) {
 		double pow = client.getTextureProvider().getBrightness(); //1.0 at low. 0.5 at high
 		boolean removeRoofs = client.getVarbitValue(12378) > 0;
 		boolean animSmoothing = client.getAnimationInterpolationFilter() != null;
-		if(powPrevFrame != pow || removeRoofsPrevFrame != removeRoofs || animSmoothingPrevFrame != animSmoothing || drawDistance_PrevFrame!=config.drawDistance()-8) { //if options have changed
+		if(powPrevFrame != pow || removeRoofsPrevFrame != removeRoofs || animSmoothingPrevFrame != animSmoothing || drawDistance_PrevFrame!=maxTileLoadDist-8 || forceSend) { //if options have changed
 			Buffer rsOptionsPacket = new Buffer(new byte[20]);
 
 			float lerpVal = ((float)pow-0.5f)*2.0f;
@@ -5739,7 +5738,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			rsOptionsPacket.writeByte((int)(UeGamma*100.0));
 			rsOptionsPacket.writeBoolean(removeRoofs);
 			rsOptionsPacket.writeBoolean(animSmoothing);
-			rsOptionsPacket.writeByte(config.drawDistance()-8);
+			rsOptionsPacket.writeByte(maxTileLoadDist-8);
 			rsOptionsPacket.writeBoolean(false);
 			rsOptionsPacket.writeBoolean(false);
 			rsOptionsPacket.writeBoolean(false);
@@ -5747,7 +5746,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			powPrevFrame = pow;
 			removeRoofsPrevFrame = removeRoofs;
 			animSmoothingPrevFrame = animSmoothing;
-			drawDistance_PrevFrame = config.drawDistance()-8;
+			drawDistance_PrevFrame = maxTileLoadDist-8;
 
 			sharedmem_rm.backBuffer.writePacket(rsOptionsPacket, "RsOptions");
 		}
@@ -6299,7 +6298,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 		checkForFashionScapeChanges();
 
-		SendRsOptionsPacket();
+		SendRsOptionsPacket(false);
 	}
 
 	void hashedEntityDespawned(int SceneId)
@@ -6344,19 +6343,34 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		}
 	}
 
-	public ApplicationSettings loadAppSettings()
+	public void loadAppSettings()
 	{
 		String jsonFileLocation = System.getProperty("user.home") + "\\.runemod\\AppSettings.json";
 
 		//Gson gson = new GsonBuilder().create();
 		try (BufferedReader reader = new BufferedReader(new FileReader(jsonFileLocation)))
 		{
-			return gson.fromJson(reader, ApplicationSettings.class);
+			appSettings = gson.fromJson(reader, ApplicationSettings.class);
 		}
 		catch (IOException e)
 		{
+			System.out.println("error in loadAppSettings");
 			e.printStackTrace();
-			return null;
+			return;
+		}
+	}
+
+	public void appSettingChanged(String setting) {
+		loadAppSettings();
+
+		if(setting.equalsIgnoreCase("maxFps")) {
+			setMaxFps(appSettings.maxFps);
+			//System.out.println("maxFpsSetting Changed");
+		}
+
+		if(setting.equalsIgnoreCase("drawDistance")) {
+			initDrawDistance();
+			changedDrawDist = true;
 		}
 	}
 

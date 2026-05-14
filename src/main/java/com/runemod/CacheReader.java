@@ -35,7 +35,6 @@ import com.runemod.cache.fs.Index;
 import com.runemod.cache.fs.Storage;
 import com.runemod.cache.fs.Store;
 import com.runemod.cache.index.FileData;
-import com.runemod.cache.region.Region;
 import java.util.HashSet;
 import java.util.Set;
 import lombok.SneakyThrows;
@@ -47,9 +46,7 @@ import java.util.Arrays;
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;
 
-import static com.runemod.RuneModPlugin.myCacheReader;
 import static com.runemod.RuneModPlugin.runeModPlugin;
-import static net.runelite.client.RuneLite.RUNELITE_DIR;
 
 @Slf4j
 public class CacheReader
@@ -157,7 +154,7 @@ public class CacheReader
 					//Early return/fast Checker
 					if (runeModPlugin.appSettings == null)
 					{
-						runeModPlugin.appSettings = runeModPlugin.loadAppSettings();
+						runeModPlugin.loadAppSettings();
 					}
 					if (runeModPlugin.appSettings != null)
 					{

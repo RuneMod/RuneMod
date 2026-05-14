@@ -765,7 +765,13 @@ public class SharedMemoryManager
 						runeModPlugin.reloadUnrealScene();
 					});
 					break;
-				case 7: //unused?
+				case 7: //AppSettingChanged
+					log.debug("recieved unreal AppSettings packet");
+					int numElements = packet.readInt();
+					for(int i = 0; i < numElements; i++) {
+						String changedAppSetting = packet.readStringCp1252NullTerminated();
+						runeModPlugin.appSettingChanged(changedAppSetting);
+					}
 					break;
 				default:
 					log.debug("unhandled unrealDataType at: " + " Offset: " + Offset + " PacketLen: " + packetLength);

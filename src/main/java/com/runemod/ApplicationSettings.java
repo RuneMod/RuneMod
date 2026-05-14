@@ -26,19 +26,28 @@ package com.runemod;
 
 public class ApplicationSettings
 {
-	public String lastUsedUser = "No Name";
-	public boolean modMode = false;
-	public int[] rsCacheHashes;
-	public boolean loaded = false;
-	public float volume = 0.5f;
-	public boolean highPerformanceMode = false;
-	public int resolutionOverride = 0;
-	public boolean animateLoginScreen = true;
-	public boolean autoRecord = false;
-	public boolean dLSS = false;
-	public boolean showFps = false;
-	public float contrast = 1.0f;
-	public boolean disableFog = false;
-	public float fogAmount = 1.0f;
-	//public int DrawDistance = 52;
+	String lastUsedUser = "No Name";
+	boolean modMode = false;
+	int[] rsCacheHashes; //read when requesting rsCache. saved when recieved all the RsCache.
+	boolean loaded = false;
+	float volume = 0.5f;
+	boolean highPerformanceMode = false;
+	int resolutionOverride = 0;
+	boolean animateLoginScreen = true;
+	boolean autoRecord = false;
+	boolean dLSS = false;
+	boolean showFps = false;
+	float contrast = 1.0f;
+	float fogAmount = 1.0f;
+	//FColor FogTint = FColor(255,255,255,255);
+	//EWeatherTag weatherOverride = EWeatherTag::None;
+	float grunge = 0.2f;
+	float colorShift = 0.2f;
+	long customWeather = 0;
+	float chanceOfRain = 1.0f;
+	float chanceOfSun = 1.0f;
+	float chanceOfCloud = 1.0f;
+	float chanceOfSnow = 0.0f;
+	int drawDistance = 46;
+	int maxFps = 50;
 }
