@@ -1417,7 +1417,6 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		return Math.sqrt((dx * dx) + (dy * dy));
 	}
 
-	int maxTileLoadDist = -1;
 	int maxChunkDist = -1;
 	int maxPopulateDIst = -1;
 
@@ -1448,7 +1447,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 				WorldPoint chunkCentre = new WorldPoint((chunkX * CHUNK_SIZE)+4, (chunkY * CHUNK_SIZE)+4, 0);
 				double distance = getWorldPointDistance(chunkCentre, playerLoc);
-				boolean isInRange = distance < maxTileLoadDist;
+				boolean isInRange = distance < appSettings.drawDistance;
 				if(!isInRange) {
 					continue;
 				}
@@ -1516,7 +1515,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 			WorldPoint chunkCentre = new WorldPoint((chunkX * CHUNK_SIZE)+4, (chunkY * CHUNK_SIZE)+4, 0);
 			double distance = getWorldPointDistance(chunkCentre, playerLoc);
-			boolean isInRange = distance < maxTileLoadDist;
+			boolean isInRange = distance < appSettings.drawDistance;
 
 			if (!isInRange/* && !isInMainScene*/)
 			{
@@ -1638,6 +1637,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		return result;
 	}
 
+	boolean playerHasTeleported = false;
 	@SneakyThrows
 	@Subscribe
 	private void onBeforeRender(BeforeRender event)
@@ -1760,9 +1760,10 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		if (curGamestate == GameState.LOGGED_IN && client.getLocalPlayer() != null/* && ticksSinceLoadScene > 0*/)
 		{
 			WorldPoint playerLocation = getPlayerLocationInWorld();
-			boolean playerHasTeleported = playerLocation.distanceTo(playerLocation_prevTick) > 7;
+			playerHasTeleported = playerLocation.distanceTo(playerLocation_prevTick) > 7;
+
 			if(playerHasTeleported) {
-				log.debug("player has teleported, spawning world all in one go");
+				log.debug("player has teleported");
 			}
 
 
@@ -2194,7 +2195,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 		if (!alreadyCommunicatedUnreal)
 		{
-			client.getTopLevelWorldView().getScene().setDrawDistance(maxTileLoadDist+8);
+			client.getTopLevelWorldView().getScene().setDrawDistance(appSettings.drawDistance+8);
 
 			if(curGpuFlags == 17) {//bodge code for zbuff gpu mode. makes all projectiles visible aswell as all graphicsobjects
 				for(Projectile obj: client.getProjectiles()) {
@@ -2215,6 +2216,12 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			visibleActors.clear();
 			tilesWithAnimateGameObjects.clear();
 			AnimatedTileObjects.clear();
+
+			if(client.getLocalPlayer()!=null) {
+				WorldPoint playerLocation = getPlayerLocationInWorld();
+				playerLocation_prevTick = playerLocation;
+			}
+			playerHasTeleported = false;
 		}
 		//communicateWithUnreal("Draw");
 	}
@@ -2665,9 +2672,8 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	}
 
 	void initDrawDistance() {
-		maxTileLoadDist = appSettings.drawDistance;
-		maxChunkDist = (int)Math.ceil((float) maxTileLoadDist /8.0f);
-		maxPopulateDIst = maxTileLoadDist - 7;
+		maxChunkDist = (int)Math.ceil((float) appSettings.drawDistance /8.0f);
+		maxPopulateDIst = appSettings.drawDistance - 6;
 	}
 
 	@SneakyThrows
@@ -3896,7 +3902,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		}
 
 		for(WorldView worldView : worldViews) {
-/*			if(!worldView.isTopLevel()) {
+			if(!worldView.isTopLevel()) {
 				WorldViewLoaded event = new WorldViewLoaded(worldView);
 				onWorldViewLoaded(event);  //seems we dont automatically get spawn events fro world views when we change gametsate to loading so we simulate them
 
@@ -3913,7 +3919,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 						}
 					}
 				}
-			}*/
+			}
 
 			for (NPC npc : worldView.npcs())
 			{
@@ -4098,7 +4104,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		LocalPoint lp = client.getLocalPlayer().getLocalLocation();
 		int sceneX = (lp.getX()) / 128;
 		int sceneY = (lp.getY()) / 128;
-		WorldPoint playerLocation = WorldPoint.fromScene(client, sceneX, sceneY, client.getPlane());
+		WorldPoint playerLocation = getPlayerLocationInWorld();
 
 		boolean isInMainScene = (sceneX >= 0 && sceneX < 104 && sceneY >= 0 && sceneY < 104); //prevents weird crash when logging into sailing
 		if(!isInMainScene) {
@@ -4163,7 +4169,6 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		if(exteriorVisibility_Prev != exteriorVisibility) { //we dont send the visibility packet if the visibility hasnt changed
 			exteriorVisibility_Prev = exteriorVisibility;
 		}else {
-			playerLocation_prevTick = playerLocation;
 			return;
 		}
 
@@ -4182,12 +4187,10 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		if(!playerHasMoved) { //if player has not moved, means evironment has changed. EG a door has been openned. so we want a small blend time.
 			visibilityBlendTime = 100;
 		}
-		if(playerLocation.distanceTo(playerLocation_prevTick) > 7) { //if player has teleported
+		if(playerHasTeleported) { //if player has teleported
 			visibilityBlendTime = 0;
 		}
 		packet.writeShort((short)visibilityBlendTime);
-
-		playerLocation_prevTick = playerLocation;
 
 		//log.debug("visibilityBlendTime: " + visibilityBlendTime);
 
@@ -4212,6 +4215,8 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			log.debug("Login SCREEN...");
 
 			clientPlane_prevFrame = -1; //prevents issue where login screen anims change clientplane, and so when we login, out plane is wrong.
+
+			playerLocation_prevTick = new WorldPoint(0,0,0);
 
 			despawnAllSubRegions();
 
@@ -4243,8 +4248,8 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		}
 		else if (curGamestate == GameState.LOGGING_IN)
 		{
-			initDisAllowedDynamicSpawns();
 			log.debug("logging in...");
+			initDisAllowedDynamicSpawns();
 		}
 		else if (curGamestate == GameState.LOGGED_IN)
 		{
@@ -4257,17 +4262,14 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		}
 		else if (curGamestate == GameState.HOPPING)
 		{
+			log.debug("hopping...");
 			//DespawnServerSpawnedObjs(false);
 			//despawnAllSubRegions();
+			playerLocation_prevTick = new WorldPoint(0,0,0);
 			populatedObjsTiles.clear(); //unreal clears scene when Gamestate == hopping, so we reflect that be clearing populated tiles.
-			log.debug("hopping...");
 		}
 		else if (curGamestate == GameState.LOADING)
 		{
-			if(lastGameState == GameState.LOGIN_SCREEN_AUTHENTICATOR || lastGameState == GameState.LOGIN_SCREEN) {
-				//we force send when moving away from loginscreen, because login screen anim will set it's own options, and those need to be refreshed when we moved off the loginscreen.
-				SendRsOptionsPacket(true);
-			}
 			log.debug("loading...");
 		}
 		else if (curGamestate == GameState.LOGIN_SCREEN_AUTHENTICATOR)
@@ -5729,7 +5731,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		double pow = client.getTextureProvider().getBrightness(); //1.0 at low. 0.5 at high
 		boolean removeRoofs = client.getVarbitValue(12378) > 0;
 		boolean animSmoothing = client.getAnimationInterpolationFilter() != null;
-		if(powPrevFrame != pow || removeRoofsPrevFrame != removeRoofs || animSmoothingPrevFrame != animSmoothing || drawDistance_PrevFrame!=maxTileLoadDist-8 || forceSend) { //if options have changed
+		if(powPrevFrame != pow || removeRoofsPrevFrame != removeRoofs || animSmoothingPrevFrame != animSmoothing || drawDistance_PrevFrame!=appSettings.drawDistance || forceSend) { //if options have changed
 			Buffer rsOptionsPacket = new Buffer(new byte[20]);
 
 			float lerpVal = ((float)pow-0.5f)*2.0f;
@@ -5738,7 +5740,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			rsOptionsPacket.writeByte((int)(UeGamma*100.0));
 			rsOptionsPacket.writeBoolean(removeRoofs);
 			rsOptionsPacket.writeBoolean(animSmoothing);
-			rsOptionsPacket.writeByte(maxTileLoadDist-8);
+			rsOptionsPacket.writeByte(appSettings.drawDistance);
 			rsOptionsPacket.writeBoolean(false);
 			rsOptionsPacket.writeBoolean(false);
 			rsOptionsPacket.writeBoolean(false);
@@ -5746,7 +5748,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			powPrevFrame = pow;
 			removeRoofsPrevFrame = removeRoofs;
 			animSmoothingPrevFrame = animSmoothing;
-			drawDistance_PrevFrame = maxTileLoadDist-8;
+			drawDistance_PrevFrame = appSettings.drawDistance;
 
 			sharedmem_rm.backBuffer.writePacket(rsOptionsPacket, "RsOptions");
 		}

@@ -48,6 +48,6 @@ public class ApplicationSettings
 	float chanceOfSun = 1.0f;
 	float chanceOfCloud = 1.0f;
 	float chanceOfSnow = 0.0f;
-	int drawDistance = 46;
+	int drawDistance = 46; //how many tile into the distance we can load
 	int maxFps = 50;
 }
