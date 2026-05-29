@@ -569,6 +569,8 @@ public class SharedMemoryManager
 		return true;
 	}
 
+	long WS_EX_TOOLWINDOW = 0x00000080L;
+	long WS_EX_APPWINDOW = 0x00040000L;
 	public void UnChildRuneModWinFromRl()
 	{
 		log.debug("UnChildingRuneModWindowToRL");
@@ -598,7 +600,110 @@ public class SharedMemoryManager
 
 		log.debug("UnChildingRuneModWindowToRL ....");
 
+		log.debug("UnChildingRuneModWindowToRL");
+
+		if (!RuneModPlugin.unrealIsReady)
+		{
+			return;
+		}
+
+		if (runeModPlugin.config.attachRmWindowToRL())
+		{
+			return;
+		}
+
+		if (!RmWinIsChilded)
+		{
+			return;
+		}
+
+		if (RuneModHandle == null)
+		{
+			RuneModHandle = findRuneModWindow();
+		}
+
+		if (RuneModHandle == null)
+		{
+			return;
+		}
+
+		log.debug("Detaching RuneMod window");
+
+		// Detach from parent
 		User32.INSTANCE.SetParent(RuneModHandle, null);
+
+		//stuff bellow is extra to detach it more thoroughly.
+		// Remove owner relationship completely
+		User32.INSTANCE.SetWindowLongPtr(
+			RuneModHandle,
+			-8,
+			null
+		);
+
+		// Restore normal window styles
+		int style = User32.INSTANCE.GetWindowLong(
+			RuneModHandle,
+			WinUser.GWL_STYLE
+		);
+
+		style &= ~WinUser.WS_CHILD;
+		style |= WinUser.WS_OVERLAPPEDWINDOW;
+
+		User32.INSTANCE.SetWindowLong(
+			RuneModHandle,
+			WinUser.GWL_STYLE,
+			style
+		);
+
+		// Restore extended styles
+		int exStyle = User32.INSTANCE.GetWindowLong(
+			RuneModHandle,
+			WinUser.GWL_EXSTYLE
+		);
+
+		// Remove toolwindow flag so it can appear on taskbar
+		exStyle &= ~WS_EX_TOOLWINDOW;
+
+		// Add appwindow flag so Explorer treats it as a real app
+		exStyle |= WS_EX_APPWINDOW;
+
+		User32.INSTANCE.SetWindowLong(
+			RuneModHandle,
+			WinUser.GWL_EXSTYLE,
+			exStyle
+		);
+
+		// Hide first so Explorer refreshes taskbar state properly
+		User32.INSTANCE.ShowWindow(
+			RuneModHandle,
+			WinUser.SW_HIDE
+		);
+
+		// Force style/frame refresh
+/*		User32.INSTANCE.SetWindowPos(
+			RuneModHandle,
+			null,
+			100,
+			100,
+			1280,
+			720,
+			WinUser.SWP_FRAMECHANGED
+		);*/
+
+		// Show again
+		User32.INSTANCE.ShowWindow(
+			RuneModHandle,
+			WinUser.SW_SHOW
+		);
+
+		// Bring to front
+		User32.INSTANCE.BringWindowToTop(RuneModHandle);
+		User32.INSTANCE.SetForegroundWindow(RuneModHandle);
+
+		RmWinIsChilded = false;
+
+		log.debug("RuneMod window detached successfully");
+
 		RmWinIsChilded = false;
 	}
 
@@ -809,7 +914,21 @@ public class SharedMemoryManager
 	}
 
 	public void SetTimeBeginPeriod() {
-		myKernel32.timeBeginPeriod(1);
+		try
+		{
+			int result = myKernel32.timeBeginPeriod(1);
+
+			if(result != 0)
+			{
+				log.debug("timeBeginPeriod failed: " + result);
+			}
+		}
+		catch(Throwable t)
+		{
+			// Wine/Proton may not support this properly.
+			// Ignore failure and continue running normally.
+			log.debug("timeBeginPeriod unsupported on this platform.");
+		}
 	}
 
 	public interface MyKernel32 extends Kernel32

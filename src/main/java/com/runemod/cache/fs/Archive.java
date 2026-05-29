@@ -102,9 +102,10 @@ public class Archive
 		if (container.revision != -1 && this.getRevision() != container.revision)
 		{
 			// compressed data doesn't always include a revision, but check it if it does
-			logger.warn("revision mismatch for archive {}/{}, expected {} was {}",
+			//commented out by runeface to avoid spam
+/*			logger.warn("revision mismatch for archive {}/{}, expected {} was {}",
 				index.getId(), this.getArchiveId(),
-				this.getRevision(), container.revision);
+				this.getRevision(), container.revision);*/
 			// I've seen this happen with vanilla caches where the
 			// revision in the index data differs from the revision
 			// stored for the archive data on disk... I assume this

@@ -1757,6 +1757,30 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			}
 		}
 
+
+		drawManager.processDrawComplete(this::screenshot);
+
+		//check if settings panel is open for runemod. if yes, open the settings window in runemod.
+/*		if(unrealIsReady && ticksSincePluginLoad%2 == 0)
+		{
+			SwingUtilities.invokeLater(() ->
+			{
+				//long timeBefore = System.nanoTime();
+				boolean isRuneModSettingsOpen = isRuneModSettingsVisible(client.getCanvas().getParent().getParent().getParent());
+				//long timeAfter = System.nanoTime();
+				//System.out.println("timeTaken: "+(timeAfter-timeBefore));
+				if(isRuneModSettingsOpen_PrevFrame!=isRuneModSettingsOpen) {
+					log.debug("RmSettings Open = "+isRuneModSettingsOpen);
+					clientThread.invoke(() -> {
+						isRuneModSettingsOpen_PrevFrame = isRuneModSettingsOpen;
+						RmUiPacket_SettingsWindow();
+					});
+				}
+			});
+		}*/
+	}
+
+	void processSpawnSimulations() {
 		if (curGamestate == GameState.LOGGED_IN && client.getLocalPlayer() != null/* && ticksSinceLoadScene > 0*/)
 		{
 			WorldPoint playerLocation = getPlayerLocationInWorld();
@@ -1853,40 +1877,9 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 						}
 					}
 				}
-/*				for (int z = 0; z < 4; z++)
-				{
-					for (int sceneX = playerSceneX-maxTileLoadDist; sceneX < playerSceneX+maxTileLoadDist; sceneX++)
-					{
-						for (int sceneY = playerSceneY-maxTileLoadDist; sceneY < playerSceneY+maxTileLoadDist; sceneY++)
-						{
-
-						}
-					}
-				}*/
 			}
 			eventIsSimulation = false;
 		}
-
-		drawManager.processDrawComplete(this::screenshot);
-
-		//check if settings panel is open for runemod. if yes, open the settings window in runemod.
-/*		if(unrealIsReady && ticksSincePluginLoad%2 == 0)
-		{
-			SwingUtilities.invokeLater(() ->
-			{
-				//long timeBefore = System.nanoTime();
-				boolean isRuneModSettingsOpen = isRuneModSettingsVisible(client.getCanvas().getParent().getParent().getParent());
-				//long timeAfter = System.nanoTime();
-				//System.out.println("timeTaken: "+(timeAfter-timeBefore));
-				if(isRuneModSettingsOpen_PrevFrame!=isRuneModSettingsOpen) {
-					log.debug("RmSettings Open = "+isRuneModSettingsOpen);
-					clientThread.invoke(() -> {
-						isRuneModSettingsOpen_PrevFrame = isRuneModSettingsOpen;
-						RmUiPacket_SettingsWindow();
-					});
-				}
-			});
-		}*/
 	}
 
 	private Image screenshot()
@@ -2210,18 +2203,9 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 			communicateWithUnreal("draw");
 
-			if(client.getLocalPlayer()!=null){ //we do this on next fram
-				calcWorldVisibility();
-			}
 			visibleActors.clear();
 			tilesWithAnimateGameObjects.clear();
 			AnimatedTileObjects.clear();
-
-			if(client.getLocalPlayer()!=null) {
-				WorldPoint playerLocation = getPlayerLocationInWorld();
-				playerLocation_prevTick = playerLocation;
-			}
-			playerHasTeleported = false;
 		}
 		//communicateWithUnreal("Draw");
 	}
@@ -2273,8 +2257,23 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	public void postDrawScene()
 	{
 		if(config.nullifyDrawCallbacks()) {return;}
-
 		log_Timed_Heavy("postDrawScene");
+	}
+
+	@Override
+	public void postSceneDraw(Scene scene)
+	{
+		if(scene.getWorldViewId() == WorldView.TOPLEVEL) { //it seems this is the correct location to simulate spawns. doing it earlie can result in default state/wrong obj rotations
+			calcWorldVisibility();
+			processSpawnSimulations();
+
+			if (client.getLocalPlayer() != null && client.getGameState() == GameState.LOGGED_IN)
+			{
+				WorldPoint playerLocation = getPlayerLocationInWorld();
+				playerLocation_prevTick = playerLocation;
+				playerHasTeleported = false;
+			}
+		}
 	}
 	//if npc in curfram has overrides, and it didnt in last frame, overridesChanged.
 	//if npcsWithOverrides in last frame is missing from npcsWithOverrides in currentFrame, overridesChanged.
@@ -2461,7 +2460,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	{
 		log.debug("loadScene. wv: "+scene.getWorldViewId());
 		if(divergentStuff.clientType == ClientType.RUNELITE) { //alora uses onLoadRegion instead, because it is single threaded as has no async map load.
-			if(scene.getWorldViewId() == 0) {
+			if(scene.getWorldViewId() == WorldView.TOPLEVEL) {
 				needSendBaseInfo = true;
 				baseInfoScene = scene;
 			}
@@ -3215,7 +3214,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			});
 		}
 
-		if(!hasDedicatedGpu()) {
+/*		if(!hasDedicatedGpu()) {
 			disableRuneModPlugin();
 			SwingUtilities.invokeLater(() ->
 			{
@@ -3224,7 +3223,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 					"RuneMod Error",
 					JOptionPane.DEFAULT_OPTION);
 			});
-		}
+		}*/
 
 		if(SharedMemoryManager.RuneModWinExists_ByName()) {
 			disableRuneModPlugin();
@@ -3669,7 +3668,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	}
 */
 
-	void simulateSomeTilObjectSpawns(Tile tile) {
+/*	void simulateSomeTilObjectSpawns(Tile tile) {
 			if(tile == null) {return;}
 			WallObject wallObject = tile.getWallObject();
 			if (wallObject != null)
@@ -3680,7 +3679,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 				onWallObjectSpawned(objectSpawned);
 			}
 
-/*			DecorativeObject decorativeObject = tile.getDecorativeObject();
+*//*			DecorativeObject decorativeObject = tile.getDecorativeObject();
 			if (decorativeObject != null)
 			{
 				final DecorativeObjectSpawned objectSpawned = new DecorativeObjectSpawned();
@@ -3696,7 +3695,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 				objectSpawned.setTile(tile);
 				objectSpawned.setGroundObject(groundObject);
 				onGroundObjectSpawned(objectSpawned);
-			}*/
+			}*//*
 
 			for (GameObject object : tile.getGameObjects())
 			{
@@ -3717,16 +3716,16 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 							}
 							else
 							{
-/*									if(object.getRenderable() instanceof Actor) {
+*//*									if(object.getRenderable() instanceof Actor) {
 										log.debug("unhandled renderableClass: Actor");
-									}*/
+									}*//*
 							}
 						}
 					}
 					//}
 				}
 			}
-	}
+	}*/
 
 	void getTileObjectTagsOnTile(Tile tile, Set<Long> setToAddTo) {
 		if(tile == null) {return;}
@@ -4094,6 +4093,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	double exteriorVisibility_Prev = -1;
 
 	void calcWorldVisibility() { //calculate how much of the world visible to the player is outdoors/indoors. used for muffling sound.
+		if(client.getLocalPlayer()==null) {return;}
 		if(client.getTopLevelWorldView() == null) {return;}
 		if(client.getTopLevelWorldView().getScene().getTiles() == null) { return; } //prevents an error that can happen on first tick of login
 
@@ -4302,7 +4302,6 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	@Subscribe
 	private void onWallObjectDespawned(WallObjectDespawned event)
 	{
-		if (ticksSincePluginLoad <= 1) { return; }
 		//clientThread.invokeAtTickEnd(() -> //invoking later because baslocation likely hasnt been sent to unreal yet
 		//{
 
@@ -4365,7 +4364,6 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			return;
 		}
 
-		if (ticksSincePluginLoad <= 1) { return; }
 		//clientThread.invokeAtTickEnd(() -> //invoking later because baslocation likely hasnt been sent to unreal yet
 		//{
 			if (!config.spawnGameObjects())
@@ -4437,7 +4435,6 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	@Subscribe
 	private void onDecorativeObjectDespawned(DecorativeObjectDespawned event)
 	{
-		if (ticksSincePluginLoad <= 1) { return; }
 		//clientThread.invokeAtTickEnd(() -> //invoking later because baslocation likely hasnt been sent to unreal yet
 		//{
 			Tile tile;
@@ -4478,7 +4475,6 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			return;
 		}
 
-		if (ticksSincePluginLoad <= 1) { return; }
 		if (!config.spawnGameObjects())
 		{
 			return;
@@ -4828,11 +4824,10 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 		if(event.getGameObject() == null) {return;}
 		WorldView worldView = event.getGameObject().getWorldView();
-		if(curGamestate == disAllowSpawnOnThisGamestate && worldView.isTopLevel()) { //toplevel world view uses simulated spawn event that happen when they come into range
+		if(curGamestate == disAllowSpawnOnThisGamestate && worldView.isTopLevel()) { //toplevel world view uses our own simulated spawn events that happen when they come into range
 			return;
 		}
 
-		if (ticksSincePluginLoad <= 1) { return; }
 		//clientThread.invokeAtTickEnd(() -> //invoking later because baslocation likely hasnt been sent to unreal yet
 		//{
 		if (!config.spawnGameObjects())
@@ -4945,7 +4940,6 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	@Subscribe
 	private void onGroundObjectDespawned(GroundObjectDespawned event)
 	{
-		if (ticksSincePluginLoad <= 1) { return; }
 		//clientThread.invokeAtTickEnd(() -> //invoking later because baslocation likely hasnt been sent to unreal yet
 		//{
 			Tile tile = event.getTile();
@@ -4973,8 +4967,6 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	@Subscribe
 	private void onGameObjectDespawned(GameObjectDespawned event)
 	{
-		if (ticksSincePluginLoad <= 1) { return; }
-
 		if(loggedInForNoServerTicks > 1 && disAllowedDynamicDeSpawns.contains(event.getGameObject().getId())) {return;}
 
 		//System.out.println("gameObjectDespawned");
@@ -5007,8 +4999,6 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 	private void onGameObjectDespawned(GameObjectDespawned event, long tag)
 	{
-		if (ticksSincePluginLoad <= 1) { return; }
-
 		if(loggedInForNoServerTicks > 1 && disAllowedDynamicDeSpawns.contains(event.getGameObject().getId())) {return;}
 		//clientThread.invokeAtTickEnd(() -> //invoking later because baslocation likely hasnt been sent to unreal yet
 		//{
@@ -5113,7 +5103,6 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			return;
 		}
 
-		if (ticksSincePluginLoad <= 1) { return; }
 		if (!config.spawnGameObjects())
 		{
 			return;
@@ -5184,7 +5173,6 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			baseInfoScene = null;
 		}
 
-		if (ticksSincePluginLoad <= 1) { return; }
 		if (!config.spawnItems())
 		{
 			return;
@@ -5231,7 +5219,6 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	@Subscribe
 	private void onItemDespawned(ItemDespawned event)
 	{
-		if (ticksSincePluginLoad <= 1) { return; }
 		//clientThread.invokeAtTickEnd(() ->
 		//{
 			Buffer actorSpawnPacket = new Buffer(new byte[100]);
@@ -5260,8 +5247,6 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	@Subscribe
 	private void onNpcSpawned(NpcSpawned event)
 	{
-		if (ticksSincePluginLoad <= 1) { return; }
-
 		if (event.getNpc() == null)
 		{
 			return;
@@ -5306,7 +5291,6 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	@Subscribe
 	private void onNpcChanged(NpcChanged event)
 	{
-		if (ticksSincePluginLoad <= 1) { return; }
 		if (event.getNpc() == null)
 		{
 			return;
@@ -5327,7 +5311,6 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	@Subscribe
 	private void onNpcDespawned(NpcDespawned event)
 	{
-		if (ticksSincePluginLoad <= 1) { return; }
 		if (event.getNpc() == null)
 		{
 			return;
@@ -5390,7 +5373,6 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	@Subscribe
 	private void onPlayerSpawned(PlayerSpawned event)
 	{
-		if (ticksSincePluginLoad <= 1) { return; }
 		if (!config.spawnPlayers())
 		{
 			return;
@@ -5451,7 +5433,6 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	@Subscribe
 	private void onPlayerDespawned(PlayerDespawned event)
 	{
-		if (ticksSincePluginLoad <= 1) { return; }
 		Buffer actorSpawnPacket = new Buffer(new byte[100]);
 
 		int instanceId = getOrAddCustomizedId(event.getPlayer());
