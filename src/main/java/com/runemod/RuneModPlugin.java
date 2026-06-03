@@ -4028,7 +4028,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 						{
 							if (action.equals("Escape") || action.equals("Touch") || action.equals("Squeeze-through") || action.equals("Climb-through ") || action.equals("Climb-over") || action.equals("Jump-over") || action.equals("Hop-over") || action.equals("Enter") || action.equals("Climb") || action.equals("Step-into"))
 							{
-								log.debug("disallowed dynamic spawn on obj: " + objDef.getName());
+								//log.debug("disallowed dynamic spawn on obj: " + objDef.getName());
 								disAllowedDynamicDeSpawns.add(i);
 								break;
 							}
