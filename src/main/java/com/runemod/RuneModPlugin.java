@@ -222,33 +222,211 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	int GpuFlagsEnableNo = DrawCallbacks.GPU|DrawCallbacks.ZBUF;//1;
 	Set<Renderable> visibleActors = new HashSet<Renderable>();
 	Set<WorldPoint> activeSubRegions = new HashSet<>();//key is the subregion's corner tileCoord.
-	Set<PopulatedTile> populatedObjsTiles = new HashSet<>();
+	HashMap<PopulatedTile, PopulatedTile>[] populatedObjsTiles = new HashMap[4096];//assuming max worldViewId is 4096
 
-	class PopulatedTile
+
+/*	ArrayList<TileObject> getObjsOnTile(Tile tile) {
+		ArrayList<TileObject> objsOnTile = new ArrayList<>();
+		objsOnTile.add(tile.getWallObject());
+		objsOnTile.add(tile.getGroundObject());
+		objsOnTile.add(tile.getDecorativeObject());
+		for(GameObject go : tile.getGameObjects()) {
+			if(go!=null) {
+				objsOnTile.add(go);
+			}
+		}
+		return objsOnTile;
+	}*/
+
+	void respawnObjOnTile(Tile tile, int objDefId) {
+		if(tile == null) {return;}
+		System.out.println("Respawning "+objDefId);
+/*		if(tile.getBridge()!=null) {
+			simulateTilObjectSpawns(tile.getBridge());
+		}*/
+		WallObject wallObject = tile.getWallObject();
+		if (wallObject != null && wallObject.getId() == objDefId)
+		{
+			final WallObjectDespawned objectDeSpawned = new WallObjectDespawned();
+			objectDeSpawned.setTile(tile);
+			objectDeSpawned.setWallObject(wallObject);
+			onWallObjectDespawned(objectDeSpawned);
+
+			final WallObjectSpawned objectSpawned = new WallObjectSpawned();
+			objectSpawned.setTile(tile);
+			objectSpawned.setWallObject(wallObject);
+			onWallObjectSpawned(objectSpawned);
+		}
+
+		DecorativeObject decorativeObject = tile.getDecorativeObject();
+		if (decorativeObject != null && decorativeObject.getId() == objDefId)
+		{
+			final DecorativeObjectDespawned objectDeSpawned = new DecorativeObjectDespawned();
+			objectDeSpawned.setTile(tile);
+			objectDeSpawned.setDecorativeObject(decorativeObject);
+			onDecorativeObjectDespawned(objectDeSpawned);
+
+			final DecorativeObjectSpawned objectSpawned = new DecorativeObjectSpawned();
+			objectSpawned.setTile(tile);
+			objectSpawned.setDecorativeObject(decorativeObject);
+			onDecorativeObjectSpawned(objectSpawned);
+		}
+
+		GroundObject groundObject = tile.getGroundObject();
+		if (groundObject != null && groundObject.getId() == objDefId)
+		{
+			final GroundObjectDespawned objectDeSpawned = new GroundObjectDespawned();
+			objectDeSpawned.setTile(tile);
+			objectDeSpawned.setGroundObject(groundObject);
+			onGroundObjectDespawned(objectDeSpawned);
+
+			final GroundObjectSpawned objectSpawned = new GroundObjectSpawned();
+			objectSpawned.setTile(tile);
+			objectSpawned.setGroundObject(groundObject);
+			onGroundObjectSpawned(objectSpawned);
+		}
+
+		for (GameObject object : tile.getGameObjects())
+		{
+			if (object != null)
+			{
+				//if (object.getSceneMinLocation().equals(tile.getSceneLocation()))
+				//{
+				if (object instanceof TileObject && object.getId() == objDefId)
+				{
+					if (object.getRenderable() != null)
+					{
+						if (object.getRenderable() instanceof DynamicObject || object.getRenderable() instanceof Model || object.getRenderable() instanceof ModelData)
+						{
+							//Point min = object.getSceneMinLocation(), max = object.getSceneMaxLocation();
+							final GameObjectDespawned objectDeSpawned = new GameObjectDespawned();
+							objectDeSpawned.setTile(tile);
+							objectDeSpawned.setGameObject(object);
+							onGameObjectDespawned(objectDeSpawned);
+
+							final GameObjectSpawned objectSpawned = new GameObjectSpawned();
+							objectSpawned.setTile(tile);
+							objectSpawned.setGameObject(object);
+							onGameObjectSpawned(objectSpawned);
+						}
+						else
+						{
+/*									if(object.getRenderable() instanceof Actor) {
+										log.debug("unhandled renderableClass: Actor");
+									}*/
+						}
+					}
+				}
+				//}
+			}
+		}
+
+		if(tile.getGroundItems()!=null) {
+			for(TileItem item : tile.getGroundItems()) {
+				if (item != null)
+				{
+					final ItemSpawned objectSpawned = new ItemSpawned(tile, item);
+					onItemSpawned(objectSpawned);
+				}
+			}
+		}
+	}
+
+	ArrayList<Integer>[] varbitToObjDefMap = new ArrayList[80000];
+	ArrayList<Integer>[] varpToObjDefMap = new ArrayList[80000];
+
+	void processObjDefRespawnRequests() {
+		Tile[][][] Tiles = client.getScene().getTiles();
+		Tile[][][] extendedTiles = client.getScene().getExtendedTiles();
+		int wvId = -1;
+		for(HashMap<PopulatedTile, PopulatedTile> worldViewPopTiles : populatedObjsTiles) {
+			wvId++;
+			for(PopulatedTile popTile : worldViewPopTiles.keySet()) {
+				for(ArrayList<Integer> list : popTile.objectsOnTile) {
+					for (int i = list.size() - 1; i >= 0; i--) {
+						int objDefId = list.get(i);
+
+						boolean shouldRespawn = objDefsToRespawnAtFrameEnd.contains(objDefId);
+
+						if(shouldRespawn) {
+							//respawn this object
+							if(wvId==WorldView.TOPLEVEL)
+							{
+								int z = popTile.plane;
+								int sceneX = popTile.x - client.getBaseX();
+								int sceneY = popTile.y - client.getBaseY();
+								int sceneX_Extended = sceneX+SCENE_OFFSET;
+								int sceneY_Extended = sceneY+SCENE_OFFSET;
+
+								boolean isInMainScene = (sceneX >= 0 && sceneX < 104 && sceneY >= 0 && sceneY < 104);
+								Tile tile;
+								if(isInMainScene) {
+									tile = Tiles[z][sceneX][sceneY];
+								}else {
+									//if(true) {continue;}
+									tile = extendedTiles[z][sceneX_Extended][sceneY_Extended];
+								}
+
+								respawnObjOnTile(tile, objDefId);
+							}
+							else
+							{
+								//System.out.println("respawning obj on boat , popTile.x:"+popTile.x+"popTile.y:"+popTile.y);
+								//disabled respawning on boats for now since im not sure they use imposters/multilocs.
+/*								WorldView worldView = client.getWorldView(wvId);
+								int z = popTile.plane;
+								int sceneX = popTile.x - worldView.getBaseX();
+								int sceneY = popTile.y - worldView.getBaseY();
+
+								Tile tile = worldView.getScene().getTiles()[z][sceneX][sceneY];
+								respawnObjOnTile(tile, objDefId);*/
+							}
+						}
+					}
+				}
+			}
+		}
+
+		objDefsToRespawnAtFrameEnd.clear();
+	}
+
+	enum TileObjType {
+		GroundObj(0),
+		GameObj(1),
+		DecorativeObject(2),
+		WallObject(3),
+		TileItem(4);
+
+		private int value;
+
+		private TileObjType(int value) {
+			this.value = value;
+		}
+
+		public int getValue() {
+			return value;
+		}
+	}
+
+	class PopulatedTile //represents a tile that exists in the unreal scene. used to track which objects have and havent been sent to unreal.
 	{
 		int x;
 		int y;
 		int plane;
-		//int wv; havent implemented yet. isEnteringMainScene could be disabled for world views since they tend not to exist in extended scene.
 
-		boolean wasInMainScene = false;
+		ArrayList<Integer>[] objectsOnTile = null; //groundObj = 0; GameObj = 1; DecorativeObject = 2; WallObject = 3
 
-		long wallObj = 0;
-		//long[] gameObjs = new long[5];//can implement these later
-		boolean hasTileObjects = false;
-
-		PopulatedTile(Tile tile) {
+		PopulatedTile(Tile tile, boolean isOnlyKey) { //if the PopulatedTile is only being used as a key/hash, then we create a less heavy version of it
 			x = tile.getWorldLocation().getX();
 			y = tile.getWorldLocation().getY();
-			plane = tile.getWorldLocation().getPlane();
+			plane = tile.getPlane();
 
-			wallObj = getTag_Unique(tile.getWallObject(), tile);
-
-			if(wallObj!=0) {hasTileObjects = true;}
-
-			int sceneX = x-baseX;
-			int sceneY = x-baseY;
-			wasInMainScene = (sceneX >= 0 && sceneX < 104 && sceneY >= 0 && sceneY < 104);
+			if(!isOnlyKey) {
+				objectsOnTile = new ArrayList[4];
+				for(int i = 0; i < 4; i++) {
+					objectsOnTile[i] = new ArrayList<>();
+				}
+			}
 		}
 
 		PopulatedTile(int x_, int y_, int plane_) { //should only be used for comparison purposes, should not store a PopulatedTile created via this method.
@@ -256,34 +434,6 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			y = y_;
 			plane = plane_;
 		}
-
-/*
-		void isEnteringMainScene() { //would need to call this periodically, to ensure stale object left over from extended scene's state are removed
-
-			if(!hasTileObjects) { return; } //optimization thing. If no tile objects, then check is not needed.
-
-			boolean isEnteringMainScene = false;
-			if(!wasInMainScene) {
-				int sceneX = x-baseX;
-				int sceneY = y-baseY;
-				boolean isInMainScene = (sceneX >= 0 && sceneX < 104 && sceneY >= 0 && sceneY < 104);
-				if(isInMainScene) {
-					isEnteringMainScene = true;
-					wasInMainScene = true;
-				}
-
-				if(isEnteringMainScene) {
-					Tile curTile = client.getScene().getTiles()[plane][sceneX][sceneY];
-
-					if((curTile.getWallObject() == null && wallObj!=0) || getTag_Unique(curTile.getWallObject(), curTile) != wallObj) {
-						System.out.println("despawning stale object left over from extended scene "+wallObj);
-						despawnTaggedTileObj(wallObj);
-						wallObj = 0;
-					}
-				}
-			}
-		}
-*/
 
 		@Override
 		public boolean equals(Object o)
@@ -1194,7 +1344,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			for(int x = 0; x < CHUNK_SIZE; x++ ) {
 				for(int y = 0; y < CHUNK_SIZE; y++ ) {
 					//WorldPoint worldLocation = new WorldPoint(chunkBase.getX()+x, chunkBase.getY()+y, z);
-					populatedObjsTiles.remove(new PopulatedTile(chunkBase.getX()+x, chunkBase.getY()+y, z));
+					populatedObjsTiles[WorldView.TOPLEVEL].remove(new PopulatedTile(chunkBase.getX()+x, chunkBase.getY()+y, z));
 				}
 			}
 		}
@@ -1819,11 +1969,6 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 				Tile[][][] extendedTiles = client.getScene().getExtendedTiles();
 				Tile[][][] Tiles = client.getScene().getTiles();
 
-/*				System.out.println("player is null: " +client.getLocalPlayer() != null);
-				System.out.println("extendedSceneValid: "+(client.getScene().getExtendedTiles()[0][1].length == Constants.EXTENDED_SCENE_SIZE));
-				WorldPoint playerLoc = getPlayerLocationInWorld();
-				System.out.println("PlayerLoc: "+playerLoc);*/
-
 				int playerSceneX = playerLocation.getX() - client.getBaseX();
 				int playerSceneY = playerLocation.getY() - client.getBaseY();
 
@@ -1868,11 +2013,11 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 						double distance = getWorldPointDistance(worldLocation, playerLocation);
 						if(distance < maxPopulateDIst) {
-							PopulatedTile populatedTile = new PopulatedTile(tile);
-							if(!populatedObjsTiles.contains(populatedTile)) {
+							if(!populatedObjsTiles[WorldView.TOPLEVEL].containsKey(new PopulatedTile(tile, true))) {
+								PopulatedTile populatedTile = new PopulatedTile(tile, false);
+								populatedObjsTiles[WorldView.TOPLEVEL].put(populatedTile, populatedTile);
 								simulateTilObjectSpawns(tile);
 								noTileSpawns++;
-								populatedObjsTiles.add(populatedTile);
 							}
 						}
 					}
@@ -2265,6 +2410,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	{
 		if(scene.getWorldViewId() == WorldView.TOPLEVEL) { //it seems this is the correct location to simulate spawns. doing it earlie can result in default state/wrong obj rotations
 			calcWorldVisibility();
+			processObjDefRespawnRequests();
 			processSpawnSimulations();
 
 			if (client.getLocalPlayer() != null && client.getGameState() == GameState.LOGGED_IN)
@@ -2583,7 +2729,6 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		window = (JFrame) SwingUtilities.getWindowAncestor(client.getCanvas());
 
 		activeSubRegions.clear();
-		populatedObjsTiles.clear();
 
 		taggedTileObjects.clear();
 
@@ -2763,6 +2908,30 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		client.setExpandedMapLoading(6);
 
 		setMaxFps(appSettings.maxFps);
+
+		//fill with empty hashmaps
+		for(int i = 0; i < populatedObjsTiles.length; i++) {
+			populatedObjsTiles[i] = new HashMap<>();
+		}
+
+		//fill with empty arrays
+		for (int i = 0; i < varbitToObjDefMap.length; i++) {
+			varbitToObjDefMap[i] = new ArrayList<Integer>();
+			varpToObjDefMap[i] = new ArrayList<Integer>();
+		}
+
+		//fill varbit to objdef map
+		for(int id = 0; id < 99000; id++) {
+			ObjectComposition objDef = client.getObjectDefinition(id);
+			if(objDef!=null) {
+				if(objDef.getVarbitId() != -1) {
+					varbitToObjDefMap[objDef.getVarbitId()].add(id);
+				}
+				if(objDef.getVarPlayerId() != -1) {
+					varpToObjDefMap[objDef.getVarPlayerId()].add(id);
+				}
+			}
+		}
 
 		setGpuFlags(0);
 		setDrawCallbacks(this);
@@ -3528,9 +3697,17 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 	void simulateTilObjectSpawns(Tile tile) {
 		if(tile == null) {return;}
+		int worldViewId = tile.getLocalLocation().getWorldView();
 		if(tile.getBridge()!=null) {
+			PopulatedTile populatedTile = new PopulatedTile(tile.getBridge(), false); //its possible a no populated tile exists for the bridge yet. if so, create one
+			if(!populatedObjsTiles[worldViewId].containsKey(populatedTile))
+			{
+				populatedObjsTiles[worldViewId].put(populatedTile, populatedTile);
+			}
 			simulateTilObjectSpawns(tile.getBridge());
+			//System.out.println("Simulating bridge tile spawns too");
 		}
+
 		WallObject wallObject = tile.getWallObject();
 		if (wallObject != null)
 		{
@@ -3873,7 +4050,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		clientPlane_prevFrame = -1;
 
 		despawnAllSubRegions();
-		DespawnServerSpawnedObjs(false); //not sure if this is correct.
+		//DespawnServerSpawnedObjs(false); //not sure if this is correct.
 
 		powPrevFrame = -1;
 		removeRoofsPrevFrame = false;
@@ -3882,7 +4059,9 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		worldVisibilityCalcedTick = -1;
 		exteriorVisibility_Prev = -1;
 		npcsWithOverrides_LastFrame.clear();
-		populatedObjsTiles.clear();
+		for(HashMap<PopulatedTile, PopulatedTile> hashMap : populatedObjsTiles) {
+			hashMap.clear();
+		}
 		changedDrawDist = true;
 
 		reSendVarBits();
@@ -4220,7 +4399,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 			despawnAllSubRegions();
 
-			DespawnServerSpawnedObjs(false);
+			//DespawnServerSpawnedObjs(false); //not nesessarry as all subregions are despawned
 
 			SwingUtilities.invokeLater(() ->
 			{
@@ -4255,10 +4434,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		{
 			log.debug("logged in...");
 
-			DespawnServerSpawnedObjs(true);
-/*			if(lastGameState == GameState.HOPPING) {
-				DespawnServerSpawnedObjs(); //should really add a if was hopping
-			}*/
+			//DespawnServerSpawnedObjs(true); //when hopping to a new world, calling this ensures old objects get despawned
 		}
 		else if (curGamestate == GameState.HOPPING)
 		{
@@ -4266,7 +4442,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			//DespawnServerSpawnedObjs(false);
 			//despawnAllSubRegions();
 			playerLocation_prevTick = new WorldPoint(0,0,0);
-			populatedObjsTiles.clear(); //unreal clears scene when Gamestate == hopping, so we reflect that be clearing populated tiles.
+			populatedObjsTiles[WorldView.TOPLEVEL].clear(); //unreal clears scene when Gamestate == hopping, so we reflect that be clearing populated tiles.
 		}
 		else if (curGamestate == GameState.LOADING)
 		{
@@ -4312,6 +4488,13 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 		if(loggedInForNoServerTicks > 1 && disAllowedDynamicDeSpawns.contains(event.getWallObject().getId())) {return;}
 
+		int worldViewId = event.getWallObject().getWorldView().getId();
+
+		PopulatedTile popTile = populatedObjsTiles[worldViewId].get(new PopulatedTile(event.getTile(), true));
+		if(popTile == null) {return;}//tile is not populated so ignore spawn events for it. spawns will be simulated bny plugin when tile comes into range
+		if(!popTile.objectsOnTile[TileObjType.WallObject.value].contains(event.getWallObject().getId())) {return;} //object is already despawned on tile so no need to spawn it again
+		popTile.objectsOnTile[TileObjType.WallObject.value].remove(new Integer(event.getWallObject().getId()));
+
 			Tile tile = event.getTile();
 
 			Buffer actorSpawnPacket = new Buffer(new byte[20]);
@@ -4338,17 +4521,51 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	private void onWorldViewLoaded(WorldViewLoaded event)
 	{
 		log.debug("onWorldViewLoaded wv:"+event.getWorldView().getId());
+		if(event.getWorldView().isTopLevel()) {return;}
+
 		worldViewUpdate(event.getWorldView(), 0); //0 means spawn worldview
+
+/*		//create populated tiles for boat. for simplicity we allow boats to always have populated tiles regardless of distance form player
+		Tile[][][] worldViewTiles = event.getWorldView().getScene().getTiles();
+		for(int z = 0; z < worldViewTiles.length; z++) {
+			for (int x = 0; x < worldViewTiles[0].length; x++) {
+				for (int y = 0; y < worldViewTiles[0][0].length; y++) {
+					Tile tile = worldViewTiles[z][x][y];
+					if(tile!=null) { //simulate tileSpawns on worldView
+						if(!populatedObjsTiles.containsKey(new PopulatedTile(tile, true))) {
+							PopulatedTile populatedTile = new PopulatedTile(tile, false);
+							populatedObjsTiles.put(populatedTile, populatedTile);
+							System.out.println("adding boat populatedTile at "+tile.getWorldLocation());
+*//*							if(tile.getBridge()!=null) {
+								PopulatedTile populatedTile_Bridge = new PopulatedTile(tile.getBridge(), false);
+								populatedObjsTiles.put(populatedTile_Bridge, populatedTile_Bridge);
+							}*//*
+						}
+					}else {
+						System.out.println("null tile on boat scene ");
+*//*						int worldX = event.getWorldView().getScene().getBaseX() + x - event.getWorldView().getSizeX()/2;
+						int worldY = event.getWorldView().getScene().getBaseY() + y - event.getWorldView().getSizeY()/2;
+						int plane = z;
+						PopulatedTile popTile = new PopulatedTile(worldX,worldY,plane, event.getWorldView().getId());
+						populatedObjsTiles.put(popTile, popTile);*//*
+					}
+				}
+			}
+		}*/
 	}
 
 	@Subscribe
 	private void onWorldViewUnloaded(WorldViewUnloaded event)
 	{
 		log.debug("onWorldViewUnLoaded wv:"+event.getWorldView().getId());
+		if(event.getWorldView().isTopLevel()) {return;}
+
 		worldViewUpdate(event.getWorldView(), 3); //3 means despawn worldview
+
+		populatedObjsTiles[event.getWorldView().getId()].clear();
 	}
 
-	GameState disAllowSpawnOnThisGamestate = GameState.LOADING;
+	//GameState disAllowSpawnOnThisGamestate = GameState.STARTING;//GameState.LOADING;
 	@Subscribe
 	private void onWallObjectSpawned(WallObjectSpawned event)
 	{
@@ -4360,9 +4577,9 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 		if(event.getWallObject() == null) {return;}
 		WorldView worldView = event.getWallObject().getWorldView();
-		if(curGamestate == disAllowSpawnOnThisGamestate && worldView.isTopLevel()) { //toplevel world view uses simulated spawn event that happen when they come into range
+/*		if(curGamestate == disAllowSpawnOnThisGamestate && worldView.isTopLevel()) { //toplevel world view uses simulated spawn event that happen when they come into range
 			return;
-		}
+		}*/
 
 		//clientThread.invokeAtTickEnd(() -> //invoking later because baslocation likely hasnt been sent to unreal yet
 		//{
@@ -4370,6 +4587,21 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			{
 				return;
 			}
+
+			int worldViewId = event.getWallObject().getWorldView().getId();
+
+			PopulatedTile popTile = populatedObjsTiles[worldViewId].get(new PopulatedTile(event.getTile(), true));
+			if(popTile == null) {
+				if(worldViewId!=WorldView.TOPLEVEL) //create populated tiles whenever needed on boats. they will be cleared when the worldview is unloaded
+				{
+					popTile = new PopulatedTile(event.getTile(), false);
+					populatedObjsTiles[worldViewId].put(popTile, popTile);
+				}else {
+					return; //tile is not populated so ignore spawn events for it. spawns will be simulated by plugin when tile comes into range
+				}
+			}
+			if(popTile.objectsOnTile[TileObjType.WallObject.value].contains(event.getWallObject().getId())) {return;} //object is already spawned on tile so no need to spawn it again
+			popTile.objectsOnTile[TileObjType.WallObject.value].add(event.getWallObject().getId());
 
 			//if(loggedInForNoServerTicks > 1 && disAllowedDynamicSpawns.contains(event.getWallObject().getId())) {return;}
 
@@ -4437,8 +4669,13 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	{
 		//clientThread.invokeAtTickEnd(() -> //invoking later because baslocation likely hasnt been sent to unreal yet
 		//{
-			Tile tile;
-			tile = event.getTile();
+			int worldViewId = event.getDecorativeObject().getWorldView().getId();
+			PopulatedTile popTile = populatedObjsTiles[worldViewId].get(new PopulatedTile(event.getTile(), true));
+			if(popTile == null) {return;}//tile is not populated so ignore spawn events for it. spawns will be simulated bny plugin when tile comes into range
+			if(!popTile.objectsOnTile[TileObjType.DecorativeObject.value].contains(event.getDecorativeObject().getId())) {return;} //object is already despawned on tile so no need to spawn it again
+			popTile.objectsOnTile[TileObjType.DecorativeObject.value].remove(new Integer(event.getDecorativeObject().getId()));
+
+			Tile tile = event.getTile();
 
 			Buffer actorSpawnPacket = new Buffer(new byte[20]);
 
@@ -4470,21 +4707,30 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		}
 
 		if(event.getDecorativeObject() == null) {return;}
-		WorldView worldView = event.getDecorativeObject().getWorldView();
-		if(curGamestate == disAllowSpawnOnThisGamestate && worldView.isTopLevel()) { //toplevel world view uses simulated spawn event that happen when they come into range
+/*		if(curGamestate == disAllowSpawnOnThisGamestate && worldView.isTopLevel()) { //toplevel world view uses simulated spawn event that happen when they come into range
 			return;
-		}
+		}*/
 
 		if (!config.spawnGameObjects())
 		{
 			return;
 		}
 
-		if(!eventIsSimulation && worldView.isTopLevel()) { //if this is a non simulated spawn, discard the spawn if the tile is not yet populated/out of range.
-			WorldPoint tileLocation = event.getTile().getWorldLocation();
-			boolean tileIsPopulated = populatedObjsTiles.contains(new PopulatedTile(tileLocation.getX(), tileLocation.getY(), tileLocation.getPlane()));
-			if(!tileIsPopulated) {return;} //disregard spawns for tiles that are not populated. when the tile comes into range, we produce spawn events for it's tileItems.
+		int worldViewId = event.getDecorativeObject().getWorldView().getId();
+		PopulatedTile popTile = populatedObjsTiles[worldViewId].get(new PopulatedTile(event.getTile(), true));
+		if(popTile == null) {
+			if(worldViewId!=WorldView.TOPLEVEL) //create populated tiles whenever needed on boats. they will be cleared when the worldview is unloaded
+			{
+				popTile = new PopulatedTile(event.getTile(), false);
+				populatedObjsTiles[worldViewId].put(popTile, popTile);
+			}else {
+				return; //tile is not populated so ignore spawn events for it. spawns will be simulated by plugin when tile comes into range
+			}
 		}
+		if(popTile.objectsOnTile[TileObjType.DecorativeObject.value].contains(event.getDecorativeObject().getId())) {return;} //object is already spawned on tile so no need to spawn it again
+		popTile.objectsOnTile[TileObjType.DecorativeObject.value].add(event.getDecorativeObject().getId());
+
+		WorldView worldView = event.getDecorativeObject().getWorldView();
 		//clientThread.invokeAtTickEnd(() ->
 		//{
 			Tile tile;
@@ -4549,6 +4795,8 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	int[] varbits;
 	int[] varps;
 
+	Set<Integer> objDefsToRespawnAtFrameEnd = new HashSet();
+
 	@Subscribe
 	private void onVarbitChanged(VarbitChanged event)
 	{
@@ -4563,6 +4811,12 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			buffer.writeInt(event.getValue());
 			varbits[event.getVarbitId()] = event.getValue();
 			sharedmem_rm.backBuffer.writePacket(buffer, "Varbit");
+
+			//mark the objdef as needing respawn
+			for(Integer objDefId : varbitToObjDefMap[event.getVarbitId()]) {
+				//System.out.println("varbit changed for objdef: "+objDefId);
+				objDefsToRespawnAtFrameEnd.add(objDefId);
+			}
 		}
 		else
 		{
@@ -4571,6 +4825,12 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			buffer.writeInt(event.getValue());
 			varps[event.getVarpId()] = event.getValue();
 			sharedmem_rm.backBuffer.writePacket(buffer, "Varp");
+
+			//mark the objdef as needing respawn
+			for(Integer objDefId : varpToObjDefMap[event.getVarpId()]) {
+				//System.out.println("varp changed for objdef: "+objDefId);
+				objDefsToRespawnAtFrameEnd.add(objDefId);
+			}
 		}
 	}
 
@@ -4583,6 +4843,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 				onVarbitChanged(event);
 			}
 		}
+
 		for(int i = 0; i < varps.length; i++) {
 			if(varps[i]!=0)
 			{
@@ -4813,6 +5074,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	ArrayList<GameObjectSpawned> serverSpawnedGameObjects = new ArrayList<>();
 	ArrayList<Long> serverSpawnedGameObjects_Tags = new ArrayList<>(); //the original tags are stored here. after moving to a new area, old gameObject refs become messed up, so we have to rely on pre-calculated tags, made before the scene was reloaded/rebased.
 
+	Set<Long> dynamiclyDespawnedObjs = new HashSet<>();
 	@Subscribe
 	private void onGameObjectSpawned(GameObjectSpawned event)
 	{
@@ -4823,28 +5085,27 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		}
 
 		if(event.getGameObject() == null) {return;}
-		WorldView worldView = event.getGameObject().getWorldView();
-		if(curGamestate == disAllowSpawnOnThisGamestate && worldView.isTopLevel()) { //toplevel world view uses our own simulated spawn events that happen when they come into range
-			return;
-		}
 
-		//clientThread.invokeAtTickEnd(() -> //invoking later because baslocation likely hasnt been sent to unreal yet
-		//{
-		if (!config.spawnGameObjects())
+		if(!config.spawnGameObjects())
 		{
 			return;
 		}
 
-		if(!eventIsSimulation && worldView.isTopLevel()) { //if this is a non simulated spawn, discard the spawn if the tile is not yet populated/out of range.
-			WorldPoint tileLocation = event.getTile().getWorldLocation();
-			boolean tileIsPopulated = populatedObjsTiles.contains(new PopulatedTile(tileLocation.getX(), tileLocation.getY(), tileLocation.getPlane()));
-			if(!tileIsPopulated) {return;} //disregard spawns for tiles that are not populated. when the tile comes into range, we produce spawn events for it's tileItems.
-		}
-
-			//if(loggedInForNoServerTicks > 1 && disAllowedDynamicSpawns.contains(event.getGameObject().getId())) {return;}
-
-
-			//client.getObjectDefinition(event.getGameObject().getConfig()).getName();
+		//clientThread.invokeAtTickEnd(() -> //invoking later because some objects dont have correct flags/rotation until later on.
+		//{
+			int worldViewId = event.getGameObject().getWorldView().getId();
+			PopulatedTile popTile = populatedObjsTiles[worldViewId].get(new PopulatedTile(event.getTile(), true));
+			if(popTile == null) {
+				if(worldViewId!=WorldView.TOPLEVEL) //create populated tiles whenever needed on boats. they will be cleared when the worldview is unloaded
+				{
+					popTile = new PopulatedTile(event.getTile(), false);
+					populatedObjsTiles[worldViewId].put(popTile, popTile);
+				}else {
+					return; //tile is not populated so ignore spawn events for it. spawns will be simulated by plugin when tile comes into range
+				}
+			}
+			if(popTile.objectsOnTile[TileObjType.GameObj.value].contains(event.getGameObject().getId())) {return;} //object is already spawned on tile so no need to spawn it again
+			popTile.objectsOnTile[TileObjType.GameObj.value].add(event.getGameObject().getId());
 
 
 			int isBridgeTile = 0;
@@ -4868,8 +5129,6 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			long tag = getTag_Unique(event.getGameObject(), tile);
 			int cycleStart = 0;
 			int frame = 0;
-
-			int worldViewId = worldView.getId();
 
 			actorSpawnPacket.writeByte(4); //write tileObject data type
 			actorSpawnPacket.writeShort(worldViewId);
@@ -4896,15 +5155,15 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 			sharedmem_rm.backBuffer.writePacket(actorSpawnPacket, "ActorSpawn");
 			taggedTileObjects.add(tag);
-			if(!eventIsSimulation && client.getGameState().ordinal()>=GameState.LOGGED_IN.ordinal()/* && loggedInForNoServerTicks > 1*/) {
+/*			if(!eventIsSimulation && client.getGameState().ordinal()>=GameState.LOGGED_IN.ordinal()*//* && loggedInForNoServerTicks > 1*//*) {
 				if(worldView.isTopLevel()) { //disabled the server spawned gameObjects restriction on boats, since boats are pretty much always spawned while gamestaste is >= GameState.LOGGED_IN
 					serverSpawnedGameObjects.add(event);
 					serverSpawnedGameObjects_Tags.add(tag);
-/*					if(event.getGameObject().getId() == 26185) {
+*//*					if(event.getGameObject().getId() == 26185) {
 						System.out.println("serverSpawn Add for fire with tag: "+tag);
-					}*/
+					}*//*
 				}
-			}
+			}*/
 		//});
 	}
 
@@ -4942,6 +5201,13 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	{
 		//clientThread.invokeAtTickEnd(() -> //invoking later because baslocation likely hasnt been sent to unreal yet
 		//{
+			int worldViewId = event.getGroundObject().getWorldView().getId();
+			PopulatedTile popTile = populatedObjsTiles[worldViewId].get(new PopulatedTile(event.getTile(), true));
+			if(popTile == null) {return;}//tile is not populated so ignore spawn events for it. spawns will be simulated bny plugin when tile comes into range
+			if(!popTile.objectsOnTile[TileObjType.GroundObj.value].contains(event.getGroundObject().getId())) {return;} //object is already despawned on tile so no need to spawn it again
+			popTile.objectsOnTile[TileObjType.GroundObj.value].remove(new Integer(event.getGroundObject().getId()));
+
+
 			Tile tile = event.getTile();
 
 			Buffer actorSpawnPacket = new Buffer(new byte[20]);
@@ -4972,6 +5238,12 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		//System.out.println("gameObjectDespawned");
 		//clientThread.invokeAtTickEnd(() -> //invoking later because baslocation likely hasnt been sent to unreal yet
 		//{
+			int worldViewId = event.getGameObject().getWorldView().getId();
+			PopulatedTile popTile = populatedObjsTiles[worldViewId].get(new PopulatedTile(event.getTile(), true));
+			if(popTile == null) {return;}//tile is not populated so ignore spawn events for it. spawns will be simulated bny plugin when tile comes into range
+			if(!popTile.objectsOnTile[TileObjType.GameObj.value].contains(event.getGameObject().getId())) {return;} //object is already despawned on tile so no need to spawn it again
+			popTile.objectsOnTile[TileObjType.GameObj.value].remove(new Integer(event.getGameObject().getId()));
+
 			Tile tile = event.getTile();
 
 			Buffer actorSpawnPacket = new Buffer(new byte[20]);
@@ -4981,6 +5253,10 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			int tileX = tile.getSceneLocation().getX();
 			int tileY = tile.getSceneLocation().getY();
 			long tag = getTag_Unique(event.getGameObject(), tile);
+
+			if(client.getGameState() == GameState.LOGGED_IN) {
+				dynamiclyDespawnedObjs.add(tag);
+			}
 
 			int worldView = event.getGameObject().getWorldView().getId();
 
@@ -5002,6 +5278,13 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		if(loggedInForNoServerTicks > 1 && disAllowedDynamicDeSpawns.contains(event.getGameObject().getId())) {return;}
 		//clientThread.invokeAtTickEnd(() -> //invoking later because baslocation likely hasnt been sent to unreal yet
 		//{
+
+		int worldViewId = event.getGameObject().getWorldView().getId();
+		PopulatedTile popTile = populatedObjsTiles[worldViewId].get(new PopulatedTile(event.getTile(), true));
+		if(popTile == null) {return;}//tile is not populated so ignore spawn events for it. spawns will be simulated bny plugin when tile comes into range
+		if(!popTile.objectsOnTile[TileObjType.GameObj.value].contains(event.getGameObject().getId())) {return;} //object is already despawned on tile so no need to spawn it again
+		popTile.objectsOnTile[TileObjType.GameObj.value].remove(new Integer(event.getGameObject().getId()));
+
 		Tile tile = event.getTile();
 
 		Buffer actorSpawnPacket = new Buffer(new byte[20]);
@@ -5098,22 +5381,27 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		}
 
 		if(event.getGroundObject() == null) {return;}
-		WorldView worldView = event.getGroundObject().getWorldView();
-		if(curGamestate == disAllowSpawnOnThisGamestate && worldView.isTopLevel()) { //toplevel world view uses simulated spawn event that happen when they come into range
-			return;
-		}
 
 		if (!config.spawnGameObjects())
 		{
 			return;
 		}
 
-		if(!eventIsSimulation && worldView.isTopLevel()) { //if this is a non simulated spawn, discard the spawn if the tile is not yet populated/out of range.
-			WorldPoint tileLocation = event.getTile().getWorldLocation();
-			boolean tileIsPopulated = populatedObjsTiles.contains(new PopulatedTile(tileLocation.getX(), tileLocation.getY(), tileLocation.getPlane()));
-			if(!tileIsPopulated) {return;} //disregard spawns for tiles that are not populated. when the tile comes into range, we produce spawn events for it's tileItems.
+		int worldViewId = event.getGroundObject().getWorldView().getId();
+		PopulatedTile popTile = populatedObjsTiles[worldViewId].get(new PopulatedTile(event.getTile(), true));
+		if(popTile == null) {
+			if(worldViewId!=WorldView.TOPLEVEL) //create populated tiles whenever needed on boats. they will be cleared when the worldview is unloaded
+			{
+				popTile = new PopulatedTile(event.getTile(), false);
+				populatedObjsTiles[worldViewId].put(popTile, popTile);
+			}else {
+				return; //tile is not populated so ignore spawn events for it. spawns will be simulated by plugin when tile comes into range
+			}
 		}
+		if(popTile.objectsOnTile[TileObjType.GroundObj.value].contains(event.getGroundObject().getId())) {return;} //object is already spawned on tile so no need to spawn it again
+		popTile.objectsOnTile[TileObjType.GroundObj.value].add(event.getGroundObject().getId());
 
+		WorldView worldView = event.getGroundObject().getWorldView();
 		//clientThread.invokeAtTickEnd(() ->
 		//{
 			Tile tile = event.getTile();
@@ -5179,14 +5467,12 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		}
 
 		int worldViewId = event.getTile().getLocalLocation().getWorldView();
-		WorldView worldView = client.getWorldView(worldViewId);
-
-		if(!eventIsSimulation && worldView.isTopLevel()) { //if this is a non simulated spawn, discard the spawn if the tile is not yet populated/out of range.
-			WorldPoint tileLocation = event.getTile().getWorldLocation();
-			boolean tileIsPopulated = populatedObjsTiles.contains(new PopulatedTile(tileLocation.getX(), tileLocation.getY(), tileLocation.getPlane()));
-			if(!tileIsPopulated) {return;} //disregard spawns for tiles that are not populated. when the tile comes into range, we produce spawn events for it's tileItems.
+		if(worldViewId==WorldView.TOPLEVEL) { //in top level view we only allow items to spawn when they are in range/viewdistance
+			PopulatedTile popTile = populatedObjsTiles[worldViewId].get(new PopulatedTile(event.getTile(), true));
+			if(popTile == null) {return;}//tile is not populated so ignore spawn events for it. spawns will be simulated bny plugin when tile comes into range
 		}
 
+			WorldView worldView = client.getWorldView(worldViewId);
 		//clientThread.invokeAtTickEnd(() ->
 		//{
 			Buffer actorSpawnPacket = new Buffer(new byte[50]);
@@ -5204,7 +5490,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 			int itemDefinitionId = event.getItem().getId();
 			int itemQuantity = event.getItem().getQuantity();
 			actorSpawnPacket.writeByte(3); //write tileItem data type
-			actorSpawnPacket.writeShort(event.getTile().getLocalLocation().getWorldView());
+			actorSpawnPacket.writeShort(worldViewId);
 			actorSpawnPacket.writeByte(tilePlane);
 			actorSpawnPacket.writeShort(tileX);
 			actorSpawnPacket.writeShort(tileY);

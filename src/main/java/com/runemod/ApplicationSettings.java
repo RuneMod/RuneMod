@@ -36,6 +36,7 @@ public class ApplicationSettings
 	boolean animateLoginScreen = true;
 	boolean autoRecord = false;
 	boolean dLSS = false;
+	boolean taa = true;
 	boolean showFps = false;
 	float contrast = 1.0f;
 	float fogAmount = 1.0f;
