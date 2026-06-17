@@ -35,8 +35,7 @@ public class ApplicationSettings
 	int resolutionOverride = 0;
 	boolean animateLoginScreen = true;
 	boolean autoRecord = false;
-	boolean dLSS = false;
-	boolean taa = true;
+	int antiAliasing = 1;
 	boolean showFps = false;
 	float contrast = 1.0f;
 	float fogAmount = 1.0f;

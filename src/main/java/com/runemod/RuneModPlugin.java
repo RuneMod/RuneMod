@@ -240,7 +240,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 	void respawnObjOnTile(Tile tile, int objDefId) {
 		if(tile == null) {return;}
-		System.out.println("Respawning "+objDefId);
+		log.debug("Respawning "+objDefId);
 /*		if(tile.getBridge()!=null) {
 			simulateTilObjectSpawns(tile.getBridge());
 		}*/
