@@ -727,6 +727,9 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	private Method GetActionAnimIfValid_Meth = null;
 	int GetActionAnimIfValid_GarbageVal = 1;
 
+	private Method GetPoseAnimIfValid_Meth = null;
+	int GetPoseAnimIfValid_GarbageVal = 1998015605;
+
 
 
 	public Field pitchField;
@@ -1069,123 +1072,25 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		int minFieldCount = 0;
 		if (actor == null)
 		{
-			System.out.println("Actor is null, cant discover field");
+			System.out.println("Player actor is null, cant discover fields");
 			return;
 		}
 
-		GetActionAnimIfValid_GarbageVal = 0/*-2102997845*/;
+		GetActionAnimIfValid_GarbageVal = 4;
 		Class<?> clazz = actor.getClass().getSuperclass();
-		System.out.println("npc superClassName: "+clazz.getName());
+		System.out.println("player superClassName: "+clazz.getName() + " player className: "+actor.getClass().getName());
 		GetActionAnimIfValid_Meth = getMethodByName(clazz, "ew");
 		GetActionAnimIfValid_Meth.setAccessible(true); // allows access to private fields
+
+		GetPoseAnimIfValid_GarbageVal = 1998015605;
+		GetPoseAnimIfValid_Meth = getMethodByName(clazz, "yp");
+		GetPoseAnimIfValid_Meth.setAccessible(true);
+
 		discovered_GetActionAnimIfValid = true;
 
 		if(GetActionAnimIfValid_Meth==null) {
 			System.out.println("Failed to discover GetActionAnimIfValid_Meth");
 		}
-/*
-		Class<?> actorClass = actor.getClass().getSuperclass();
-		// We will gather declared methods at this level and test them.
-		Method[] declared = actorClass.getDeclaredMethods();
-		List<Method> candidates = new ArrayList<>();
-		for (Method m : declared)
-		{
-			// Filter: the sequence does not define itself as public zero parameters and non-void return and return types who have Object as class (AnimationSequence class is toplevel so "Object" is it's superclass)
-			if (!Modifier.isPublic(m.getModifiers()) && !Modifier.isStatic(m.getModifiers()) && m.getParameterCount() == 1 && m.getReturnType() != void.class && m.getReturnType().getSuperclass()==Object.class) //added m.getReturnType().getSuperclass()==Object.class but not 100% sure about it
-			{
-				System.out.println("adding candidate who returns object of type: "+m.getReturnType().getName()+" funcName: "+m.getName());
-				candidates.add(m);
-			}
-		}
-
-		if (!candidates.isEmpty())
-		{
-			System.out.printf("Testing %d no-arg non-void methods on class %s%n", candidates.size(), actorClass.getName());
-		}
-
-		// Test each candidate method individually
-		for (Method m : candidates)
-		{
-			try
-			{
-				m.setAccessible(true);
-
-				GetActionAnimIfValid_GarbageVal = findGarbageParam(actorClass, m.getName());
-				System.out.println("testing method + "+m.getName() + " with garbage val: "+ GetActionAnimIfValid_GarbageVal);
-				// see if func return null when anim is set to null
-				Object before = null;
-				try
-				{
-					before = m.invoke(actor, GetActionAnimIfValid_GarbageVal);
-				}
-				catch (InvocationTargetException ite)
-				{
-					// If the method throws, skip it
-					System.out.printf("Method %s threw before invocation: %s%n", m.getName(), ite.getCause());
-					continue;
-				}
-
-				// Set animation to a non-null anim
-				actor.setAnimation(442);
-
-				Object after = null;
-				try
-				{
-					after = m.invoke(actor, GetActionAnimIfValid_GarbageVal);
-				}
-				catch (InvocationTargetException ite)
-				{
-					System.out.printf("Method %s threw after invocation: %s%n", m.getName(), ite.getCause());
-					// Optionally reset animation (actor.setAnimation(0)), then continue
-					try { actor.setAnimation(-1); } catch (Throwable t) {}
-					continue;
-				}
-
-				// condition for picking a candidate: before setting valid anim = Null and after setting valid anim = Not Null
-				if (before == null && after != null)
-				{
-					Class<?> retClass = after.getClass();
-
-					boolean superclassIsObject = retClass.getSuperclass() == Object.class;
-					//int declaredFieldCount = retClass.getDeclaredFields().length;
-
-					System.out.printf("Candidate method %s matched null->non-null. Return type runtime: %s, superclass=%s%n",
-						m.getName(), retClass.getName(), retClass.getSuperclass() == null ? "null" : retClass.getSuperclass().getName());
-
-					if (superclassIsObject)
-					{
-						System.out.printf("discovered and Selected method %s from class %s as probable match. ReturnType: %s%n", m.getName(), actorClass.getName(), m.getReturnType().getName());
-						// Optionally reset animation to 0 (clean up)
-						try { actor.setAnimation(-1); } catch (Throwable t) {}
-						GetActionAnimIfValid_Meth = m;
-						//return;
-					}
-					else
-					{
-						System.out.printf("Method %s passed null->non-null but failed extra heuristics (topLevel=%b).%n",
-							m.getName(), superclassIsObject, minFieldCount);
-					}
-				}
-
-				// Reset animation after test to avoid leaving state changed. Tune as needed.
-				try { actor.setAnimation(-1); } catch (Throwable t) {}
-
-			}
-			catch (IllegalAccessException iae)
-			{
-				System.out.printf("IllegalAccess for method %s: %s%n", m.getName(), iae.getMessage());
-			}
-			catch (Exception ex)
-			{
-				System.out.printf("Unexpected exception testing method %s: %s%n", m.getName(), ex);
-			}
-		}
-
-		if(GetActionAnimIfValid_Meth == null) {
-			System.out.println("unable to discover GetActionAnimIfValid_Meth");
-		}
-
-		return;*/
 	}
 
 	int getAnimation_Unmasked(NPC npc)
@@ -1347,7 +1252,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	{
 		if (GetActionAnimIfValid_Meth == null) //if the method field wasnt found, use to basic check.
 		{
-			log_Timed_Heavy("GetActionAnimIfValid_Meth is null");
+			log.debug("GetActionAnimIfValid_Meth is null");
 			return actorInstance.getAnimation()!=-1;
 		}
 
@@ -1357,12 +1262,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 		try
 		{
-			boolean valid = GetActionAnimIfValid_Meth.invoke(/*null, */actorInstance,  (byte)4)!=null; //null is first param because is static func
-/*			if(actorInstance.getName().contains("dorvis")) {
-				if(valid == false) {
-					System.out.println("vard action anim valid = false");
-				}
-			}*/
+			boolean valid = GetActionAnimIfValid_Meth.invoke(/*null, */actorInstance,  (byte)GetActionAnimIfValid_GarbageVal)!=null; //null is first param because is static func
 			return valid;
 		}
 		catch (InvocationTargetException | IllegalAccessException e)
@@ -1372,6 +1272,32 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		}
 	}
 
+	public boolean isPoseAnimValid(Actor actorInstance) //checks if actior has a valid action anim using internal function that includes use of the sequenceDelay==0 check
+	{
+		if (GetActionAnimIfValid_Meth == null || GetPoseAnimIfValid_Meth == null) //if the method field wasnt found, use to basic check.
+		{
+			log.debug("GetActionAnimIfValid_Meth || GetPoseAnimIfValid_Meth is null");
+			return actorInstance.getAnimation()!=-1;
+		}
+
+		if(actorInstance == null) {
+			return false;
+		}
+
+		try
+		{
+			Object ActionAnimation = GetActionAnimIfValid_Meth.invoke(/*null, */actorInstance,  (byte)4); //null is first param because is static func
+
+			Object PoseAnimation = GetPoseAnimIfValid_Meth.invoke(null, actorInstance, ActionAnimation, GetPoseAnimIfValid_GarbageVal);
+
+			return PoseAnimation!=null;
+		}
+		catch (InvocationTargetException | IllegalAccessException e)
+		{
+			System.err.printf("Invocation failed for %s: %s%n", actorInstance, e);
+			return false;
+		}
+	}
 
 	void despawnTaggedTileObj(long tag) {
 		Buffer actorSpawnPacket = new Buffer(new byte[20]);
@@ -1389,67 +1315,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	@Subscribe
 	private void onGameTick(GameTick event)
 	{
-/*		Tile tile = client.getSelectedSceneTile();
-		if(tile!=null) {
-			Point scenePoint = tile.getSceneLocation();
-			//Tile tile_defaultState = defaultTileState[tile.getPlane()][scenePint.getX()][scenePint.getY()]; //client.getScene().getExtendedTiles()[tile.getPlane()][scenePint.getX()+SCENE_OFFSET][scenePint.getY()+SCENE_OFFSET];
-
-			long wallObjHash = 0;
-			if(tile.getWallObject()!=null) {
-				wallObjHash = getTag_Unique(tile.getWallObject());
-			}
-			defaultTileState defaultTile = tile_DefaultState[tile.getPlane()][scenePoint.getX()][scenePoint.getY()];
-			if(defaultTile!=null) {
-				long defaultStateWallObjHash = defaultTile.wallObj_Default;
-				System.out.println("wallObjHash: "+wallObjHash + " defaultStateWallObjHash: "+defaultStateWallObjHash);
-			}
-		}*/
-/*		WorldView mainWorldView = client.getTopLevelWorldView();
-		for(WorldEntity we : mainWorldView.worldEntities()) {
-			WorldView boatWorldView = we.getWorldView();
-			for(Player player : boatWorldView.players()) {
-				if(player.getName().equalsIgnoreCase("noodleeater")) {
-					System.out.println("nood is in wv idx "+boatWorldView.getId() );
-					System.out.println("noEntities in nood's' world: "+boatWorldView.worldEntities().stream().count());
-
-					LocalPoint playerLocalLocation = player.getLocalLocation();
-					System.out.println("nood loc: "+playerLocalLocation);
-
-					LocalPoint local_MainWv = we.transformToMainWorld(playerLocalLocation);
-					System.out.println("nood loc_MainWv: "+local_MainWv);
-
-					mainWorldView.getMainWorldProjection()
-					//LocalPoint locInWv = wv.
-					//System.out.println();
-				}
-			}
-		}*/
-
-/*		if(ticksSinceLoadScene > 100 && client.getTickCount()%10 == 0) {
-			WorldPoint playerTile = getPlayerLocationInWorld();
-			int softBaseX = ((playerTile.getX()/8)*8)-52;
-			int softBaseY = ((playerTile.getY()/8)*8)-52;
-			sendBaseCoordinatePacket(softBaseX, softBaseY, client.getScene());
-			resendGameStateChanged();
-		}*/
-
-/*		String typed = client.getVarcStrValue(VarClientStr.CHATBOX_TYPED_TEXT);
-		if(typed.equalsIgnoreCase("send")) {
-			client.setVarcStrValue(VarClientStr.CHATBOX_TYPED_TEXT,"");
-			spawn_All_SubRegionModels();
-		}*/
-/*		String typed = client.getVarcStrValue(VarClientStr.CHATBOX_TYPED_TEXT);
-		if(typed.equalsIgnoreCase("doWork")) {
-			client.setVarcStrValue(VarClientStr.CHATBOX_TYPED_TEXT,"");
-			for(PopulatedTile popTile : populatedObjsTiles) {
-				popTile.isEnteringMainScene();
-			}
-		}*/
-
-
-
 		discoverField_ActionAnimValid();
-
 
 		if(config.reduceFpsWhenIdle()) {
 			if(storedMaxFps != 50 && client.getTickCount()%6 == 0) {
@@ -5962,22 +5828,22 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 		}
 	}
 
-	boolean isPoseAnimValid(Actor actor) {
+/*	boolean isPoseAnimValid(Actor actor) {
 		boolean actionAnimIsValid = isActionAnimValid(actor);
 		// Check if the current pose animation sequence is valid
-		boolean ImvalidPoseAnim = actor.getPoseAnimation() == -1 /*|| !this.poseAnimationSequence.getSequenceDefinition().iValid()*/;
+		boolean ImvalidPoseAnim = actor.getPoseAnimation() == -1 *//*|| !this.poseAnimationSequence.getSequenceDefinition().iValid()*//*;
 
 		// Check if the current pose animation is the same as the idle animation
 		boolean isPoseSameAsIdle = (actor.getPoseAnimation() == actor.getIdlePoseAnimation());
 
 		// If any invalid conditions are met, return null
-		if (ImvalidPoseAnim || (isPoseSameAsIdle && actionAnimIsValid/*ActionAnim != null*/)) {
+		if (ImvalidPoseAnim || (isPoseSameAsIdle && actionAnimIsValid*//*ActionAnim != null*//*)) {
 			return false;
 		}
 
 		// Otherwise, return the valid pose animation sequence
 		return true;
-	}
+	}*/
 
 	@SneakyThrows
 	private void WritePerFramePacket()
@@ -6086,6 +5952,12 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 				if(!isPoseValid) {
 					animationId_Pose = -1;
 					animationFrameIdx_Pose = -1;
+				}
+
+				boolean isActionAnimValid = isActionAnimValid(npc);
+				if(!isActionAnimValid) {
+					animationId_Action = -1;
+					animationFrameIdx_Action = -1;
 				}
 
 				boolean shouldDraw = visibleActors.contains(npc) && hooks.draw(npc, false);
