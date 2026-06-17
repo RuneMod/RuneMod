@@ -735,12 +735,12 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 	@SneakyThrows
 	public void discoverField_ProjectilePitch(Projectile projectile)
 	{
-		pitch_GarbageVal = -266919833;
+		pitch_GarbageVal = -266919833;//-266919833;
 		Class<?> clazz = projectile.getClass();
-
+		System.out.println("projectileClassName = "+clazz.getName());
 		try
 		{
-			pitchField = clazz.getDeclaredField("aw");
+			pitchField = clazz.getDeclaredField("am");
 			pitchField.setAccessible(true);
 		}
 		catch (NoSuchFieldException e)
@@ -1075,7 +1075,8 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 		GetActionAnimIfValid_GarbageVal = 0/*-2102997845*/;
 		Class<?> clazz = actor.getClass().getSuperclass();
-		GetActionAnimIfValid_Meth = getMethodByName(clazz, "lt");
+		System.out.println("npc superClassName: "+clazz.getName());
+		GetActionAnimIfValid_Meth = getMethodByName(clazz, "ew");
 		GetActionAnimIfValid_Meth.setAccessible(true); // allows access to private fields
 		discovered_GetActionAnimIfValid = true;
 
@@ -1356,7 +1357,7 @@ public class RuneModPlugin extends Plugin implements DrawCallbacks
 
 		try
 		{
-			boolean valid = GetActionAnimIfValid_Meth.invoke(null, actorInstance,  (byte)4)!=null; //null is first param because is static func
+			boolean valid = GetActionAnimIfValid_Meth.invoke(/*null, */actorInstance,  (byte)4)!=null; //null is first param because is static func
 /*			if(actorInstance.getName().contains("dorvis")) {
 				if(valid == false) {
 					System.out.println("vard action anim valid = false");
